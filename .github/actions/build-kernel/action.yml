@@ -123,10 +123,20 @@ runs:
           }
           if [ "$LTO" = "full" ]; then
             echo "Memory before full-LTO build:"; free -h || true
-            if kbuild full; then
+            set +e
+            kbuild full 2>&1 | tee /tmp/kbuild-full.log
+            RC=${PIPESTATUS[0]}
+            set -e
+            if [ "$RC" -eq 0 ]; then
               USED_LTO=full
+            elif grep -qE ': (fatal )?error: |undefined reference to|Error [0-9]+$' /tmp/kbuild-full.log \
+                 && ! grep -qiE 'killed|out of memory|signal 9|ld\.lld: error: .*(memory|mmap)' /tmp/kbuild-full.log; then
+              # A source/compile error fails the same way with ThinLTO; do not
+              # spend another 10+ minutes proving it.
+              echo "::error::Kernel build failed with a compile error (not an LTO/memory problem); see the errors above" >&2
+              exit "$RC"
             else
-              echo "::warning::Full LTO build failed (see above, usually OOM); retrying with ThinLTO (the previous default command)"
+              echo "::warning::Full LTO build failed without a compile error (usually OOM); retrying with ThinLTO (the previous default command)"
               free -h || true
               kbuild ""
               USED_LTO=thin
