@@ -14,6 +14,16 @@ runs:
         delay: 5
         workdir: ${{ github.workspace }}/kernel
     
+    - name: Pin Baseband-guard to the known-good commit
+      if: env.PIN_BBG_COMMIT != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/Baseband-guard
+      run: |
+        set -euo pipefail
+        git fetch -q origin "$PIN_BBG_COMMIT" 2>/dev/null || git fetch -q --unshallow origin 2>/dev/null || true
+        git checkout -q --detach "$PIN_BBG_COMMIT"
+        echo "[+] Baseband-guard pinned to known-good ${PIN_BBG_COMMIT:0:12}"
+
     - name: Apply 6.18 compatibility shim
       # Upstream BBG calls blkdev_get_no_open() without declaring it; the
       # prototype lived in include/linux/blkdev.h until 6.18 moved it into the
@@ -54,6 +64,7 @@ runs:
         # Extract and export BBG version info
         BBG_COMMIT=$(git rev-parse --short HEAD 2>/dev/null)
         echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
+        echo "BBG_COMMIT_FULL=$(git rev-parse HEAD 2>/dev/null)" >> $GITHUB_ENV
 
     - name: Enable Kernel Configs
       uses: ./.github/actions/set-kernel-config
