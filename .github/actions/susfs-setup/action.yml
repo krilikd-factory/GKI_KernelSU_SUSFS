@@ -85,7 +85,8 @@ runs:
         # branch tip resolved a moment ago, and to any call without a commit.
         REQ="${REQUIRED_SUSFS_VERSION:-}"
         SEARCH=false
-        if [ -n "$REQ" ] && { [ "${{ inputs.root_flavor }}" = "next" ] || [ -z "${{ inputs.susfs_commit }}" ]; }; then
+        if [ -n "$REQ" ] && [ -z "${PIN_SUSFS_COMMIT:-}" ] && \
+           { [ "${{ inputs.root_flavor }}" = "next" ] || [ -z "${{ inputs.susfs_commit }}" ]; }; then
           SEARCH=true
         fi
         HDR="kernel_patches/include/linux/susfs.h"
