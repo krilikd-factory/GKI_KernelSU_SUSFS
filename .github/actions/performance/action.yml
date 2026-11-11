@@ -95,10 +95,20 @@ runs:
           try_patch "$p" -F3 < "$KP/$p.patch"
         done
 
+        # Google's GKI AutoFDO profile (Kleaf trees only): build the
+        # kernel_aarch64 target with the profile Google ships in-tree but
+        # only wires into kernel_aarch64_autofdo.
+        AFDO_MSG="n/a (no BUILD.bazel)"
+        if [ -f BUILD.bazel ]; then
+          AFDO_MSG="$(python3 -I "${{ github.workspace }}/.github/scripts/gki_enable_autofdo.py")"
+          echo "$AFDO_MSG"
+        fi
+
         echo "[+] Performance: applied ${#APPLIED[@]}: ${APPLIED[*]:-none}"
         echo "[!] Performance: skipped ${#SKIPPED[@]}: ${SKIPPED[*]:-none}"
         {
           echo "### Performance patches"
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
+          echo "- ${AFDO_MSG}"
         } >> "$GITHUB_STEP_SUMMARY"
