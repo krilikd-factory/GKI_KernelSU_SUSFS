@@ -32,12 +32,12 @@ on:
           - 6.6.x-android15
           - 6.12.x-android16
           - 6.18.x-android17
-        default: All
+        default: 6.12.x-android16
       os_patch_level:
         description: "Patch date (YYYY-MM), kernel sublevel, lts, or All (no filter)"
         required: true
         type: string
-        default: All
+        default: "2026-03"
       page_size:
         description: "ARM64 page size. 16k requires explicitly selecting Kernel Version 6.1.x-android14, 6.6.x-android15 or 6.12.x-android16 (All is rejected)"
         type: choice
@@ -73,7 +73,7 @@ on:
           - FinaSU
           - No Root
           - All (KernelSU-Next + KernelSU + BakaSU)
-        default: All (KernelSU-Next + KernelSU + BakaSU)
+        default: KernelSU-Next
       use_susfs:
         description: "SUSFS"
         type: boolean

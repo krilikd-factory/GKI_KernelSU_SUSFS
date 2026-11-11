@@ -87,6 +87,11 @@ jobs:
     name: "${{ inputs.kernel_version }}.${{ inputs.sublevel }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }} (${{ inputs.variant }})"
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      # SUSFS release to build against. susfs-setup checks out the newest
+      # commit of the gki branch that declares this SUSFS_VERSION (fails if
+      # none). Only enforced on android16-6.12; other families track as before.
+      REQUIRED_SUSFS_VERSION: ${{ inputs.version == 'android16-6.12' && 'v2.4.0' || '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
@@ -512,6 +517,7 @@ jobs:
         with:
           version: ${{ inputs.version }}
           page_size: ${{ inputs.page_size }}
+          allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
 
       - name: Consolidated Build Summary
         id: build-summary
