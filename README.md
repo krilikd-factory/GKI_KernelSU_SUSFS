@@ -1,6 +1,6 @@
 <div align="center">
 
-# Wild Kernels for Android devices running GKI 2.0 (5.10+)
+# KRILIKD — GKI 2.0 kernel fork for Android devices (5.10+)
 
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Third-Party Notices](https://img.shields.io/badge/notices-THIRD__PARTY_NOTICES-lightgrey.svg)](THIRD_PARTY_NOTICES.md)
@@ -14,7 +14,7 @@
 
 ## About
 
-Generic kernels built on [Google's GKI sources](https://android.googlesource.com/kernel/common/) with KernelSU and SUSFS for root hiding and detection evasion — broad compatibility, not guaranteed for every device.
+KRILIKD kernels are built on [Google's GKI sources](https://android.googlesource.com/kernel/common/) with KernelSU and SUSFS for root hiding and detection evasion — broad compatibility, not guaranteed for every device.
 
 ---
 
