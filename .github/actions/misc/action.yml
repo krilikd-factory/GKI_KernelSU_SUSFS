@@ -29,3 +29,10 @@ runs:
           CONFIG_TMPFS_POSIX_ACL=y
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
+          # CONFIG_FANOTIFY / CONFIG_FANOTIFY_ACCESS_PERMISSIONS (#349) removed:
+          # GKI ships them off, and turning them on adds UCOUNT_FANOTIFY_* to
+          # enum ucount_type and fanotify_data to struct fsnotify_group. Neither
+          # is KABI-padded, so every KMI symbol that reaches struct cred /
+          # user_namespace / ucounts gets a new modversions CRC and the stock
+          # vendor modules refuse to load (device hangs on the boot logo).
+          
