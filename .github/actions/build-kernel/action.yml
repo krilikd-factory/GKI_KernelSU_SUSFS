@@ -14,6 +14,10 @@ inputs:
     required: false
     type: boolean
     default: false
+  kmi_symbol_lists:
+    description: 'Vendor symbol lists (gki/aarch64/symbols/<name>) whose CRCs must match stock. Empty = skip the guard.'
+    required: false
+    default: 'qcom oplus'
 runs:
   using: composite
   steps:
@@ -91,15 +95,18 @@ runs:
           # target there; the rest of this action already reads the image from
           # bazel-bin/common/kernel_aarch64/Image, which is unchanged.
           if [ "${{ inputs.version }}" = "android17-6.18" ]; then
-            BAZEL_TARGET=//common:kernel_aarch64
+            BAZEL_TARGETS=(//common:kernel_aarch64)
           else
-            BAZEL_TARGET=//common:kernel_aarch64/Image
+            # vmlinux.symvers comes out of the same kernel_build action as the
+            # Image; naming it just guarantees it is materialised for the KMI
+            # CRC guard below.
+            BAZEL_TARGETS=(//common:kernel_aarch64/Image //common:kernel_aarch64/vmlinux.symvers)
           fi
           tools/bazel build \
             --config=fast \
             "${PAGE_SIZE_FLAGS[@]}" \
             --disk_cache=/home/runner/.cache/bazel \
-            "$BAZEL_TARGET"
+            "${BAZEL_TARGETS[@]}"
         fi
 
     - name: 'Verify Page Size in Generated .config'
@@ -179,6 +186,56 @@ runs:
           exit 1
         fi
         echo "Page size verified: ${PAGE_SIZE}"
+
+    - name: 'KMI CRC guard (stock vendor modules must still load)'
+      # A build whose KMI symbol CRCs drifted boots to the logo and hangs:
+      # first-stage init cannot load the vendor display/storage modules.
+      # Compare the built vmlinux.symvers against the tree's abi.stg for the
+      # symbols the device's vendor modules import, and fail the leg instead
+      # of shipping an unbootable zip. allow_version_mismatch=true (module
+      # CRC bypass) turns the failure into a warning.
+      if: inputs.kmi_symbol_lists != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel
+      run: |
+        set -euo pipefail
+        STG=""
+        for c in common/gki/aarch64/abi.stg common/android/abi_gki_aarch64.stg; do
+          [ -f "$c" ] && { STG="$c"; break; }
+        done
+        SYMVERS=""
+        for c in bazel-bin/common/kernel_aarch64/vmlinux.symvers /home/runner/out/vmlinux.symvers /home/runner/out/dist/vmlinux.symvers; do
+          [ -f "$c" ] && { SYMVERS="$c"; break; }
+        done
+        if [ -z "$STG" ] || [ -z "$SYMVERS" ]; then
+          echo "::warning::KMI CRC guard skipped (abi.stg: '${STG:-none}', vmlinux.symvers: '${SYMVERS:-none}')"
+          exit 0
+        fi
+        LISTS=()
+        for n in ${{ inputs.kmi_symbol_lists }}; do
+          for d in common/gki/aarch64/symbols common/android; do
+            f="$d/$n"; [ -f "$f" ] || f="$d/abi_gki_aarch64_$n"
+            [ -f "$f" ] && { LISTS+=("$f"); break; }
+          done
+        done
+        if [ "${#LISTS[@]}" -eq 0 ]; then
+          echo "::warning::no vendor symbol lists found for '${{ inputs.kmi_symbol_lists }}'; checking every symbol in $STG"
+        fi
+        echo "abi: $STG"; echo "symvers: $SYMVERS"; printf 'list: %s\n' "${LISTS[@]}"
+        rc=0
+        python3 -I "${{ github.workspace }}/.github/scripts/kmi_crc_guard.py" \
+          --stg "$STG" --symvers "$SYMVERS" --lists "${LISTS[@]}" \
+          --report "${{ github.workspace }}/kmi-crc-report.txt" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+          echo "KMI CRCs match stock: vendor modules will load."
+          exit 0
+        fi
+        if [ "${{ inputs.allow_version_mismatch }}" = "true" ]; then
+          echo "::warning::KMI CRC drift detected, continuing because allow_version_mismatch=true"
+          exit 0
+        fi
+        echo "::error::KMI CRC drift: stock vendor modules would be rejected and the device would hang on the boot logo. See the list above; the usual cause is a config that changes a core struct/enum (e.g. FANOTIFY)." >&2
+        exit 1
 
     - name: 'Gather Build Artifacts'
       shell: bash
