@@ -211,6 +211,24 @@ runs:
     #   run: |
     #     python "${{ github.workspace }}/.github/actions/download-kernel/fast_parallel_download.py"
 
+    - name: Pin kernel/common to the known-good commit
+      if: env.PIN_KERNEL_COMMON != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        PIN="$PIN_KERNEL_COMMON"
+        if [ "$(git rev-parse HEAD)" = "$PIN" ]; then
+          echo "kernel/common already at known-good ${PIN:0:12}"; exit 0
+        fi
+        for i in 1 2 3 4 5; do
+          git fetch --depth=1 https://android.googlesource.com/kernel/common "$PIN" && break
+          echo "fetch attempt $i failed, retrying" >&2; sleep 10
+        done
+        git checkout -q --detach "$PIN"
+        [ "$(git rev-parse HEAD)" = "$PIN" ] || { echo "ERROR: kernel/common pin checkout failed" >&2; exit 1; }
+        echo "[+] kernel/common pinned to known-good ${PIN:0:12}: $(git log -1 --format='%ci %s')"
+
     - name: Capture Kernel Common Commit Metadata
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
