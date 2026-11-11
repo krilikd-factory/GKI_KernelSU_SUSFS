@@ -1,1 +1,19 @@
-{}
+{
+  "android16-6.12-2026-03/KernelSU-Next": {
+    "anykernel3_commit": "e1e9dce98430c5c6f231f7094a8c7f4ecaf50948",
+    "bbg_commit": "028ff7fd509e2104596da7cc1ef8e6ce2a0c9082",
+    "droidspaces_commit": "cdadb9eb5d0f86aacffff60776333e6f6b73a30a",
+    "feature_set": "SUSFS+NoMount+BBG+NET+DS+NTSync+Ptrace+Unicode+BPF",
+    "file": "6.12.69-android16-2026-03-KernelSU-Next",
+    "from_run": "https://github.com/krilikd-factory/GKI_KernelSU_SUSFS/actions/runs/42933563275",
+    "kernel_patches_commit": "b6690c6c66a05f873faf460daaaac1c84de9d720",
+    "kernel_source_commit": "ab1b4fc5ca8eed85eb9259015586db20a639526a",
+    "marked_at": "2026-11-11T01:45:00Z",
+    "nomount_commit": "8f05de794901a637e554c6566866be893748df69",
+    "note": "Booted on OnePlus 15, ColorOS 17 (stock 6.12.69). Seeded by hand from the run logs: this run predates the *-Pins artifact.",
+    "root_commit": "aafde92ae9769b42567d8db5feefd838c591633b",
+    "root_version": "v3.4.2-162-gaafde92a",
+    "susfs_commit": "395a8c0c88d348e9fe7c14f66a456fde4653287c",
+    "susfs_version": "v2.4.0"
+  }
+}
