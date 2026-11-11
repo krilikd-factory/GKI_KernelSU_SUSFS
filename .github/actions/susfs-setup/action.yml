@@ -74,6 +74,43 @@ runs:
         fi
 
         cd "${{ github.workspace }}/susfs4ksu"
+
+        # Pin the SUSFS *release* rather than a sha: when REQUIRED_SUSFS_VERSION
+        # is set (build.yml sets v2.4.0 for android16-6.12) and no explicit
+        # commit was requested, walk the branch back from its tip to the newest
+        # commit whose kernel_patches/include/linux/susfs.h declares that
+        # version. The tip is used when it already matches, so this tracks the
+        # latest v2.4.0 fixes and never silently jumps to v2.4.1+.
+        # Applies to the tip-tracking flavor (next), whose "commit" is just the
+        # branch tip resolved a moment ago, and to any call without a commit.
+        REQ="${REQUIRED_SUSFS_VERSION:-}"
+        SEARCH=false
+        if [ -n "$REQ" ] && { [ "${{ inputs.root_flavor }}" = "next" ] || [ -z "${{ inputs.susfs_commit }}" ]; }; then
+          SEARCH=true
+        fi
+        HDR="kernel_patches/include/linux/susfs.h"
+        susfs_ver_at() { git show "$1:$HDR" 2>/dev/null | sed -n 's/^#define SUSFS_VERSION "\(.*\)".*/\1/p' | head -n1; }
+        if [ "$SEARCH" = true ]; then
+          if [ "$(susfs_ver_at HEAD)" != "$REQ" ]; then
+            echo "SUSFS tip is $(susfs_ver_at HEAD); searching $SUSFS_BRANCH for the newest $REQ commit..."
+            FOUND=""
+            for c in $(git rev-list --first-parent HEAD); do
+              if [ "$(susfs_ver_at "$c")" = "$REQ" ]; then FOUND="$c"; break; fi
+            done
+            if [ -z "$FOUND" ]; then
+              echo "ERROR: no commit on $SUSFS_BRANCH declares SUSFS_VERSION $REQ" >&2
+              exit 1
+            fi
+            git checkout -q "$FOUND"
+          fi
+        fi
+        GOT="$(susfs_ver_at HEAD)"
+        echo "SUSFS_VERSION at checkout: ${GOT:-unknown}"
+        if [ -n "$REQ" ] && [ "$GOT" != "$REQ" ]; then
+          echo "ERROR: SUSFS checkout declares '${GOT:-unknown}', required '$REQ'" >&2
+          exit 1
+        fi
+
         SUSFS_COMMIT="$(git rev-parse HEAD)"
         echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "$GITHUB_ENV"
         echo "Using SUSFS commit: $SUSFS_COMMIT"
