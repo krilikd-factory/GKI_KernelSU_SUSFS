@@ -48,7 +48,7 @@ on:
       brand_name:
         description: "Kernel Branding (empty = stock version string)"
         type: string
-        default: Wild
+        default: KRILIKD
       keep_kmi:
         description: "Keep stock KMI generation suffix in kernel version (fix #265)"
         type: boolean
@@ -122,6 +122,14 @@ on:
         description: "Performance (patches that do not apply to the tree are skipped, not fatal)"
         type: boolean
         default: true
+      performance_profile:
+        description: "KRILIKD performance profile: safe, balanced, or lab"
+        type: choice
+        options:
+          - safe
+          - balanced
+          - lab
+        default: balanced
       test_release_notes:
         description: "Render release notes preview only (skip all builds + release)"
         type: boolean
@@ -737,7 +745,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -746,6 +754,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android13-5-10:
@@ -771,7 +780,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -780,6 +789,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android13-5-15:
@@ -805,7 +815,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -814,6 +824,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android14-5-15:
@@ -839,7 +850,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -848,6 +859,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android14-6-1:
@@ -873,7 +885,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -882,6 +894,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android15-6-6:
@@ -907,7 +920,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -916,6 +929,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android16-6-12:
@@ -941,7 +955,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -950,6 +964,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   build-android17-6-18:
@@ -980,7 +995,7 @@ jobs:
       ksu_branch: ${{ needs.resolve-sources.outputs.kernelsu_commit }}
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
-      brand_name: ${{ inputs.brand_name || 'Wild' }}
+      brand_name: ${{ inputs.brand_name || 'KRILIKD' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -989,6 +1004,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       lto: ${{ inputs.lto || 'full' }}
+      performance_profile: ${{ inputs.performance_profile || 'balanced' }}
     secrets: inherit
 
   telegram-announce:

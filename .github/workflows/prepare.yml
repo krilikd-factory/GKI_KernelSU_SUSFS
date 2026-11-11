@@ -60,7 +60,7 @@ on:
         description: "Kernel branding text appended to the version string (empty = stock)"
         required: false
         type: string
-        default: Wild
+        default: KRILIKD
       keep_kmi:
         description: "Keep stock KMI generation suffix in kernel version (fix #265)"
         required: false
@@ -106,6 +106,11 @@ on:
         required: false
         type: string
         default: "full"
+      performance_profile:
+        description: "KRILIKD profile: safe, balanced, or lab"
+        required: false
+        type: string
+        default: "balanced"
 
 jobs:
   generate-matrix:
@@ -363,5 +368,6 @@ jobs:
       pin_kernel_common: ${{ inputs.pin_kernel_common }}
       pin_bbg_commit: ${{ inputs.pin_bbg_commit }}
       lto: ${{ inputs.lto }}
+      performance_profile: ${{ inputs.performance_profile }}
       stock_config_artifact: stock-configs-${{ needs.generate-matrix.outputs.version_slug }}
     secrets: inherit
