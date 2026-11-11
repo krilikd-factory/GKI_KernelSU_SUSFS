@@ -207,6 +207,19 @@ runs:
         for c in bazel-bin/common/kernel_aarch64/vmlinux.symvers /home/runner/out/vmlinux.symvers /home/runner/out/dist/vmlinux.symvers; do
           [ -f "$c" ] && { SYMVERS="$c"; break; }
         done
+        # System.map tells vmlinux symbols from the GKI-module exports that
+        # abi.stg also lists. It is an output of the same kernel_build action
+        # as vmlinux.symvers; if it is somehow absent, derive it from vmlinux.
+        OUTDIR="$(dirname "${SYMVERS:-.}")"
+        SYSMAP="$OUTDIR/System.map"
+        if [ ! -f "$SYSMAP" ] && [ -f "$OUTDIR/vmlinux" ]; then
+          NM="$(ls -d prebuilts/clang/host/linux-x86/clang-*/bin/llvm-nm 2>/dev/null | sort -V | tail -n1 || true)"
+          NM="${NM:-$(command -v llvm-nm || command -v nm || true)}"
+          if [ -n "$NM" ]; then
+            "$NM" -n "$OUTDIR/vmlinux" > /tmp/vmlinux.System.map 2>/dev/null && SYSMAP=/tmp/vmlinux.System.map
+          fi
+        fi
+        [ -f "$SYSMAP" ] || SYSMAP=""
         if [ -z "$STG" ] || [ -z "$SYMVERS" ]; then
           echo "::warning::KMI CRC guard skipped (abi.stg: '${STG:-none}', vmlinux.symvers: '${SYMVERS:-none}')"
           exit 0
@@ -221,10 +234,11 @@ runs:
         if [ "${#LISTS[@]}" -eq 0 ]; then
           echo "::warning::no vendor symbol lists found for '${{ inputs.kmi_symbol_lists }}'; checking every symbol in $STG"
         fi
-        echo "abi: $STG"; echo "symvers: $SYMVERS"; printf 'list: %s\n' "${LISTS[@]}"
+        echo "abi: $STG"; echo "symvers: $SYMVERS"; echo "System.map: ${SYSMAP:-none}"; printf 'list: %s\n' "${LISTS[@]}"
         rc=0
         python3 -I "${{ github.workspace }}/.github/scripts/kmi_crc_guard.py" \
           --stg "$STG" --symvers "$SYMVERS" --lists "${LISTS[@]}" \
+          ${SYSMAP:+--sysmap "$SYSMAP"} \
           --report "${{ github.workspace }}/kmi-crc-report.txt" || rc=$?
         if [ "$rc" -eq 0 ]; then
           echo "KMI CRCs match stock: vendor modules will load."
