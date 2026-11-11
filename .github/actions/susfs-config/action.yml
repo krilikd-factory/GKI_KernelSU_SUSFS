@@ -13,7 +13,11 @@ runs:
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_KSTAT=y
           CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          # SUSFS kernel logging compiled out: no per-hit printk on every
+          # hidden path/mount/map lookup (CPU + wakeups). Supported upstream
+          # ("uncheck it to completely disable all susfs log"); KernelSU-Next
+          # guards CMD_SUSFS_ENABLE_LOG with the same #ifdef. Set =y to debug.
+          CONFIG_KSU_SUSFS_ENABLE_LOG=n
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
