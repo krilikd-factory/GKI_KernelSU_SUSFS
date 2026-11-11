@@ -4,6 +4,10 @@ inputs:
   kernel_version:
     description: 'Kernel version (e.g., 6.1)'
     required: true
+  performance_profile:
+    description: 'KRILIKD profile: safe, balanced, or lab'
+    required: false
+    default: balanced
 
 runs:
   using: 'composite'
@@ -14,6 +18,11 @@ runs:
       run: |
         set -euo pipefail
         KERNEL_VERSION="${{ inputs.kernel_version }}"
+        PROFILE="${{ inputs.performance_profile }}"
+        case "$PROFILE" in
+          safe|balanced|lab) ;;
+          *) echo "ERROR: unknown KRILIKD performance profile: $PROFILE" >&2; exit 2 ;;
+        esac
         MIN_VERSION="5.16"
         KP="${{ github.workspace }}/kernel_patches/common"
 
@@ -36,7 +45,21 @@ runs:
           rm -f "$tmp"
         }
 
-        try_patch optimized_mem_operations < "$KP/optimized_mem_operations.patch"
+        # Safe is intentionally small. Balanced is the recommended daily
+        # profile; lab is opt-in and may change writeback/wakeup behaviour.
+        # Every selected patch still goes through the dry-run gate below.
+        apply_patch() {
+          local name="$1"; shift
+          case "$PROFILE:$name" in
+            safe:reduce_cache_pressure|safe:add_timeout_wakelocks_globally|safe:f2fs_reduce_congestion|safe:reduce_freeze_timeout|safe:avoid_extra_s2idle_wake_attempts|safe:disable_cache_hot_buddy|safe:f2fs_enlarge_min_fsync_blocks|safe:increase_ext4_default_commit_age|safe:increase_sk_mem_packets|safe:reduce_pci_pme_wakeups)
+              SKIPPED+=("$name(profile)"); echo "KRILIKD $PROFILE: skipped $name"; return 0 ;;
+            balanced:add_timeout_wakelocks_globally|balanced:reduce_freeze_timeout|balanced:avoid_extra_s2idle_wake_attempts|balanced:disable_cache_hot_buddy|balanced:f2fs_enlarge_min_fsync_blocks|balanced:increase_ext4_default_commit_age|balanced:increase_sk_mem_packets)
+              SKIPPED+=("$name(profile)"); echo "KRILIKD $PROFILE: skipped $name"; return 0 ;;
+            *) try_patch "$name" "$@" ;;
+          esac
+        }
+
+        apply_patch optimized_mem_operations < "$KP/optimized_mem_operations.patch"
         # file_struct_8bytes_align is deliberately NOT applied on GKI (>= 5.10
         # trees with ANDROID_KABI in struct file): on arm64 struct file already
         # has 8-byte alignment from its pointer/u64 members, so the patch buys
@@ -44,19 +67,19 @@ runs:
         # on every symbol that reaches struct file - the stock vendor modules
         # would then refuse to load (boot-logo hang).
         if ! grep -q 'ANDROID_KABI' include/linux/fs.h 2>/dev/null; then
-          try_patch file_struct_8bytes_align < "$KP/file_struct_8bytes_align.patch"
+          apply_patch file_struct_8bytes_align < "$KP/file_struct_8bytes_align.patch"
         else
           echo "file_struct_8bytes_align: skipped on GKI (KMI-sensitive, no-op on arm64)"
         fi
-        try_patch reduce_cache_pressure < "$KP/reduce_cache_pressure.patch"
-        try_patch mem_opt_prefetch < "$KP/mem_opt_prefetch.patch"
+        apply_patch reduce_cache_pressure < "$KP/reduce_cache_pressure.patch"
+        apply_patch mem_opt_prefetch < "$KP/mem_opt_prefetch.patch"
 
         if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | tail -n1)" = "$KERNEL_VERSION" ]; then
-          try_patch optimise_memcmp < "$KP/optimise_memcmp.patch"
+          apply_patch optimise_memcmp < "$KP/optimise_memcmp.patch"
         elif [ "$(printf '%s\n' "$KERNEL_VERSION" "5.11" | sort -V | tail -n1)" = "$KERNEL_VERSION" ]; then
           # process substitution, not a pipe: try_patch must run in this shell
           # so its APPLIED/SKIPPED bookkeeping survives.
-          try_patch optimise_memcmp < <(sed \
+          apply_patch optimise_memcmp < <(sed \
               -e 's/SYM_FUNC_START(__pi_memcmp)/SYM_FUNC_START_WEAK_PI(memcmp)/' \
               -e 's/SYM_FUNC_END(__pi_memcmp)/SYM_FUNC_END_PI(memcmp)/' \
               -e 's/SYM_FUNC_ALIAS_WEAK(memcmp, __pi_memcmp)/EXPORT_SYMBOL_NOKASAN(memcmp)/' \
@@ -64,17 +87,17 @@ runs:
         else
           echo "Optimised memcmp patch not found!"
         fi
-        try_patch minimise_wakeup_time < "$KP/minimise_wakeup_time.patch"
-        try_patch int_sqrt < "$KP/int_sqrt.patch"
-        try_patch reduce_gc_thread_sleep_time < "$KP/reduce_gc_thread_sleep_time.patch"
-        try_patch add_timeout_wakelocks_globally < "$KP/add_timeout_wakelocks_globally.patch"
-        try_patch f2fs_reduce_congestion < "$KP/f2fs_reduce_congestion.patch"
-        try_patch reduce_freeze_timeout < "$KP/reduce_freeze_timeout.patch"
+        apply_patch minimise_wakeup_time < "$KP/minimise_wakeup_time.patch"
+        apply_patch int_sqrt < "$KP/int_sqrt.patch"
+        apply_patch reduce_gc_thread_sleep_time < "$KP/reduce_gc_thread_sleep_time.patch"
+        apply_patch add_timeout_wakelocks_globally < "$KP/add_timeout_wakelocks_globally.patch"
+        apply_patch f2fs_reduce_congestion < "$KP/f2fs_reduce_congestion.patch"
+        apply_patch reduce_freeze_timeout < "$KP/reduce_freeze_timeout.patch"
 
         if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
-          try_patch clear_page_16bytes_align < "$KP/clear_page_16bytes_align.patch"
+          apply_patch clear_page_16bytes_align < "$KP/clear_page_16bytes_align.patch"
         else
-          try_patch clear_page_16bytes_align -F3 < <(sed \
+          apply_patch clear_page_16bytes_align -F3 < <(sed \
             -e 's/SYM_FUNC_START_PI(clear_page)/SYM_FUNC_START_PI(__pi_clear_page)/' \
             "$KP/clear_page_16bytes_align.patch")
         fi
@@ -92,7 +115,7 @@ runs:
                  f2fs_enlarge_min_fsync_blocks increase_ext4_default_commit_age \
                  increase_sk_mem_packets reduce_pci_pme_wakeups \
                  silence_irq_cpu_logspam silence_system_logspam; do
-          try_patch "$p" -F3 < "$KP/$p.patch"
+          apply_patch "$p" -F3 < "$KP/$p.patch"
         done
 
         # Google's GKI AutoFDO profile (Kleaf trees only): build the
@@ -107,7 +130,8 @@ runs:
         echo "[+] Performance: applied ${#APPLIED[@]}: ${APPLIED[*]:-none}"
         echo "[!] Performance: skipped ${#SKIPPED[@]}: ${SKIPPED[*]:-none}"
         {
-          echo "### Performance patches"
+          echo "### KRILIKD Performance patches"
+          echo "- profile: ${PROFILE}"
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
           echo "- ${AFDO_MSG}"
