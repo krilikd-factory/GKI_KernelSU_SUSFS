@@ -52,7 +52,7 @@ on:
       keep_kmi:
         description: "Keep stock KMI generation suffix in kernel version (fix #265)"
         type: boolean
-        default: false
+        default: true
       commit_mode:
         description: "latest = branch tips, verified = audited pins"
         required: false
@@ -60,7 +60,7 @@ on:
         options:
           - latest
           - verified
-        default: verified
+        default: latest
       root_flavor:
         description: "Root Flavor"
         type: choice
@@ -111,9 +111,9 @@ on:
         type: boolean
         default: true
       use_perf:
-        description: "Performance"
+        description: "Performance (patches that do not apply to the tree are skipped, not fatal)"
         type: boolean
-        default: false
+        default: true
       test_release_notes:
         description: "Render release notes preview only (skip all builds + release)"
         type: boolean
@@ -518,12 +518,11 @@ jobs:
 
           # Scheduled (nightly) runs carry NO inputs - the use_* booleans are
           # empty strings, not true - so read them with schedule defaults:
-          # every feature ON (matching the dispatch defaults) except Perf,
-          # which is opt-in on dispatch and stays off for nightlies.
+          # every feature ON, matching the dispatch defaults (Perf included).
           if [ "${{ github.event_name }}" = "schedule" ]; then
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
-            F_BPF=true;    F_PERF=false
+            F_BPF=true;    F_PERF=true
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
