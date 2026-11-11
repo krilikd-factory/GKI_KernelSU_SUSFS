@@ -14,6 +14,10 @@ inputs:
     required: false
     type: boolean
     default: false
+  lto:
+    description: 'full (Google GKI release setting) or thin. full falls back to thin when its build fails (typically out of memory on the runner).'
+    required: false
+    default: 'full'
   kmi_symbol_lists:
     description: 'Vendor symbol lists (gki/aarch64/symbols/<name>) whose CRCs must match stock. Empty = skip the guard.'
     required: false
@@ -102,11 +106,37 @@ runs:
             # CRC guard below.
             BAZEL_TARGETS=(//common:kernel_aarch64/Image //common:kernel_aarch64/vmlinux.symvers)
           fi
-          tools/bazel build \
-            --config=fast \
-            "${PAGE_SIZE_FLAGS[@]}" \
-            --disk_cache=/home/runner/.cache/bazel \
-            "${BAZEL_TARGETS[@]}"
+          # --config=fast pins ThinLTO; an explicit --lto after it overrides.
+          # Full LTO is what Google ships for GKI; if it fails here (the usual
+          # cause is the 4-core/16 GB runner running out of memory on the
+          # single vmlinux link) retry with ThinLTO instead of failing the leg.
+          LTO="${{ inputs.lto }}"; LTO="${LTO:-full}"
+          kbuild() { # <lto|empty>  empty = exactly the old command (fast => thin)
+            local LTO_FLAG=()
+            [ -n "$1" ] && LTO_FLAG=(--lto="$1")
+            tools/bazel build \
+              --config=fast \
+              "${LTO_FLAG[@]}" \
+              "${PAGE_SIZE_FLAGS[@]}" \
+              --disk_cache=/home/runner/.cache/bazel \
+              "${BAZEL_TARGETS[@]}"
+          }
+          if [ "$LTO" = "full" ]; then
+            echo "Memory before full-LTO build:"; free -h || true
+            if kbuild full; then
+              USED_LTO=full
+            else
+              echo "::warning::Full LTO build failed (see above, usually OOM); retrying with ThinLTO (the previous default command)"
+              free -h || true
+              kbuild ""
+              USED_LTO=thin
+            fi
+          else
+            kbuild "$LTO"
+            USED_LTO="$LTO"
+          fi
+          echo "KERNEL_LTO=$USED_LTO" >> "$GITHUB_ENV"
+          echo "### Kernel LTO: $USED_LTO" >> "$GITHUB_STEP_SUMMARY"
         fi
 
     - name: 'Verify Page Size in Generated .config'
@@ -140,6 +170,8 @@ runs:
         fi
         echo "Verifying page size using $CONFIG_FILE"
         grep -E '^(# )?CONFIG_ARM64_(4K|16K|64K)_PAGES|^CONFIG_ARM64_PAGE_SHIFT' "$CONFIG_FILE" || true
+        echo "--- LTO / AutoFDO in final .config ---"
+        grep -E '^(# )?CONFIG_LTO_(NONE|CLANG|CLANG_THIN|CLANG_FULL)[= ]|^CONFIG_AUTOFDO_CLANG' "$CONFIG_FILE" || true
 
         # Susfs-presence probe on the built image: the fs/susfs.o objects leave
         # their log-format strings in .rodata; a zero count means susfs was
