@@ -589,6 +589,18 @@ jobs:
           [ "$F_PERF" = "true" ] && FEATURES="${FEATURES}Perf+"
           echo "feature_set=${FEATURES%+}" >> "$GITHUB_OUTPUT"
 
+          # known-good pins commits, not features: say so when this dispatch
+          # turns on something the booted build did not have. Note the old
+          # 6.12 BBRv3 step was a no-op, so any NET build now carries real
+          # BBRv3 that the pre-fix known-good builds never had.
+          KG_KEY="${{ steps.resolve.outputs.known_good_key }}"
+          if [ -n "$KG_KEY" ] && [ -f .github/known-good.json ]; then
+            KG_FEATURES="$(jq -r --arg k "$KG_KEY" '.[$k].feature_set // empty' .github/known-good.json)"
+            if [ -n "$KG_FEATURES" ] && [ "$KG_FEATURES" != "${FEATURES%+}" ]; then
+              echo "::warning::Features differ from the known-good build ($KG_FEATURES -> ${FEATURES%+}). Same commits, but this is a new variant: test-boot it, then mark it known-good."
+            fi
+          fi
+
       - name: Clone shared source repos once
         if: inputs.use_nomount && !inputs.test_release_notes
         shell: bash
