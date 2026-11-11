@@ -50,9 +50,22 @@ runs:
           fi
         }
         if [[ ${{ inputs.version }} == "android16-6.12" ]]; then
-          #patch -p1 < "${{ github.workspace }}/kernel_patches/common/bbrv3/0001-net-tcp-backport-BBRv3-to-android15-6.6.patch"
-          #patch -p1 < ${{ github.action_path }}/patches/0001-net-tcp-backport-BBRv3-to-android16-6.12.patch
-          echo "skipped"
+          # Upstream had this family switched off (no reason recorded). The
+          # backport keeps the struct layouts, but two of its edits are bare
+          # unions that genksyms sees, so KMI CRCs would move and stock vendor
+          # modules would not load. Apply it only
+          # if it fits this sublevel cleanly, then hide those two edits from
+          # genksyms and add compile-time layout asserts
+          # (.github/scripts/bbrv3_kabi_hide.py). The KMI CRC guard after the
+          # build double-checks the result.
+          P612="$KP/0001-net-tcp-backport-BBRv3-to-android16-6.12.patch"
+          if [ -f "$P612" ] && patch -p1 --forward --dry-run < "$P612" >/dev/null 2>&1; then
+            patch -p1 --forward < "$P612"
+            python3 -I "${{ github.workspace }}/.github/scripts/bbrv3_kabi_hide.py"
+          else
+            echo "::warning::BBRv3 backport does not apply to android16-6.12.${{ inputs.sublevel }}; building with BBR v1 only"
+            echo "BBRV3_SKIPPED=1" >> "$GITHUB_ENV"
+          fi
         elif [[ ${{ inputs.version }} == "android15-6.6" ]]; then
           patch -p1 < "$(pick "$KP" 0001-net-tcp-backport-BBRv3-to-android15-6.6)"
         elif [[ ${{ inputs.version }} == "android14-6.1" ]]; then
@@ -81,6 +94,7 @@ runs:
         echo "[+] BBRv3 patches applied"
 
     - name: Enable BBRv3 Kernel Config
+      if: env.BBRV3_SKIPPED != '1'
       uses: ./.github/actions/set-kernel-config
       with:
         config_list: |
