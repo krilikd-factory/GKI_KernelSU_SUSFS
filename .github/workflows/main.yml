@@ -54,13 +54,14 @@ on:
         type: boolean
         default: true
       commit_mode:
-        description: "latest = branch tips, verified = audited pins"
+        description: "known-good = exact commits of your last build that booted (.github/known-good.json; falls back to latest when empty), latest = branch tips, verified = audited pins"
         required: false
         type: choice
         options:
+          - known-good
           - latest
           - verified
-        default: latest
+        default: known-good
       root_flavor:
         description: "Root Flavor"
         type: choice
@@ -167,6 +168,10 @@ jobs:
       anykernel3_commit: ${{ steps.resolve.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ steps.resolve.outputs.droidspaces_commit }}
       feature_set: ${{ steps.features.outputs.feature_set }}
+      pin_susfs_commit: ${{ steps.resolve.outputs.pin_susfs_commit }}
+      pin_kernel_common: ${{ steps.resolve.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ steps.resolve.outputs.pin_bbg_commit }}
+      known_good_key: ${{ steps.resolve.outputs.known_good_key }}
       manager_list: ${{ steps.manager.outputs.manager_list }}
     steps:
       - uses: actions/checkout@v7
@@ -208,6 +213,41 @@ jobs:
             COMMIT_MODE="${{ inputs.commit_mode || 'verified' }}"
           fi
           echo "commit_mode=${COMMIT_MODE}"
+
+          # known-good: reuse the exact component commits of a build that was
+          # flashed and booted (recorded by "Mark build as known-good" into
+          # .github/known-good.json). The set is per kernel family +
+          # patch level + root, so it only applies to a dispatch that names one
+          # family, one patch level and one root flavor. Anything missing falls
+          # back to the latest tip of that component, loudly.
+          KG_ROOT=""; KG_SUSFS=""; KG_COMMON=""; KG_NOMOUNT=""; KG_BBG=""
+          KG_DS=""; KG_KP=""; KG_AK3=""; KG_KEY=""
+          if [ "$COMMIT_MODE" = "known-good" ]; then
+            KVER_IN="${{ inputs.kernel_build_version }}"
+            OPL_IN="${{ inputs.os_patch_level }}"
+            ROOT_IN="${{ inputs.root_flavor }}"
+            KG_FILE=".github/known-good.json"
+            if [[ "$KVER_IN" =~ ^([0-9]+\.[0-9]+)\.x-(android[0-9]+)$ ]] && \
+               [ -n "$OPL_IN" ] && [ "${OPL_IN,,}" != "all" ] && \
+               [ -n "$ROOT_IN" ] && [[ "$ROOT_IN" != All* ]]; then
+              KG_KEY="${BASH_REMATCH[2]}-${BASH_REMATCH[1]}-${OPL_IN}/${ROOT_IN}"
+            fi
+            if [ -n "$KG_KEY" ] && [ -f "$KG_FILE" ] && jq -e --arg k "$KG_KEY" '.[$k].root_commit // empty' "$KG_FILE" >/dev/null 2>&1; then
+              kg() { jq -r --arg k "$KG_KEY" --arg f "$1" '.[$k][$f] // empty' "$KG_FILE"; }
+              KG_ROOT="$(kg root_commit)";        KG_SUSFS="$(kg susfs_commit)"
+              KG_COMMON="$(kg kernel_source_commit)"; KG_NOMOUNT="$(kg nomount_commit)"
+              KG_BBG="$(kg bbg_commit)";          KG_DS="$(kg droidspaces_commit)"
+              KG_KP="$(kg kernel_patches_commit)"; KG_AK3="$(kg anykernel3_commit)"
+              echo "[+] known-good set '$KG_KEY' (recorded from $(kg from_run)):"
+              jq --arg k "$KG_KEY" '.[$k]' "$KG_FILE"
+            else
+              echo "::warning::commit_mode=known-good but no known-good set for '${KG_KEY:-this selection}' - building LATEST tips. After this build boots, run the 'Mark build as known-good' workflow with this run's id."
+            fi
+          fi
+          echo "known_good_key=${KG_ROOT:+$KG_KEY}" >> "$GITHUB_OUTPUT"
+          echo "pin_susfs_commit=${KG_SUSFS}" >> "$GITHUB_OUTPUT"
+          echo "pin_kernel_common=${KG_COMMON}" >> "$GITHUB_OUTPUT"
+          echo "pin_bbg_commit=${KG_BBG}" >> "$GITHUB_OUTPUT"
 
           retry() {
             local n=0
@@ -306,7 +346,7 @@ jobs:
 
           # NoMount (pinned in verified mode, else dev tip)
           # NoMount always tracks the dev tip - never pinned, in either mode.
-          emit nomount_commit "$(resolve_sha https://github.com/maxsteeel/nomount.git refs/heads/dev)"
+          emit nomount_commit "${KG_NOMOUNT:-$(resolve_sha https://github.com/maxsteeel/nomount.git refs/heads/dev)}"
 
           # KernelSU-Next manager - always built from the official repo's dev branch.
           # pershoot's fork is used only for the kernel SUSFS integration (root_commit below),
@@ -359,6 +399,11 @@ jobs:
           else
             NEXT_COMMIT="$(resolve_sha https://github.com/KernelSU-Next/KernelSU-Next.git refs/heads/dev)"
           fi
+          # known-good: the exact KernelSU-Next commit that booted.
+          if [ -n "$KG_ROOT" ] && [ "${{ inputs.root_flavor }}" = "KernelSU-Next" ]; then
+            NEXT_COMMIT="$KG_ROOT"
+            echo "[+] KernelSU-Next pinned to known-good ${NEXT_COMMIT:0:12}"
+          fi
 
           # The kernel reports 30000 + count(merge-base(KSU HEAD, upstream dev))
           # -- see .github/actions/root-setup. The manager has to be resolved at
@@ -374,8 +419,8 @@ jobs:
             # base on run 41005208268 and left the pairing to the fallback.
             NEXT_BASE=""
             for cmp_url in \
-              "https://api.github.com/repos/pershoot/KernelSU-Next/compare/dev...dev-susfs" \
-              "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/compare/dev...pershoot:dev-susfs"; do
+              "https://api.github.com/repos/pershoot/KernelSU-Next/compare/dev...${NEXT_COMMIT}" \
+              "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/compare/dev...pershoot:${NEXT_COMMIT}"; do
               NEXT_BASE="$(curl -fsSL --max-time 30 --retry 3 \
                 -H "Authorization: Bearer ${{ github.token }}" \
                 -H "Accept: application/vnd.github+json" \
@@ -481,9 +526,9 @@ jobs:
           done
 
           # Tracked build helpers (resolved automatically, before the run)
-          emit kernel_patches_commit "$(resolve_sha https://github.com/WildKernels/kernel_patches.git refs/heads/main)"
-          emit anykernel3_commit   "$(resolve_sha https://github.com/WildKernels/AnyKernel3.git refs/heads/gki-2.0)"
-          emit droidspaces_commit  "$(resolve_sha https://github.com/ravindu644/Droidspaces-OSS.git refs/heads/main)"
+          emit kernel_patches_commit "${KG_KP:-$(resolve_sha https://github.com/WildKernels/kernel_patches.git refs/heads/main)}"
+          emit anykernel3_commit   "${KG_AK3:-$(resolve_sha https://github.com/WildKernels/AnyKernel3.git refs/heads/gki-2.0)}"
+          emit droidspaces_commit  "${KG_DS:-$(resolve_sha https://github.com/ravindu644/Droidspaces-OSS.git refs/heads/main)}"
 
           echo "Resolved:"
           env | grep -E '^(nomount_commit|kernelsu_commit|kernelsu_branch|root_commit|susfs_commit_|kernel_patches_commit|anykernel3_commit|droidspaces_commit)' | sort || true
@@ -678,6 +723,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android13-5-10:
@@ -708,6 +756,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android13-5-15:
@@ -738,6 +789,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android14-5-15:
@@ -768,6 +822,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android14-6-1:
@@ -798,6 +855,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android15-6-6:
@@ -828,6 +888,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android16-6-12:
@@ -858,6 +921,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   build-android17-6-18:
@@ -893,6 +959,9 @@ jobs:
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
+      pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
+      pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
     secrets: inherit
 
   telegram-announce:

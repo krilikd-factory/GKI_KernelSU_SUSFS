@@ -86,6 +86,21 @@ on:
         required: false
         type: string
         default: "4k"
+      pin_susfs_commit:
+        description: "known-good SUSFS commit (KernelSU-Next legs); empty = resolve as usual"
+        required: false
+        type: string
+        default: ""
+      pin_kernel_common:
+        description: "known-good kernel/common commit; empty = branch tip"
+        required: false
+        type: string
+        default: ""
+      pin_bbg_commit:
+        description: "known-good Baseband-guard commit; empty = main tip"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   generate-matrix:
@@ -339,5 +354,8 @@ jobs:
       keep_kmi: ${{ inputs.keep_kmi }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
       page_size: ${{ inputs.page_size }}
+      pin_susfs_commit: ${{ inputs.pin_susfs_commit }}
+      pin_kernel_common: ${{ inputs.pin_kernel_common }}
+      pin_bbg_commit: ${{ inputs.pin_bbg_commit }}
       stock_config_artifact: stock-configs-${{ needs.generate-matrix.outputs.version_slug }}
     secrets: inherit

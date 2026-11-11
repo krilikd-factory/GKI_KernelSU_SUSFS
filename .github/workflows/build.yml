@@ -76,6 +76,18 @@ on:
         required: false
         type: string
         default: "4k"
+      pin_susfs_commit:
+        required: false
+        type: string
+        default: ""
+      pin_kernel_common:
+        required: false
+        type: string
+        default: ""
+      pin_bbg_commit:
+        required: false
+        type: string
+        default: ""
       stock_config_artifact:
         description: "Artifact name with prefetched stock configs (stock_<kver>[_16k].config)"
         required: false
@@ -92,6 +104,10 @@ jobs:
       # commit of the gki branch that declares this SUSFS_VERSION (fails if
       # none). Only enforced on android16-6.12; other families track as before.
       REQUIRED_SUSFS_VERSION: ${{ inputs.version == 'android16-6.12' && 'v2.4.0' || '' }}
+      # known-good pins (empty = resolve as usual); see commit_mode in main.yml.
+      PIN_SUSFS_COMMIT: ${{ inputs.pin_susfs_commit }}
+      PIN_KERNEL_COMMON: ${{ inputs.pin_kernel_common }}
+      PIN_BBG_COMMIT: ${{ inputs.pin_bbg_commit }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
@@ -565,3 +581,48 @@ jobs:
           path: /tmp/build-summary-${{ steps.build-summary.outputs.summary_base }}.md
           if-no-files-found: warn
           compression-level: 9
+
+      # Exact component commits of this build. If it boots, the
+      # "Mark build as known-good" workflow copies this file into
+      # .github/known-good.json and commit_mode=known-good rebuilds
+      # exactly these commits from then on.
+      - name: Record component pins (known-good candidate)
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          full() { # turn a short/odd value into a 40-hex sha or empty
+            [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]] && echo "$1" || echo ""
+          }
+          KEY="${{ inputs.version }}-${{ inputs.os_patch_level }}/${{ inputs.variant }}"
+          jq -n \
+            --arg key "$KEY" \
+            --arg file "${{ steps.extract.outputs.file_name }}" \
+            --arg root_commit "$(full "${ROOT_COMMIT:-}")" \
+            --arg root_version "${ROOT_VERSION:-}" \
+            --arg susfs_commit "$(full "${SUSFS_COMMIT:-}")" \
+            --arg kernel_source_commit "$(full "${KERNEL_SOURCE_COMMIT:-}")" \
+            --arg nomount_commit "$(full "${{ inputs.nomount_commit }}")" \
+            --arg bbg_commit "$(full "${BBG_COMMIT_FULL:-}")" \
+            --arg droidspaces_commit "$(full "${{ inputs.droidspaces_commit }}")" \
+            --arg kernel_patches_commit "$(full "${{ inputs.kernel_patches_commit }}")" \
+            --arg anykernel3_commit "$(full "${{ inputs.anykernel3_commit }}")" \
+            --arg feature_set "${{ inputs.feature_set }}" \
+            --arg from_run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{($key): {file: $file, root_commit: $root_commit, root_version: $root_version,
+              susfs_commit: $susfs_commit, kernel_source_commit: $kernel_source_commit,
+              nomount_commit: $nomount_commit, bbg_commit: $bbg_commit,
+              droidspaces_commit: $droidspaces_commit,
+              kernel_patches_commit: $kernel_patches_commit,
+              anykernel3_commit: $anykernel3_commit,
+              feature_set: $feature_set, from_run: $from_run}}' \
+            > "${{ github.workspace }}/known-good-candidate.json"
+          cat "${{ github.workspace }}/known-good-candidate.json"
+
+      - name: Upload component pins
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.extract.outputs.file_name }}-Pins
+          path: ${{ github.workspace }}/known-good-candidate.json
+          if-no-files-found: error

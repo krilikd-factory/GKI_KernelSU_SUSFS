@@ -1,0 +1,95 @@
+name: Mark build as known-good
+
+# Run this AFTER you flashed a kernel from a "Build Kernels" run and it booted.
+# It copies that run's component pins (the *-Pins artifact every successful
+# build leg uploads: KernelSU-Next, SUSFS, kernel/common, NoMount, BBG,
+# DroidSpaces, kernel_patches, AnyKernel3 commits) into
+# .github/known-good.json. "Build Kernels" with commit_mode=known-good
+# (the default) then rebuilds exactly those commits. The set it replaces is
+# kept as "<key>@previous" so a bad mark can be rolled back by hand.
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run ID or run URL of the Build Kernels run whose kernel BOOTED"
+        required: true
+        type: string
+      build:
+        description: "Only this build of the run (e.g. 6.12.69-android16-2026-03-KernelSU-Next); empty = every build in the run"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: known-good
+  cancel-in-progress: false
+
+jobs:
+  mark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch the run's component pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_IN: ${{ inputs.run_id }}
+          BUILD_IN: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          RUN="${RUN_IN##*/runs/}"; RUN="${RUN%%/*}"; RUN="${RUN%%\?*}"
+          [[ "$RUN" =~ ^[0-9]+$ ]] || { echo "ERROR: '$RUN_IN' is not a run id or run URL" >&2; exit 1; }
+          CONCL="$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion,workflowName --jq '.workflowName + " / " + (.conclusion // "in progress")')"
+          echo "Run $RUN: $CONCL"
+          PATTERN="*-Pins"
+          [ -n "$BUILD_IN" ] && PATTERN="${BUILD_IN}-Pins"
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --pattern "$PATTERN" --dir pins
+          shopt -s nullglob
+          FILES=(pins/*/known-good-candidate.json)
+          [ "${#FILES[@]}" -gt 0 ] || { echo "ERROR: run $RUN has no '$PATTERN' artifact (built before pin recording existed, or expired)" >&2; exit 1; }
+          printf 'pins: %s\n' "${FILES[@]}"
+          # Every recorded set must carry real commits for the parts that decide
+          # whether it boots; refuse to mark a half-empty set as known-good.
+          for f in "${FILES[@]}"; do
+            jq -e 'to_entries[0].value
+                   | (.root_commit|test("^[0-9a-f]{40}$"))
+                     and (.kernel_source_commit|test("^[0-9a-f]{40}$"))' "$f" >/dev/null \
+              || { echo "ERROR: $f lacks root_commit/kernel_source_commit" >&2; cat "$f" >&2; exit 1; }
+          done
+          echo "RUN=$RUN" >> "$GITHUB_ENV"
+
+      - name: Merge into known-good.json and commit
+        run: |
+          set -euo pipefail
+          KG=.github/known-good.json
+          [ -f "$KG" ] || echo '{}' > "$KG"
+          NEW="$(jq -s 'reduce .[] as $x ({}; . + $x)' pins/*/known-good-candidate.json)"
+          jq -S --argjson new "$NEW" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+            reduce ($new | to_entries[]) as $e (.;
+              (if has($e.key) and (.[$e.key].root_commit != $e.value.root_commit
+                                   or .[$e.key].kernel_source_commit != $e.value.kernel_source_commit
+                                   or .[$e.key].susfs_commit != $e.value.susfs_commit)
+               then .[$e.key + "@previous"] = .[$e.key] else . end)
+              | .[$e.key] = ($e.value + {marked_at: $at}))' "$KG" > "$KG.tmp"
+          mv "$KG.tmp" "$KG"
+          cat "$KG"
+          if git diff --quiet -- "$KG"; then
+            echo "known-good.json unchanged (this run is already the known-good set)."
+            exit 0
+          fi
+          KEYS="$(echo "$NEW" | jq -r 'keys | join(", ")')"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$KG"
+          git commit -m "known-good: ${KEYS} from run ${RUN}"
+          git push
+          {
+            echo "### Marked known-good"
+            echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN}"
+            echo "- sets: ${KEYS}"
+          } >> "$GITHUB_STEP_SUMMARY"
