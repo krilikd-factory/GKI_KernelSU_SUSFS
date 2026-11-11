@@ -88,6 +88,10 @@ on:
         required: false
         type: string
         default: ""
+      lto:
+        required: false
+        type: string
+        default: "full"
       stock_config_artifact:
         description: "Artifact name with prefetched stock configs (stock_<kver>[_16k].config)"
         required: false
@@ -98,7 +102,9 @@ jobs:
   build-gki:
     name: "${{ inputs.kernel_version }}.${{ inputs.sublevel }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }} (${{ inputs.variant }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Full LTO links vmlinux in one ~30-50 min step (and may need a thin
+    # retry), so the old 120 min budget is too tight.
+    timeout-minutes: 200
     env:
       # SUSFS release to build against. susfs-setup checks out the newest
       # commit of the gki branch that declares this SUSFS_VERSION (fails if
@@ -534,6 +540,7 @@ jobs:
           version: ${{ inputs.version }}
           page_size: ${{ inputs.page_size }}
           allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
+          lto: ${{ inputs.lto }}
 
       - name: Consolidated Build Summary
         id: build-summary
@@ -608,6 +615,7 @@ jobs:
             --arg kernel_patches_commit "$(full "${{ inputs.kernel_patches_commit }}")" \
             --arg anykernel3_commit "$(full "${{ inputs.anykernel3_commit }}")" \
             --arg feature_set "${{ inputs.feature_set }}" \
+            --arg lto "${KERNEL_LTO:-}" \
             --arg from_run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             '{($key): {file: $file, root_commit: $root_commit, root_version: $root_version,
               susfs_commit: $susfs_commit, kernel_source_commit: $kernel_source_commit,
@@ -615,7 +623,7 @@ jobs:
               droidspaces_commit: $droidspaces_commit,
               kernel_patches_commit: $kernel_patches_commit,
               anykernel3_commit: $anykernel3_commit,
-              feature_set: $feature_set, from_run: $from_run}}' \
+              feature_set: $feature_set, lto: $lto, from_run: $from_run}}' \
             > "${{ github.workspace }}/known-good-candidate.json"
           cat "${{ github.workspace }}/known-good-candidate.json"
 

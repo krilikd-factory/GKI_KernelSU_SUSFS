@@ -101,6 +101,11 @@ on:
         required: false
         type: string
         default: ""
+      lto:
+        description: "full or thin"
+        required: false
+        type: string
+        default: "full"
 
 jobs:
   generate-matrix:
@@ -357,5 +362,6 @@ jobs:
       pin_susfs_commit: ${{ inputs.pin_susfs_commit }}
       pin_kernel_common: ${{ inputs.pin_kernel_common }}
       pin_bbg_commit: ${{ inputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto }}
       stock_config_artifact: stock-configs-${{ needs.generate-matrix.outputs.version_slug }}
     secrets: inherit

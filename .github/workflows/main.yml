@@ -111,6 +111,13 @@ on:
         description: "BPF Stack (BTF + eBPF + FUSE-BPF)"
         type: boolean
         default: true
+      lto:
+        description: "Link-time optimisation: full (Google's GKI release setting, slower build; falls back to thin automatically if the runner runs out of memory) or thin"
+        type: choice
+        options:
+          - full
+          - thin
+        default: full
       use_perf:
         description: "Performance (patches that do not apply to the tree are skipped, not fatal)"
         type: boolean
@@ -738,6 +745,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android13-5-10:
@@ -771,6 +779,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android13-5-15:
@@ -804,6 +813,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android14-5-15:
@@ -837,6 +847,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android14-6-1:
@@ -870,6 +881,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android15-6-6:
@@ -903,6 +915,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android16-6-12:
@@ -936,6 +949,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   build-android17-6-18:
@@ -974,6 +988,7 @@ jobs:
       pin_susfs_commit: ${{ matrix.root.root_flavor == 'next' && needs.resolve-sources.outputs.pin_susfs_commit || '' }}
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
+      lto: ${{ inputs.lto || 'full' }}
     secrets: inherit
 
   telegram-announce:
