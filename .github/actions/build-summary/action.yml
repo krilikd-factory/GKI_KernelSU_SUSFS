@@ -281,6 +281,21 @@ runs:
             else:
                 lines += [f"⚠️ Capability report: {md(caps_error)}.", ""]
 
+            rekernel, rk_error = read_json(workspace / "rekernel-provenance.json")
+            if isinstance(rekernel, dict):
+                lines += ["### 🧊 Re-Kernel", ""]
+                table(lines, ("Field", "Evidence"), [
+                    ("Source", rekernel.get("repo")),
+                    ("Commit", rekernel.get("commit")),
+                    ("Mode / transport", f"{rekernel.get('mode')} / {rekernel.get('transport')}"),
+                    ("Source tree SHA-256", rekernel.get("source_tree_sha256")),
+                    ("Runtime / freezer compatibility", "⚠️ Requires separate on-device validation"),
+                ])
+            wakeup_sha = env.get("ASB_WAKEUP_BLOCKER_PATCH_SHA256")
+            if wakeup_sha:
+                lines += ["### 🌙 ASB wakeup blocker", "",
+                          f"Reviewed patch SHA-256 `{md(wakeup_sha)}`. Exact-name list, empty by default; physical suspend/modem/alarm/call/charging behavior is not attested.", ""]
+
             lines += ["### 📦 Artifacts and next step", ""]
             artifact_rows = [
                 (f"{a.file_name}-AnyKernel3", "Flashable kernel package"),
