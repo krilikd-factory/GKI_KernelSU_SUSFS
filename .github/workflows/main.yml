@@ -145,14 +145,16 @@ on:
         type: boolean
         default: true
       power_app_features:
-        description: "Re-Kernel and/or ASB wakeup blocker (android16-6.12; wakeup policy is empty by default)"
+        description: "Re-Kernel / ASB wakeup blocker / SDP 900 mA (android16-6.12; all = three, both = first two)"
         type: choice
         options:
+          - all
           - both
           - rekernel
           - wakeup-blocker
+          - sdp-900ma
           - none
-        default: both
+        default: all
       test_release_notes:
         description: "Render release notes preview only (skip all builds + release)"
         type: boolean
@@ -622,7 +624,7 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
-            F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true; F_RK=true; F_AWL=true
+            F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true; F_RK=true; F_AWL=true; F_SDP=true
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
@@ -637,10 +639,12 @@ jobs:
             F_BPF="${{ inputs.use_bpf }}";        F_PERF="${{ inputs.use_perf }}"
             F_VPN="${{ inputs.use_vpnhide }}";    F_USB="${{ inputs.use_usb_arsenal }}"
             case "${{ inputs.power_app_features }}" in
-              both)           F_RK=true;  F_AWL=true ;;
-              rekernel)       F_RK=true;  F_AWL=false ;;
-              wakeup-blocker) F_RK=false; F_AWL=true ;;
-              none)           F_RK=false; F_AWL=false ;;
+              all)            F_RK=true;  F_AWL=true;  F_SDP=true ;;
+              both)           F_RK=true;  F_AWL=true;  F_SDP=false ;;
+              rekernel)       F_RK=true;  F_AWL=false; F_SDP=false ;;
+              wakeup-blocker) F_RK=false; F_AWL=true;  F_SDP=false ;;
+              sdp-900ma)      F_RK=false; F_AWL=false; F_SDP=true ;;
+              none)           F_RK=false; F_AWL=false; F_SDP=false ;;
               *) echo "Unsupported power_app_features selection" >&2; exit 2 ;;
             esac
           fi
@@ -660,6 +664,7 @@ jobs:
           [ "$F_USB" = "true" ] && FEATURES="${FEATURES}USB+"
           [ "$F_RK" = "true" ] && FEATURES="${FEATURES}RK+"
           [ "$F_AWL" = "true" ] && FEATURES="${FEATURES}AWL+"
+          [ "$F_SDP" = "true" ] && FEATURES="${FEATURES}SDP900+"
           echo "feature_set=${FEATURES%+}" >> "$GITHUB_OUTPUT"
 
           # known-good pins commits, not features: say so when this dispatch

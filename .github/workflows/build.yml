@@ -459,6 +459,12 @@ jobs:
         with:
           version: ${{ inputs.version }}
 
+      - name: Integrate OPLUS SDP 900 mA
+        if: (contains(inputs.feature_set, 'SDP900') || inputs.feature_set == 'All') && inputs.version == 'android16-6.12'
+        uses: ./.github/actions/oplus-sdp-900ma
+        with:
+          version: ${{ inputs.version }}
+
       - name: Integrate Re-Kernel
         if: (contains(inputs.feature_set, 'RK') || inputs.feature_set == 'All') && inputs.version == 'android16-6.12'
         uses: ./.github/actions/rekernel
@@ -626,15 +632,18 @@ jobs:
           set -euo pipefail
           [ -f kernel-final.config ] || { echo "ERROR: final .config was not preserved" >&2; exit 1; }
           REQUIRE=()
-          if [[ ",${{ inputs.feature_set }}," == *",NET,"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
+          if [[ "+${{ inputs.feature_set }}+" == *"+NET+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
             REQUIRE+=(--require network.cake --require network.ip_sets)
           fi
           if [ "${{ inputs.version }}" = "android16-6.12" ]; then
-            if [[ ",${{ inputs.feature_set }}," == *",RK,"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
+            if [[ "+${{ inputs.feature_set }}+" == *"+RK+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
               REQUIRE+=(--require app.rekernel)
             fi
-            if [[ ",${{ inputs.feature_set }}," == *",AWL,"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
+            if [[ "+${{ inputs.feature_set }}+" == *"+AWL+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
               REQUIRE+=(--require power.wakeup_blocker)
+            fi
+            if [[ "+${{ inputs.feature_set }}+" == *"+SDP900+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
+              REQUIRE+=(--require charging.sdp_900ma)
             fi
           fi
           python3 -I .github/scripts/kernel_capability_report.py \
