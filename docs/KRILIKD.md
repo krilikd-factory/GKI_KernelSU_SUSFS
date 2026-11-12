@@ -51,7 +51,7 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, N
 2. Denylist и проверка рискованных header-изменений остаются дополнительными барьерами. Allowlist сам по себе не включает патч. Для candidate/enabled обязательны `families`, `devices`, `soc`, `provenance.source` и `provenance.license`; несовпадение с OnePlus 15/SM8850/android16-6.12 блокирует применение.
 3. **Build Kernels**: `stable` применяет только `enabled`; `candidate` дополнительно проверяет `candidate`. Оба канала используют dry-run и `-F0`, затем действуют прежние stock-config и KMI guards.
 4. `patch-inventory.json` в BuildInfo содержит digest, размер, состояние, target, решение и причину по каждому новому патчу. Так свежие патчи появляются регулярно, но не становятся незаметной частью production.
-5. Загрузилось стабильное ядро → заполни `device-validation-template.json` из Pins → **Mark build as known-good** (ID запуска + JSON checklist). Candidate-сборка и незаполненный checklist отклоняются: сначала переведи проверенные патчи в `enabled` и пересобери `stable`.
+5. Загрузилось стабильное ядро → открой **Mark build as known-good** и вставь только ссылку на его successful runner. Пустой checklist означает `boot_attested_only` — твоё ручное подтверждение именно boot. Для более широкой аттестации можно опционально вставить заполненный `device-validation-template.json` из Pins. Candidate-сборки по-прежнему отклоняются: сначала переведи проверенные патчи в `enabled` и пересобери `stable`.
 6. Не загрузилось → прошить сохранённое рабочее ядро, прислать `/sys/fs/pstore/console-ramoops*`. Для known-good с новой схемой evidence также фиксируется SHA-256 patch policy: её последующее изменение требует новой валидации, а не молчаливого reuse старого verdict.
 
 ## Сборка из исходников OnePlus
@@ -74,22 +74,24 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 
 ## Device evidence
 
-Pins artifact содержит `device-validation-template.json`. Обязательные проверки: boot, vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal и ASB. В known-good сохраняются только digest, время, `uname -r` и статус ручной аттестации. Serial, IMEI, account и network identifiers в отчёт не входят и поля с ними отклоняются. Checklist — явная ручная аттестация, а не независимое автоматическое доказательство.
+Простой режим требует только URL successful stable runner после личной проверки загрузки. Workflow сам скачивает Pins, проверяет evidence hashes и commits, а в known-good записывает `boot_attested_only`: это подтверждение boot, не утверждение о проверке остальных функций. При повторном использовании таких pins resolver показывает предупреждение об этом ограниченном scope.
+
+Для полной аттестации Pins artifact по-прежнему содержит `device-validation-template.json`. Его необязательный checklist охватывает boot, vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal и ASB; при заполнении все пункты должны быть `passed`. В known-good сохраняются digest, время, run/build binding и статус ручной аттестации; `uname -r` сохраняется для полного checklist. Serial, IMEI, account и network identifiers в отчёт не входят и поля с ними отклоняются. Оба режима — явная ручная аттестация, а не независимое автоматическое доказательство.
 
 ## Файлы
 
 | Файл | Что |
 |---|---|
-| `.github/known-good.json` | проверенные наборы коммитов и evidence digest |
+| `.github/known-good.json` | наборы коммитов и evidence с явным scope: boot-only или полный checklist |
 | `.github/device.json` | телефон и его стоковое ядро |
 | `.github/patch-policy.json` | observed/candidate/enabled, target и provenance |
 | `.github/patch-denylist.txt`, `.github/patch-allowlist.txt` | дополнительные запреты и header review |
 | `.github/scripts/new_patches.py` | lifecycle classifier и patch inventory |
 | `.github/scripts/source_provenance.py` | preflight фактического AOSP/OnePlus source |
 | `.github/scripts/kernel_capability_report.py` | build-time capability report для ASB |
-| `.github/scripts/device_evidence.py` | template и проверка device checklist |
+| `.github/scripts/device_evidence.py` | URL-only boot attestation, template и проверка полного device checklist |
 | `.github/workflows/update-check.yml` + `scripts/update_check.py` | проверка обновлений без auto-apply |
-| `.github/workflows/mark-known-good.yml` | ручное promotion только stable + device evidence |
+| `.github/workflows/mark-known-good.yml` | ручное promotion только stable + явный evidence scope |
 | `scripts/kmi_crc_guard.py`, `scripts/stock_config_guard.py` | прежние защиты загрузки |
 | `tests/test_build_evidence.py` | regression новых contracts |
 
