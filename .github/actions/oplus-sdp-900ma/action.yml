@@ -1,0 +1,47 @@
+name: 'OPLUS SDP 900 mA'
+description: 'Apply the vendored oplus_sdp_900ma patch (USB data port input current 500 -> 900 mA) and enable it'
+
+inputs:
+  version:
+    description: 'Kernel family; this vendored patch is exclusively for android16-6.12'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Apply vendored SDP 900 mA patch
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        [ "${{ inputs.version }}" = "android16-6.12" ] || {
+          echo "::error::oplus_sdp_900ma has only been reviewed for android16-6.12" >&2
+          exit 1
+        }
+        PATCH="${{ github.workspace }}/.github/patches/android16-6.12/oplus-sdp-900ma.patch"
+        [ -f "$PATCH" ] || { echo "::error::missing $PATCH" >&2; exit 1; }
+        [ ! -e drivers/misc/oplus_sdp_900ma.c ] || { echo "::error::oplus_sdp_900ma.c already exists" >&2; exit 1; }
+        git apply --check "$PATCH"
+        git apply "$PATCH"
+        grep -Fqx 'obj-$(CONFIG_OPLUS_SDP_900MA)	+= oplus_sdp_900ma.o' drivers/misc/Makefile
+        [ "$(grep -c '^config OPLUS_SDP_900MA$' drivers/misc/Kconfig)" -eq 1 ]
+        grep -Fq 'early_initcall(oplus_sdp_900ma_init);' drivers/misc/oplus_sdp_900ma.c
+        grep -Fq '__setup("oplus_sdp_900ma=", oplus_sdp_900ma_setup);' drivers/misc/oplus_sdp_900ma.c
+        echo "OPLUS_SDP_900MA_PATCH_SHA256=$(sha256sum "$PATCH" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+    - name: Enable SDP 900 mA
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_OPLUS_SDP_900MA=y
+
+    - name: Summarize safety contract
+      shell: bash
+      run: |
+        {
+          echo '### OPLUS SDP 900 mA'
+          echo '- Only the USB data port (SDP) input limit is raised 500 -> 900 mA; DCP, CDP and PD limits are untouched.'
+          echo '- The live device tree is edited at early boot; vendor charger modules stay stock, so every thermal clamp still applies.'
+          echo '- Read the result on the device: `cat /proc/sdp900ma`. Disable without rebuilding: boot parameter `oplus_sdp_900ma=0`.'
+          echo '- Non-spec for USB 2.0 ports (500 mA). Build evidence is not a charging measurement.'
+        } >> "$GITHUB_STEP_SUMMARY"
