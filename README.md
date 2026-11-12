@@ -85,7 +85,7 @@ There is deliberately no arbitrary path/value writer and no broad `/sys/kernel/k
 ## 🏗️ Build your own
 
 1. **Fork this repository.** Do not use the upstream Wild repository as the source of fork-specific settings.
-2. Open **Actions → Build Kernels** and select one family, patch level, root implementation and feature set.
+2. Open **Actions → Build Kernels** and select one family, patch level, root implementation and feature set. The dispatch form has exactly 25 inputs, within GitHub's startup limit. **Compatibility patches** selects Ptrace/Unicode together or separately; **Re-Kernel and/or ASB wakeup blocker** selects those Android 16 / 6.12 features together or separately. No feature choice was removed.
 3. Choose `stable` for enabled patches only or `candidate` for an explicitly reviewed candidate experiment.
 4. For the OnePlus target, choose AOSP or OnePlus source and keep the provenance/stock-version guards enabled.
 5. Download the matching artifacts from the completed run.
