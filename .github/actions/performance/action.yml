@@ -4,10 +4,6 @@ inputs:
   kernel_version:
     description: 'Kernel version (e.g., 6.1)'
     required: true
-  performance_profile:
-    description: 'KRILIKD profile: safe, balanced, or lab'
-    required: false
-    default: balanced
 
 runs:
   using: 'composite'
@@ -18,11 +14,6 @@ runs:
       run: |
         set -euo pipefail
         KERNEL_VERSION="${{ inputs.kernel_version }}"
-        PROFILE="${{ inputs.performance_profile }}"
-        case "$PROFILE" in
-          safe|balanced|lab) ;;
-          *) echo "ERROR: unknown KRILIKD performance profile: $PROFILE" >&2; exit 2 ;;
-        esac
         MIN_VERSION="5.16"
         KP="${{ github.workspace }}/kernel_patches/common"
 
@@ -45,19 +36,10 @@ runs:
           rm -f "$tmp"
         }
 
-        # Safe is intentionally small. Balanced is the recommended daily
-        # profile; lab is opt-in and may change writeback/wakeup behaviour.
-        # Every selected patch still goes through the dry-run gate below.
-        apply_patch() {
-          local name="$1"; shift
-          case "$PROFILE:$name" in
-            safe:reduce_cache_pressure|safe:add_timeout_wakelocks_globally|safe:f2fs_reduce_congestion|safe:reduce_freeze_timeout|safe:avoid_extra_s2idle_wake_attempts|safe:disable_cache_hot_buddy|safe:f2fs_enlarge_min_fsync_blocks|safe:increase_ext4_default_commit_age|safe:increase_sk_mem_packets|safe:reduce_pci_pme_wakeups)
-              SKIPPED+=("$name(profile)"); echo "KRILIKD $PROFILE: skipped $name"; return 0 ;;
-            balanced:add_timeout_wakelocks_globally|balanced:reduce_freeze_timeout|balanced:avoid_extra_s2idle_wake_attempts|balanced:disable_cache_hot_buddy|balanced:f2fs_enlarge_min_fsync_blocks|balanced:increase_ext4_default_commit_age|balanced:increase_sk_mem_packets)
-              SKIPPED+=("$name(profile)"); echo "KRILIKD $PROFILE: skipped $name"; return 0 ;;
-            *) try_patch "$name" "$@" ;;
-          esac
-        }
+        # KRILIKD TOP: one mode, every patch that fits this tree. Each one is
+        # dry-run first, and the stock-config + KMI CRC guards after the build
+        # stop anything that would change what the vendor modules rely on.
+        apply_patch() { try_patch "$@"; }
 
         apply_patch optimized_mem_operations < "$KP/optimized_mem_operations.patch"
         # file_struct_8bytes_align is deliberately NOT applied on GKI (>= 5.10
@@ -130,8 +112,7 @@ runs:
         echo "[+] Performance: applied ${#APPLIED[@]}: ${APPLIED[*]:-none}"
         echo "[!] Performance: skipped ${#SKIPPED[@]}: ${SKIPPED[*]:-none}"
         {
-          echo "### KRILIKD Performance patches"
-          echo "- profile: ${PROFILE}"
+          echo "### KRILIKD Performance patches (TOP)"
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
           echo "- ${AFDO_MSG}"
