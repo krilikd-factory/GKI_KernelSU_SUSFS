@@ -1,8 +1,8 @@
 name: 'Build summary'
-description: 'Write the per-build markdown summary (status, versions, root/SUSFS/NoMount commits) and expose the summary base name'
+description: 'Write one structured KRILIKD BuildInfo report from final config, component pins, patch decisions and safety evidence'
 inputs:
   job_status:
-    description: 'Status of the parent job (success/cancelled/failure); the workflow passes job.status here'
+    description: 'Status of the parent job (success/cancelled/failure)'
     required: true
   file_name:
     description: 'Artifact base name from the extract-sublevel-file-name step'
@@ -25,10 +25,22 @@ inputs:
   feature_set:
     required: false
     default: ''
+  family:
+    required: false
+    default: ''
   nomount_commit:
     required: false
     default: ''
   susfs_commit:
+    required: false
+    default: ''
+  droidspaces_commit:
+    required: false
+    default: ''
+  kernel_patches_commit:
+    required: false
+    default: ''
+  anykernel3_commit:
     required: false
     default: ''
 outputs:
@@ -43,6 +55,7 @@ runs:
       id: summary
       shell: bash
       run: |
+        set -euo pipefail
         SUMMARY_BASE="${{ inputs.file_name }}"
         if [ -z "${SUMMARY_BASE}" ]; then
           SUMMARY_BASE="${{ inputs.kernel_version }}.${{ inputs.sublevel }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}"
@@ -57,78 +70,38 @@ runs:
         SUMMARY_FILE="/tmp/build-summary-${SUMMARY_BASE}.md"
         echo "SUMMARY_BASE=${SUMMARY_BASE}" >> "$GITHUB_ENV"
 
-        # NoMount is optional (nomount_commit input is always populated, so
-        # feature_set is the only reliable signal for whether it was built).
-        NOMOUNT_ENABLED="false"
-        if [ "${{ contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All' }}" = "true" ]; then
-          NOMOUNT_ENABLED="true"
-        fi
-
-        # Determine build status
-        if [ "${{ inputs.job_status }}" = "success" ]; then
-          STATUS="[+] Success"
-        else
-          STATUS="[-] Failed"
-        fi
-
-        # Get kernel version from Image if available
         KERNEL_VER_STR=""
-        if [ -f "/home/runner/out/dist/Image" ]; then
-          KERNEL_VER_STR=$(strings "/home/runner/out/dist/Image" | grep -m1 "^Linux version " | sed 's/Linux version //' || echo "")
-        elif [ -f "/home/runner/out/Image" ]; then
-          KERNEL_VER_STR=$(strings "/home/runner/out/Image" | grep -m1 "^Linux version " | sed 's/Linux version //' || echo "")
-        fi
-
-        # Get KSU version from env (set by kernelsu action)
-        KSU_VER="${KSU_VERSION:-N/A}"
-        KSU_TAG="${KSU_GIT_TAG:-N/A}"
-        ROOT_IMPL="${ROOT_IMPLEMENTATION:-KernelSU-Next (legacy path)}"
-        ROOT_MANAGER="${ROOT_MANAGER:-KernelSU-Next Manager}"
-        ROOT_VERSION="${ROOT_VERSION:-${KSU_TAG}}"
-        ROOT_SHA="${ROOT_COMMIT:-${KSU_COMMIT:-N/A}}"
-        if [ "$NOMOUNT_ENABLED" = "true" ]; then
-          NOMOUNT_SHA="${NOMOUNT_COMMIT:-${{ inputs.nomount_commit }}}"
-        else
-          NOMOUNT_SHA="N/A"
-        fi
-        SUSFS_SHA="${SUSFS_COMMIT:-${{ inputs.susfs_commit }}}"
-
-        # Get SUSFS version from susfs.h if available
+        for image in /home/runner/out/dist/Image /home/runner/out/Image; do
+          if [ -f "$image" ]; then
+            KERNEL_VER_STR=$(strings "$image" | grep -m1 "^Linux version " | sed 's/Linux version //' || true)
+            break
+          fi
+        done
         SUSFS_VER="N/A"
-        if [ -f "${{ github.workspace }}/kernel/common/include/linux/susfs.h" ]; then
-          SUSFS_VER=$(grep '#define SUSFS_VERSION' "${{ github.workspace }}/kernel/common/include/linux/susfs.h" | awk -F'"' '{print $2}' || echo "N/A")
+        SUSFS_HEADER="${{ github.workspace }}/kernel/common/include/linux/susfs.h"
+        if [ -f "$SUSFS_HEADER" ]; then
+          SUSFS_VER=$(grep '#define SUSFS_VERSION' "$SUSFS_HEADER" | awk -F'"' '{print $2}' || true)
+          SUSFS_VER="${SUSFS_VER:-N/A}"
         fi
 
-        {
-          echo "## ${{ inputs.android_version }} ${{ inputs.kernel_version }}.${{ inputs.sublevel }} (${{ inputs.variant }}) - ${STATUS}"
-          echo
-          echo "| Metric | Value |"
-          echo "|--------|-------|"
-          echo "| **Status** | ${STATUS} |"
-          echo "| **Kernel** | ${{ inputs.kernel_version }}.${{ inputs.sublevel }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }} |"
-          if [ -n "$KERNEL_VER_STR" ]; then
-            echo "| **Version String** | \`${KERNEL_VER_STR}\` |"
-          fi
-          echo "| **KSU Version** | ${KSU_VER} |"
-          echo "| **KSU Tag** | ${KSU_TAG} |"
-          echo "| **Root Implementation** | ${ROOT_IMPL} |"
-          echo "| **Root Manager** | ${ROOT_MANAGER} |"
-          echo "| **Root Version** | ${ROOT_VERSION} |"
-          echo "| **Root Commit** | ${ROOT_SHA} |"
-          echo "| **SUSFS Version** | ${SUSFS_VER} |"
-          echo "| **SUSFS Commit** | ${SUSFS_SHA} |"
-          echo "| **NoMount Commit** | ${NOMOUNT_SHA} |"
-          echo "| **Feature Set** | ${{ inputs.feature_set }} |"
-          echo "| **Variant** | ${{ inputs.variant }} |"
-          echo "| **Page Size** | ${{ inputs.page_size }} |"
-          echo
-
-          # Kernel Fixes
-          if [ -f /tmp/kernel-fixes-summary.md ]; then
-            echo "### Kernel Fixes"
-            cat /tmp/kernel-fixes-summary.md
-            echo
-          fi
-        } > "$SUMMARY_FILE"
-
+        python3 -I "${{ github.workspace }}/.github/scripts/build_summary.py" \
+          --workspace "${{ github.workspace }}" \
+          --output "$SUMMARY_FILE" \
+          --job-status "${{ inputs.job_status }}" \
+          --file-name "${SUMMARY_BASE}" \
+          --kernel-version "${{ inputs.kernel_version }}" \
+          --sublevel "${{ inputs.sublevel }}" \
+          --android-version "${{ inputs.android_version }}" \
+          --os-patch-level "${{ inputs.os_patch_level }}" \
+          --variant "${{ inputs.variant }}" \
+          --page-size "${{ inputs.page_size }}" \
+          --feature-set "${{ inputs.feature_set }}" \
+          --family "${{ inputs.family }}" \
+          --version-string "$KERNEL_VER_STR" \
+          --susfs-version "$SUSFS_VER" \
+          --susfs-commit "${{ inputs.susfs_commit }}" \
+          --nomount-commit "${{ inputs.nomount_commit }}" \
+          --droidspaces-commit "${{ inputs.droidspaces_commit }}" \
+          --kernel-patches-commit "${{ inputs.kernel_patches_commit }}" \
+          --anykernel3-commit "${{ inputs.anykernel3_commit }}"
         echo "summary_base=${SUMMARY_BASE}" >> "$GITHUB_OUTPUT"
