@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Render one structured, evidence-bounded KRILIKD BuildInfo report.
+
+Optional evidence files are described as unavailable rather than turning a failed
+build's summary step into a second failure. Config presence never becomes runtime
+or physical-boot proof.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from collections import Counter
+from pathlib import Path
+
+FEATURE_ORDER = ("SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode", "BPF", "Perf", "VPN", "USB")
+FEATURES = {
+    "SUSFS": ("🛡️ SUSFS", "Kernel-side SUSFS integration; matching userspace remains required"),
+    "NoMount": ("🧩 NoMount", "Mount metamodule integration; companion artifact is built separately"),
+    "BBG": ("🔐 Baseband Guard", "Guards critical partitions and device nodes"),
+    "NET": ("🌐 Networking", "WireGuard, congestion control, Netfilter/IPSet, NAT and CIFS options"),
+    "DS": ("📦 DroidSpaces", "Container runtime support"),
+    "NTSync": ("🎮 NTSync", "NT-compatible synchronization primitives"),
+    "Ptrace": ("🩹 Ptrace fix", "Version-gated ptrace information-leak fix"),
+    "Unicode": ("🔤 Unicode fix", "Version-gated non-printable Unicode path fix"),
+    "BPF": ("📊 BPF stack", "BTF, eBPF and FUSE-BPF build options"),
+    "Perf": ("🚀 Performance pass", "Dry-run-checked patches plus stock-config and KMI guards"),
+    "VPN": ("🕵️ VPN Hide", "Built-in driver; managed only by its own app and matching companion"),
+    "USB": ("🔌 USB Arsenal", "USB gadget integration, including ISO/DVD mode where the patch fits"),
+}
+
+
+def md(value: object) -> str:
+    text = str(value if value not in (None, "") else "N/A")
+    return text.replace("|", "\\|").replace("\n", " ").strip()
+
+
+def table(lines: list[str], headers: tuple[str, ...], rows: list[tuple[object, ...]]) -> None:
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("|" + "|".join("---" for _ in headers) + "|")
+    for row in rows:
+        lines.append("| " + " | ".join(md(v) for v in row) + " |")
+    lines.append("")
+
+
+def read_json(path: Path):
+    if not path.is_file():
+        return None, "not generated"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), ""
+    except (OSError, ValueError) as exc:
+        return None, f"unreadable: {exc}"
+
+
+def enabled_features(raw: str) -> list[str]:
+    tokens = [x.strip() for x in raw.split("+") if x.strip()]
+    if raw.strip() == "All":
+        return list(FEATURE_ORDER)
+    return [x for x in FEATURE_ORDER if x in tokens] + [x for x in tokens if x not in FEATURE_ORDER]
+
+
+def gate_state(status: str, report: Path) -> str:
+    if report.is_file() and status == "success":
+        return "✅ Passed; report present"
+    if report.is_file():
+        return "📄 Report present; inspect build result"
+    return "⚠️ Not recorded or guard skipped"
+
+
+def render(a: argparse.Namespace, env: dict[str, str]) -> str:
+    workspace = Path(a.workspace)
+    success = a.job_status == "success"
+    status = "✅ Success" if success else ("⚠️ Cancelled" if a.job_status == "cancelled" else "❌ Failed")
+    features = enabled_features(a.feature_set)
+    run_url = f"{env.get('GITHUB_SERVER_URL', 'https://github.com')}/{env.get('GITHUB_REPOSITORY', '')}/actions/runs/{env.get('GITHUB_RUN_ID', '')}"
+    root_impl = env.get("ROOT_IMPLEMENTATION") or "not recorded"
+    root_manager = env.get("ROOT_MANAGER") or "N/A"
+    root_version = env.get("ROOT_VERSION") or env.get("KSU_GIT_TAG") or "N/A"
+    root_commit = env.get("ROOT_COMMIT") or env.get("KSU_COMMIT") or "N/A"
+    source = env.get("KERNEL_SOURCE") or "aosp"
+    source_commit = env.get("KERNEL_SOURCE_COMMIT") or "N/A"
+    patch_channel = env.get("PATCH_CHANNEL") or "stable"
+    lto = env.get("KERNEL_LTO") or "unknown"
+
+    lines = [
+        "# ⚡ KRILIKD Build Report",
+        "",
+        f"## `{md(a.file_name)}`",
+        "",
+        "> **Build-verified only.** A successful compile and its static guards do not prove physical boot, runtime interface writability or device compatibility.",
+        "",
+        "### 🧱 Build identity",
+        "",
+    ]
+    table(lines, ("Field", "Value"), [
+        ("Status", status), ("Artifact", a.file_name),
+        ("Kernel", f"{a.kernel_version}.{a.sublevel}-{a.android_version}-{a.os_patch_level}"),
+        ("Version string", a.version_string or "not extracted"), ("Family", a.family),
+        ("Source", source), ("Source commit", source_commit),
+        ("OEM repository", env.get("OEM_REPO") or "N/A"),
+        ("OEM branch", env.get("OEM_BRANCH") or "N/A"),
+        ("Variant / mode", f"{a.variant} / TOP"), ("ARM64 page size", a.page_size),
+        ("LTO in final config", lto), ("Patch channel", patch_channel), ("Run", run_url),
+    ])
+
+    lines += ["### 🧩 Components", ""]
+    component_rows = [
+        ("Root implementation", root_impl, root_version, root_commit),
+        ("Root manager", root_manager, "N/A", "N/A"),
+        ("SUSFS", (env.get("KSU_VERSION") or "integrated") if "SUSFS" in features else "not requested", a.susfs_version if "SUSFS" in features else "N/A", (a.susfs_commit or env.get("SUSFS_COMMIT") or "N/A") if "SUSFS" in features else "N/A"),
+        ("NoMount", "included" if "NoMount" in features else "not requested", "N/A", a.nomount_commit if "NoMount" in features else "N/A"),
+        ("Baseband Guard", "included" if "BBG" in features else "not requested", "N/A", env.get("BBG_COMMIT_FULL") or "N/A"),
+        ("DroidSpaces", "included" if "DS" in features else "not requested", "N/A", a.droidspaces_commit or "N/A"),
+        ("VPN Hide", env.get("VPNHIDE_MODE") or ("requested" if "VPN" in features else "not requested"), env.get("VPNHIDE_VERSION") or "N/A", env.get("VPNHIDE_COMMIT") or "N/A"),
+        ("USB Arsenal", "included" if "USB" in features else "not requested", "N/A", env.get("USB_ARSENAL_COMMIT") or "N/A"),
+        ("kernel_patches", "input pin", "N/A", a.kernel_patches_commit or "not pinned"),
+        ("AnyKernel3", "input pin", "N/A", a.anykernel3_commit or "not pinned"),
+    ]
+    table(lines, ("Component", "State", "Version", "Commit / pin"), component_rows)
+
+    lines += ["### ✨ Requested feature groups", ""]
+    feature_rows = []
+    for flag in features:
+        label, description = FEATURES.get(flag, (f"⚙️ {flag}", "Custom feature flag; inspect its integration action"))
+        feature_rows.append((label, flag, description))
+    table(lines, ("Feature", "Flag", "Scope"), feature_rows or [("None", "—", "No optional feature group requested")])
+
+    lines += ["### 🩹 Patch decisions", ""]
+    inventory, inventory_error = read_json(workspace / "patch-inventory.json")
+    if isinstance(inventory, dict):
+        counts = Counter(p.get("state", "unknown") for p in inventory.get("patches", []) if isinstance(p, dict))
+        decisions = Counter(p.get("decision", "unknown") for p in inventory.get("patches", []) if isinstance(p, dict))
+        lines.append(f"Channel `{md(inventory.get('channel', patch_channel))}`; target `{md(inventory.get('target', {}))}`.")
+        lines.append("")
+        lines.append("States: " + ", ".join(f"**{md(k)}={v}**" for k, v in sorted(counts.items())) + ". Decisions: " + ", ".join(f"**{md(k)}={v}**" for k, v in sorted(decisions.items())) + ".")
+        lines.append("")
+        rows = [(p.get("name"), p.get("state"), p.get("decision"), p.get("reason"), str(p.get("sha256", ""))[:12])
+                for p in inventory.get("patches", []) if isinstance(p, dict)]
+        table(lines, ("Patch", "State", "Decision", "Reason", "SHA-256"), rows or [("None", "—", "—", "Inventory is empty", "—")])
+    else:
+        lines += [f"⚠️ Patch inventory: {md(inventory_error)}.", ""]
+    performance = Path(a.performance_report)
+    if performance.is_file():
+        lines += ["#### 🚀 Main Performance pass", "", performance.read_text(encoding="utf-8").strip(), ""]
+    else:
+        lines += ["Main Performance pass report: not generated (Perf disabled or the build stopped earlier).", ""]
+
+    lines += ["### 🛡️ Safety and evidence gates", ""]
+    rejects = env.get("REJ_COUNT") or "not recorded"
+    if rejects == "0":
+        rejects = "✅ 0"
+    table(lines, ("Gate", "Evidence"), [
+        ("Patch rejects", rejects),
+        ("KMI CRC guard", gate_state(a.job_status, workspace / "kmi-crc-report.txt")),
+        ("Stock config guard", gate_state(a.job_status, workspace / "stock-config-report.txt")),
+        ("Final resolved .config", "✅ Preserved" if (workspace / "kernel-final.config").is_file() else "⚠️ Not available"),
+        ("Physical boot / vendor modules / thermal", "⚠️ Requires separate on-device validation"),
+    ])
+
+    lines += ["### 🎛️ ASB capability contract", ""]
+    capabilities, caps_error = read_json(workspace / "kernel-capabilities.json")
+    if isinstance(capabilities, dict):
+        lines.append(f"Schema `{md(capabilities.get('schema'))}`; final config SHA-256 `{md(capabilities.get('final_config_sha256'))}`.")
+        lines.append("")
+        rows = [(name, item.get("build_state"), item.get("runtime_state")) for name, item in capabilities.get("capabilities", {}).items()]
+        table(lines, ("Capability", "Final config", "Runtime"), rows)
+        controls = capabilities.get("asb_contract", {}).get("controls", {})
+        rows = [(name, item.get("runtime_path"), item.get("build_state"), item.get("runtime_state"), item.get("writable")) for name, item in controls.items()]
+        table(lines, ("Bounded control", "Standard Linux path", "Build", "Runtime", "Writable"), rows)
+        lines += ["ASB must rediscover every path, capture a baseline and verify readback. VPN Hide and network policy keep their existing owners; no arbitrary kernel writer is added.", ""]
+    else:
+        lines += [f"⚠️ Capability report: {md(caps_error)}.", ""]
+
+    lines += ["### 📦 Artifacts and next step", ""]
+    artifact_rows = [
+        (f"{a.file_name}-AnyKernel3", "Flashable kernel package"),
+        (f"{a.file_name}-BuildInfo", "This report, final config, source provenance, capabilities and patch inventory"),
+        (f"{a.file_name}-Pins", "Exact component pins and manual device-validation template"),
+    ]
+    if "VPN" in features:
+        artifact_rows.append(("VPNHide-Builtin-Module", "Required matching companion for built-in VPN Hide; do not install vpnhide-kmod"))
+    if "NoMount" in features:
+        artifact_rows.append(("NoMount-Metamodule", "Separate NoMount companion"))
+    table(lines, ("Artifact / file", "Purpose"), artifact_rows)
+    lines += [
+        "Flash only the matching build, keep a known-good kernel available, then complete the device checklist before marking the run known-good.",
+        "",
+    ]
+    fixes = Path("/tmp/kernel-fixes-summary.md")
+    if fixes.is_file():
+        lines += ["### 🔧 Kernel fixes", "", fixes.read_text(encoding="utf-8").strip(), ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--workspace", required=True)
+    ap.add_argument("--output", required=True)
+    ap.add_argument("--job-status", required=True)
+    ap.add_argument("--file-name", required=True)
+    ap.add_argument("--kernel-version", required=True)
+    ap.add_argument("--sublevel", required=True)
+    ap.add_argument("--android-version", required=True)
+    ap.add_argument("--os-patch-level", required=True)
+    ap.add_argument("--variant", default="Normal")
+    ap.add_argument("--page-size", default="4k")
+    ap.add_argument("--feature-set", default="")
+    ap.add_argument("--family", default="")
+    ap.add_argument("--version-string", default="")
+    ap.add_argument("--susfs-version", default="N/A")
+    ap.add_argument("--susfs-commit", default="")
+    ap.add_argument("--nomount-commit", default="")
+    ap.add_argument("--droidspaces-commit", default="")
+    ap.add_argument("--kernel-patches-commit", default="")
+    ap.add_argument("--anykernel3-commit", default="")
+    ap.add_argument("--performance-report", default="/tmp/performance-patches-summary.md")
+    return ap
+
+
+def main() -> int:
+    args = parser().parse_args()
+    output = Path(args.output)
+    output.write_text(render(args, dict(os.environ)), encoding="utf-8")
+    print(f"Structured KRILIKD BuildInfo written: {output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
