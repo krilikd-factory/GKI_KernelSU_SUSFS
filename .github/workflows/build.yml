@@ -453,18 +453,18 @@ jobs:
           android_version: ${{ inputs.android_version }}
           sublevel: ${{ steps.extract.outputs.sublevel }}
 
+      - name: Integrate ASB wakeup blocker
+        if: (contains(inputs.feature_set, 'AWL') || inputs.feature_set == 'All') && inputs.version == 'android16-6.12'
+        uses: ./.github/actions/asb-wakeup-blocker
+        with:
+          version: ${{ inputs.version }}
+
       - name: Integrate Re-Kernel
         if: (contains(inputs.feature_set, 'RK') || inputs.feature_set == 'All') && inputs.version == 'android16-6.12'
         uses: ./.github/actions/rekernel
         with:
           version: ${{ inputs.version }}
           commit: ${{ fromJSON(inputs.extra_pins || '{}').rekernel_commit }}
-
-      - name: Integrate ASB wakeup blocker
-        if: (contains(inputs.feature_set, 'AWL') || inputs.feature_set == 'All') && inputs.version == 'android16-6.12'
-        uses: ./.github/actions/asb-wakeup-blocker
-        with:
-          version: ${{ inputs.version }}
 
       - name: DroidSpaces-OSS Patches
         if: contains(inputs.feature_set, 'DS') || inputs.feature_set == 'All'
