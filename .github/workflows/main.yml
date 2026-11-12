@@ -107,14 +107,15 @@ on:
         description: "NTSync"
         type: boolean
         default: true
-      use_ptrace:
-        description: "Ptrace Patch"
-        type: boolean
-        default: true
-      use_unicode:
-        description: "Unicode Fix"
-        type: boolean
-        default: true
+      compatibility_patches:
+        description: "Compatibility patches: both, ptrace only, unicode only, or none"
+        type: choice
+        options:
+          - both
+          - ptrace
+          - unicode
+          - none
+        default: both
       use_bpf:
         description: "BPF Stack (BTF + eBPF + FUSE-BPF)"
         type: boolean
@@ -143,14 +144,15 @@ on:
         description: "Performance (patches that do not apply to the tree are skipped, not fatal)"
         type: boolean
         default: true
-      use_rekernel:
-        description: "Re-Kernel built-in (android16-6.12; binder/signal/network events for compatible freezers)"
-        type: boolean
-        default: true
-      use_wakeup_blocker:
-        description: "ASB bounded exact-name kernel wakeup blocker (android16-6.12; empty policy by default)"
-        type: boolean
-        default: true
+      power_app_features:
+        description: "Re-Kernel and/or ASB wakeup blocker (android16-6.12; wakeup policy is empty by default)"
+        type: choice
+        options:
+          - both
+          - rekernel
+          - wakeup-blocker
+          - none
+        default: both
       test_release_notes:
         description: "Render release notes preview only (skip all builds + release)"
         type: boolean
@@ -625,10 +627,22 @@ jobs:
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
             F_DS="${{ inputs.use_ds }}";          F_NTSYNC="${{ inputs.use_ntsync }}"
-            F_PTRACE="${{ inputs.use_ptrace }}";  F_UNICODE="${{ inputs.use_unicode }}"
+            case "${{ inputs.compatibility_patches }}" in
+              both)    F_PTRACE=true;  F_UNICODE=true ;;
+              ptrace)  F_PTRACE=true;  F_UNICODE=false ;;
+              unicode) F_PTRACE=false; F_UNICODE=true ;;
+              none)    F_PTRACE=false; F_UNICODE=false ;;
+              *) echo "Unsupported compatibility_patches selection" >&2; exit 2 ;;
+            esac
             F_BPF="${{ inputs.use_bpf }}";        F_PERF="${{ inputs.use_perf }}"
             F_VPN="${{ inputs.use_vpnhide }}";    F_USB="${{ inputs.use_usb_arsenal }}"
-            F_RK="${{ inputs.use_rekernel }}";      F_AWL="${{ inputs.use_wakeup_blocker }}"
+            case "${{ inputs.power_app_features }}" in
+              both)           F_RK=true;  F_AWL=true ;;
+              rekernel)       F_RK=true;  F_AWL=false ;;
+              wakeup-blocker) F_RK=false; F_AWL=true ;;
+              none)           F_RK=false; F_AWL=false ;;
+              *) echo "Unsupported power_app_features selection" >&2; exit 2 ;;
+            esac
           fi
 
           FEATURES=""
@@ -2045,8 +2059,8 @@ jobs:
           USE_DS: ${{ inputs.use_ds || (github.event_name == 'schedule' && true) || false }}
           USE_NET: ${{ inputs.use_net || (github.event_name == 'schedule' && true) || false }}
           USE_NTSYNC: ${{ inputs.use_ntsync || (github.event_name == 'schedule' && true) || false }}
-          USE_PTRACE: ${{ inputs.use_ptrace || (github.event_name == 'schedule' && true) || false }}
-          USE_UNICODE: ${{ inputs.use_unicode || (github.event_name == 'schedule' && true) || false }}
+          USE_PTRACE: ${{ github.event_name == 'schedule' || inputs.compatibility_patches == 'both' || inputs.compatibility_patches == 'ptrace' }}
+          USE_UNICODE: ${{ github.event_name == 'schedule' || inputs.compatibility_patches == 'both' || inputs.compatibility_patches == 'unicode' }}
           USE_BPF: ${{ inputs.use_bpf || (github.event_name == 'schedule' && true) || false }}
           USE_PERF: ${{ inputs.use_perf || false }}
           PAGE_SIZE: ${{ inputs.page_size || '4k' }}
