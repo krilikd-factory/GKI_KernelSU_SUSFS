@@ -229,6 +229,47 @@ class DeviceEvidenceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             evidence.validate_one(bad, self.pins)
 
+    def test_url_only_mode_records_boot_without_claiming_full_device_checks(self):
+        metadata = evidence.boot_attestation(self.pins, "2026-11-13T18:00:00Z")
+        self.assertEqual(metadata["status"], "boot_attested_only")
+        self.assertEqual(metadata["run_id"], "123")
+        self.assertEqual(metadata["build"], "kernel-test")
+        self.assertIn("not attested", metadata["scope"])
+        self.assertNotIn("kernel_release", metadata)
+        self.assertEqual(len(metadata["sha256"]), 64)
+        with self.assertRaisesRegex(ValueError, "timestamp"):
+            evidence.boot_attestation(self.pins, "today")
+
+    def test_url_only_cli_needs_no_json_and_binds_every_selected_pin(self):
+        output = Path(self.tmp.name) / "metadata.json"
+        result = subprocess.run([
+            sys.executable, "-I", str(SCRIPTS / "device_evidence.py"), "validate",
+            "--pins", str(self.pins), "--boot-confirmed",
+            "--confirmed-at", "2026-11-13T18:00:00Z", "--output", str(output),
+        ], text=True, capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(output.read_text())
+        self.assertEqual(data["kernel-test"]["status"], "boot_attested_only")
+        self.assertEqual(data["kernel-test"]["run_id"], "123")
+        missing_mode = subprocess.run([
+            sys.executable, "-I", str(SCRIPTS / "device_evidence.py"), "validate",
+            "--pins", str(self.pins), "--output", str(output),
+        ], text=True, capture_output=True, check=False)
+        self.assertNotEqual(missing_mode.returncode, 0)
+        self.assertIn("exactly one", missing_mode.stderr)
+
+    def test_full_checklist_cli_remains_available(self):
+        output = Path(self.tmp.name) / "full-metadata.json"
+        result = subprocess.run([
+            sys.executable, "-I", str(SCRIPTS / "device_evidence.py"), "validate",
+            "--pins", str(self.pins), "--data", json.dumps(self.report()),
+            "--output", str(output),
+        ], text=True, capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(output.read_text())
+        self.assertEqual(data["kernel-test"]["status"], "attested_passed")
+        self.assertEqual(data["kernel-test"]["kernel_release"], "6.12.69-test")
+
 
 class SourceProvenanceTest(unittest.TestCase):
     def setUp(self):
@@ -484,11 +525,45 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("--channel \"$CHANNEL\"", performance)
         self.assertNotIn("New upstream patches applied automatically", performance)
 
-    def test_known_good_requires_stable_and_device_evidence(self):
+    def test_known_good_supports_url_only_boot_and_optional_full_evidence(self):
         text = (ROOT / ".github/workflows/mark-known-good.yml").read_text()
+        resolver = (ROOT / ".github/scripts/resolve_source_and_known_good.sh").read_text()
         self.assertIn('.patch_channel == "stable"', text)
         self.assertIn("device_evidence.py validate", text)
         self.assertIn("DEVICE_VALIDATION:", text)
+        self.assertIn('description: "Optional full checklist JSON; leave empty for boot-only confirmation"', text)
+        self.assertIn("--boot-confirmed", text)
+        self.assertIn('--data "$DEVICE_VALIDATION"', text)
+        self.assertIn("boot_attested_only", text)
+        self.assertIn('.[$k].device_validation.status // empty', resolver)
+        self.assertIn("full device checklist was not attested", resolver)
+        self.assertNotIn("Completed device-validation-template.json from the Pins artifact", text)
+
+    def test_known_good_resolver_reads_boot_only_scope_and_keeps_exact_pins(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / ".github").mkdir()
+            key = "android16-6.12-2026-03/KernelSU-Next"
+            (root / ".github/known-good.json").write_text(json.dumps({key: {
+                "root_commit": "a" * 40, "kernel_source_commit": "b" * 40,
+                "susfs_commit": "c" * 40, "device_validation": {"status": "boot_attested_only"},
+            }}))
+            output = root / "github-output.txt"
+            output.write_text("")
+            result = subprocess.run([
+                "bash", "-c", f'source "{ROOT}/.github/scripts/resolve_source_and_known_good.sh"',
+            ], cwd=root, env={
+                "PATH": "/usr/bin:/bin", "COMMIT_MODE": "known-good",
+                "GITHUB_OUTPUT": str(output), "IN_KERNEL_SOURCE": "aosp",
+                "IN_OS_PATCH_LEVEL": "2026-03", "IN_KVER": "6.12.x-android16",
+                "IN_ROOT": "KernelSU-Next", "IN_ONEPLUS_BRANCH": "",
+            }, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("URL-only manual boot attestation", result.stdout)
+            pins = output.read_text()
+            self.assertIn("pin_susfs_commit=" + "c" * 40, pins)
+            self.assertIn("pin_kernel_common=" + "b" * 40, pins)
+            self.assertIn("known_good_key=" + key, pins)
 
 
 source = load("source_provenance")
