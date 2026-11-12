@@ -211,8 +211,37 @@ runs:
     #   run: |
     #     python "${{ github.workspace }}/.github/actions/download-kernel/fast_parallel_download.py"
 
+    - name: Swap kernel/common for the OnePlus source tree
+      # kernel_source=oneplus: the Kleaf tools, prebuilts and build/ come from
+      # the AOSP manifest of the OnePlus tree's base GKI release (that is the
+      # matrix leg main.yml selected); only common/ is replaced.
+      if: env.KERNEL_SOURCE == 'oneplus'
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel
+      run: |
+        set -euo pipefail
+        [ -n "${OEM_REPO:-}" ] && [[ "${OEM_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || {
+          echo "ERROR: kernel_source=oneplus but OEM_REPO/OEM_COMMIT not set (${OEM_REPO:-} ${OEM_COMMIT:-})" >&2; exit 1; }
+        AOSP_SUB="$(sed -n 's/^SUBLEVEL = //p' common/Makefile | head -n1)"
+        rm -rf common
+        git init -q common
+        ok=false
+        for i in 1 2 3 4 5; do
+          if git -C common fetch -q --depth=1 "$OEM_REPO" "$OEM_COMMIT"; then ok=true; break; fi
+          echo "fetch attempt $i failed, retrying" >&2; sleep $((i*10))
+        done
+        $ok || { echo "ERROR: could not fetch $OEM_COMMIT from $OEM_REPO" >&2; exit 1; }
+        git -C common checkout -q --detach FETCH_HEAD
+        OEM_SUB="$(sed -n 's/^SUBLEVEL = //p' common/Makefile | head -n1)"
+        echo "[+] kernel/common = OnePlus ${OEM_BRANCH:-?} @ ${OEM_COMMIT:0:12} (6.12.${OEM_SUB}; AOSP leg was 6.12.${AOSP_SUB})"
+        [ "$OEM_SUB" = "$AOSP_SUB" ] || echo "::warning::OnePlus tree is 6.12.${OEM_SUB}, matrix leg is 6.12.${AOSP_SUB}: only the artifact name differs"
+        for f in BUILD.bazel build.config.gki.aarch64 arch/arm64/configs/gki_defconfig; do
+          [ -f "common/$f" ] || { echo "ERROR: OnePlus tree lacks $f; not a Kleaf GKI common tree" >&2; exit 1; }
+        done
+        echo "### Kernel source: OnePlus ${OEM_BRANCH:-} @ ${OEM_COMMIT:0:12}" >> "$GITHUB_STEP_SUMMARY"
+
     - name: Pin kernel/common to the known-good commit
-      if: env.PIN_KERNEL_COMMON != ''
+      if: env.PIN_KERNEL_COMMON != '' && env.KERNEL_SOURCE != 'oneplus'
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
