@@ -418,6 +418,66 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             self.assertEqual(kconfig.count("config ASB_WAKEUP_BLOCKER"), 1)
             self.assertTrue(kconfig.endswith("\n\nendmenu\n"))
 
+    def test_wakeup_driver_includes_what_it_uses(self):
+        # Run 117316696254 failed to compile: list_for_each_entry_rcu and
+        # list_add_rcu/list_del_rcu live in <linux/rculist.h>, not <linux/list.h>.
+        patch = (ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker.patch").read_text()
+        driver = [l[1:] for l in patch.split("b/drivers/base/power/asb_wakeup_blocker.c", 2)[2]
+                  .split("diff --git", 1)[0].splitlines() if l.startswith("+") and not l.startswith("+++")]
+        includes = {l.split("<", 1)[1].rstrip(">") for l in driver if l.startswith("#include <")}
+        body = "\n".join(driver)
+        needs = {"list_for_each_entry_rcu": "linux/rculist.h", "list_add_rcu": "linux/rculist.h",
+                 "list_del_rcu": "linux/rculist.h", "kfree_rcu": "linux/rcupdate.h",
+                 "static_branch_unlikely": "linux/jump_label.h", "atomic64_inc": "linux/atomic.h",
+                 "mutex_lock": "linux/mutex.h", "kzalloc": "linux/slab.h", "isprint": "linux/ctype.h",
+                 "sysfs_emit": "linux/sysfs.h", "kobject_create_and_add": "linux/kobject.h",
+                 "strscpy": "linux/string.h"}
+        for symbol, header in needs.items():
+            self.assertIn(symbol, body)
+            self.assertIn(header, includes, f"{symbol} needs <{header}>")
+        self.assertIn("linux/asb_wakeup_blocker.h", includes)  # definition sees its own prototype
+        header_hunk = [l for l in patch.splitlines() if l.startswith("@@ -0,0 +1,")]
+        self.assertEqual(header_hunk[0], f"@@ -0,0 +1,{len(driver)} @@")
+
+    def test_required_capabilities_match_the_plus_separated_feature_set(self):
+        # feature_set is "A+B+C"; the old ",RK," test could never match, so the
+        # fail-closed gate silently required nothing.
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        self.assertNotIn('== *",', build)
+        for token, capability in (("NET", "network.cake"), ("RK", "app.rekernel"),
+                                  ("AWL", "power.wakeup_blocker"), ("SDP900", "charging.sdp_900ma")):
+            self.assertIn(f'[[ "+${{{{ inputs.feature_set }}}}+" == *"+{token}+"* ]]', build)
+            self.assertIn(f"--require {capability}", build)
+        with tempfile.TemporaryDirectory() as d:
+            config = Path(d) / "config"; out = Path(d) / "out.json"
+            config.write_text("CONFIG_OPLUS_SDP_900MA=y\n")
+            ok = subprocess.run([sys.executable, "-I", str(ROOT / ".github/scripts/kernel_capability_report.py"),
+                                 "--config", str(config), "--feature-set", "SDP900", "--output", str(out),
+                                 "--require", "charging.sdp_900ma"], text=True, capture_output=True)
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            config.write_text("# CONFIG_OPLUS_SDP_900MA is not set\n")
+            bad = subprocess.run([sys.executable, "-I", str(ROOT / ".github/scripts/kernel_capability_report.py"),
+                                  "--config", str(config), "--feature-set", "SDP900", "--output", str(out),
+                                  "--require", "charging.sdp_900ma"], text=True, capture_output=True)
+            self.assertEqual(bad.returncode, 1)
+
+    def test_sdp_900ma_is_vendored_gated_and_only_touches_the_sdp_limit(self):
+        patch = (ROOT / ".github/patches/android16-6.12/oplus-sdp-900ma.patch").read_text()
+        action = (ROOT / ".github/actions/oplus-sdp-900ma/action.yml").read_text()
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        self.assertEqual(sorted(l[6:] for l in patch.splitlines() if l.startswith("+++ b/")),
+                         ["drivers/misc/Kconfig", "drivers/misc/Makefile", "drivers/misc/oplus_sdp_900ma.c"])
+        self.assertIn("early_initcall(oplus_sdp_900ma_init);", patch)
+        self.assertIn('__setup("oplus_sdp_900ma=", oplus_sdp_900ma_setup);', patch)
+        self.assertNotIn("EXPORT_SYMBOL", patch)   # nothing new for vendor modules to import
+        self.assertIn("git apply --check", action)
+        self.assertIn("CONFIG_OPLUS_SDP_900MA=y", action)
+        step = "      - name: Integrate OPLUS SDP 900 mA\n"
+        self.assertEqual(build.count(step), 1)
+        gate = build.split(step, 1)[1].split("\n", 1)[0]
+        self.assertIn("contains(inputs.feature_set, 'SDP900')", gate)
+        self.assertIn("inputs.version == 'android16-6.12'", gate)
+
     def test_wakeup_kconfig_anchor_is_fail_closed(self):
         source = embedded_source(
             ".github/actions/asb-wakeup-blocker/action.yml", "ASB_WAKEUP_KCONFIG")
@@ -789,19 +849,24 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("test_release_notes", inputs)
         for name in ("compatibility_patches", "power_app_features"):
             self.assertEqual(inputs[name]["type"], "choice")
-            self.assertEqual(inputs[name]["default"], "both")
-            self.assertEqual(inputs[name]["options"], ["both", inputs[name]["options"][1],
-                                                       inputs[name]["options"][2], "none"])
-        self.assertEqual(inputs["compatibility_patches"]["options"][1:3], ["ptrace", "unicode"])
-        self.assertEqual(inputs["power_app_features"]["options"][1:3], ["rekernel", "wakeup-blocker"])
+        self.assertEqual(inputs["compatibility_patches"]["default"], "both")
+        self.assertEqual(inputs["compatibility_patches"]["options"], ["both", "ptrace", "unicode", "none"])
+        self.assertEqual(inputs["power_app_features"]["default"], "all")
+        self.assertEqual(inputs["power_app_features"]["options"],
+                         ["all", "both", "rekernel", "wakeup-blocker", "sdp-900ma", "none"])
 
         text = path.read_text(encoding="utf-8")
         for token in ('case "${{ inputs.compatibility_patches }}" in',
                       'case "${{ inputs.power_app_features }}" in',
                       'ptrace)  F_PTRACE=true;  F_UNICODE=false',
                       'unicode) F_PTRACE=false; F_UNICODE=true',
-                      'rekernel)       F_RK=true;  F_AWL=false',
-                      'wakeup-blocker) F_RK=false; F_AWL=true'):
+                      'all)            F_RK=true;  F_AWL=true;  F_SDP=true',
+                      'both)           F_RK=true;  F_AWL=true;  F_SDP=false',
+                      'rekernel)       F_RK=true;  F_AWL=false; F_SDP=false',
+                      'wakeup-blocker) F_RK=false; F_AWL=true;  F_SDP=false',
+                      'sdp-900ma)      F_RK=false; F_AWL=false; F_SDP=true',
+                      'none)           F_RK=false; F_AWL=false; F_SDP=false',
+                      '[ "$F_SDP" = "true" ] && FEATURES="${FEATURES}SDP900+"'):
             self.assertIn(token, text)
         for removed in ("inputs.use_ptrace", "inputs.use_unicode", "inputs.use_rekernel",
                         "inputs.use_wakeup_blocker"):
