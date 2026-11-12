@@ -45,7 +45,7 @@ new file mode 100644
 index 0000000..73882f8
 --- /dev/null
 +++ b/drivers/base/power/asb_wakeup_blocker.c
-@@ -0,0 +1,228 @@
+@@ -0,0 +1,230 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Bounded, exact-name wakeup-source blocking for explicit administrator policy.
@@ -54,6 +54,7 @@ index 0000000..73882f8
 + * printable names (63 bytes each), never a path, pattern or arbitrary value.
 + * Existing active sources are not force-relaxed; only future events are ignored.
 + */
++#include <linux/asb_wakeup_blocker.h>
 +#include <linux/atomic.h>
 +#include <linux/ctype.h>
 +#include <linux/errno.h>
@@ -62,6 +63,7 @@ index 0000000..73882f8
 +#include <linux/kobject.h>
 +#include <linux/list.h>
 +#include <linux/mutex.h>
++#include <linux/rculist.h>
 +#include <linux/rcupdate.h>
 +#include <linux/slab.h>
 +#include <linux/string.h>
