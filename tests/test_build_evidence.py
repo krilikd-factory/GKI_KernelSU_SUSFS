@@ -193,6 +193,127 @@ class CapabilityReportTest(unittest.TestCase):
             self.assertNotIn("vpn_hide", contract["controls"])
 
 
+class KernelFeatureIntegrationTest(unittest.TestCase):
+    def write_config(self, directory, disabled=()):
+        path = Path(directory) / ".config"
+        names = ["CONFIG_NET_SCH_CAKE", "CONFIG_REKERNEL", "CONFIG_REKERNEL_NETWORK",
+                 "CONFIG_ASB_WAKEUP_BLOCKER"]
+        names += list(caps.CAPABILITIES["network.ip_sets"]["configs"])
+        path.write_text("".join(f"# {key} is not set\n" if key in disabled else f"{key}=y\n"
+                                for key in names))
+        return path
+
+    def run_caps(self, config, *required):
+        output = config.parent / "capabilities.json"
+        command = [sys.executable, "-I", str(SCRIPTS / "kernel_capability_report.py"),
+                   "--config", str(config), "--feature-set", "NET+RK+AWL",
+                   "--output", str(output)]
+        for name in required:
+            command += ["--require", name]
+        return subprocess.run(command, text=True, capture_output=True, check=False), output
+
+    def test_selected_capabilities_are_required_in_final_config(self):
+        with tempfile.TemporaryDirectory() as d:
+            config = self.write_config(d)
+            result, output = self.run_caps(config, "network.cake", "network.ip_sets",
+                                           "app.rekernel", "power.wakeup_blocker")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(output.read_text())
+            self.assertTrue(report["asb_contract"]["custom_sysfs_abi"])
+            self.assertEqual(report["asb_contract"]["bounded_interfaces"]["wakeup_blocklist"]["max_rules"], 16)
+            self.assertEqual(report["capabilities"]["app.rekernel"]["runtime_state"], "unknown")
+
+    def test_requested_network_options_cannot_silently_disappear(self):
+        for missing in ("CONFIG_NET_SCH_CAKE", "CONFIG_IP_SET_HASH_NET", "CONFIG_NETFILTER_XT_SET"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as d:
+                config = self.write_config(d, {missing})
+                result, _ = self.run_caps(config, "network.cake", "network.ip_sets")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("FINAL config", result.stderr)
+                self.assertIn(missing + "=n", result.stderr)
+
+    def test_unknown_required_capability_is_an_error_not_a_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            result, _ = self.run_caps(self.write_config(d), "network.unknown")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not declared", result.stderr)
+
+    def test_workflow_gates_and_exact_rekernel_pin_are_fail_closed(self):
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        main = (ROOT / ".github/workflows/main.yml").read_text()
+        resolver = (ROOT / ".github/scripts/resolve_source_and_known_good.sh").read_text()
+        action = (ROOT / ".github/actions/rekernel/action.yml").read_text()
+        self.assertIn("--require network.cake --require network.ip_sets", build)
+        self.assertIn("--require app.rekernel", build)
+        self.assertIn("--require power.wakeup_blocker", build)
+        self.assertIn('Sakion-Team/Re-Kernel refs/heads/main', main)
+        self.assertIn('KG_RK="$(kg rekernel_commit)"', resolver)
+        self.assertIn('rekernel_commit: $rekernel_commit', build)
+        self.assertIn('[[ "$WANT" =~ ^[0-9a-f]{40}$ ]]', action)
+        self.assertIn('[ "$ACTUAL" = "$WANT" ]', action)
+        self.assertNotIn("continue-on-error", action)
+        self.assertNotIn("Re-Kernel skipped", action)
+
+    def test_wakeup_patch_applies_to_reviewed_source_anchors(self):
+        patch = ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker.patch"
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            (tree / "drivers/base/power").mkdir(parents=True)
+            (tree / "drivers/Kconfig").write_text(
+                'source "drivers/cdx/Kconfig"\n\nsource "drivers/dpll/Kconfig"\n\nendmenu\n')
+            (tree / "drivers/base/power/Makefile").write_text(
+                "# SPDX-License-Identifier: GPL-2.0\n"
+                "obj-$(CONFIG_PM)\t+= sysfs.o generic_ops.o common.o qos.o runtime.o wakeirq.o\n"
+                "obj-$(CONFIG_PM_SLEEP)\t+= main.o wakeup.o wakeup_stats.o\n"
+                "obj-$(CONFIG_PM_TRACE_RTC)\t+= trace.o\n"
+                "obj-$(CONFIG_HAVE_CLK)\t+= clock_ops.o\n"
+                "obj-$(CONFIG_PM_QOS_KUNIT_TEST) += qos-test.o\n")
+            wakeup_source = "\n".join([
+                "#include <linux/irq.h>", "#include <linux/irqdesc.h>",
+                "#include <linux/wakeup_reason.h>", "#include <trace/events/power.h>", "",
+                "#include \"power.h\"", "", "void __pm_stay_awake(struct wakeup_source *ws)", "{",
+                "\tunsigned long flags;", "", "\tif (!ws)", "\t\treturn;", "",
+                "\tspin_lock_irqsave(&ws->lock, flags);", "}",
+                "void pm_wakeup_ws_event(struct wakeup_source *ws, unsigned int msec, bool hard)", "{",
+                "\tunsigned long flags;", "\tunsigned long expires;", "",
+                "\tif (!ws)", "\t\treturn;", "", "\tspin_lock_irqsave(&ws->lock, flags);", "}", "",
+            ])
+            (tree / "drivers/base/power/wakeup.c").write_text(wakeup_source)
+            result = subprocess.run(["git", "apply", "--check", str(patch)], cwd=tree,
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            subprocess.run(["git", "apply", str(patch)], cwd=tree, check=True)
+            wakeup = (tree / "drivers/base/power/wakeup.c").read_text()
+            self.assertEqual(wakeup.count("asb_wakeup_source_blocked(ws->name)"), 2)
+            driver = (tree / "drivers/base/power/asb_wakeup_blocker.c").read_text()
+            self.assertIn("ASB_WAKEUP_MAX_RULES 16", driver)
+            self.assertIn("DEFINE_STATIC_KEY_FALSE", driver)
+            self.assertNotIn("LIST_WL_DEFAULT", driver)
+
+    def test_rekernel_integrator_rewrites_only_exact_anchors(self):
+        action = (ROOT / ".github/actions/rekernel/action.yml").read_text()
+        marker = "python3 - \"$TREE\" \"$DST\" <<'PY'\n"
+        source = textwrap.dedent(action.split(marker, 1)[1].split("\n        PY", 1)[0]) + "\n"
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); tree = root / "kernel"; dst = tree / "drivers/rekernel"
+            dst.mkdir(parents=True)
+            (dst / "Makefile").write_text("obj-m := rekernel.o\nrekernel-y := main.o\n")
+            (dst / "Kconfig").write_text(
+                'config REKERNEL\n\tbool "Re:Kernel module"\n\tdepends on MODULES\n'
+                '\thelp\n\t  Tips: Enabling this will build Re-Kernel as a module\n')
+            (tree / "drivers/Makefile").write_text("obj-y += base/\n")
+            (tree / "drivers/Kconfig").write_text('menu "Device Drivers"\nendmenu\n')
+            result = subprocess.run([sys.executable, "-c", source, str(tree), str(dst)],
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("obj-$(CONFIG_REKERNEL) += rekernel.o", (dst / "Makefile").read_text())
+            self.assertIn("depends on ANDROID_VENDOR_HOOKS && NET && NETFILTER", (dst / "Kconfig").read_text())
+            self.assertEqual((tree / "drivers/Kconfig").read_text().count("drivers/rekernel/Kconfig"), 1)
+            bad = subprocess.run([sys.executable, "-c", source, str(tree), str(dst)],
+                                 text=True, capture_output=True, check=False)
+            self.assertNotEqual(bad.returncode, 0)
+
+
 class DeviceEvidenceTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -567,6 +688,36 @@ class WorkflowContractTest(unittest.TestCase):
 
 
 source = load("source_provenance")
+
+class KrilikdRegressionTest(unittest.TestCase):
+    def test_candidate_build_without_candidate_patches_is_promotable(self):
+        mark = (ROOT / ".github/workflows/mark-known-good.yml").read_text()
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        self.assertIn("candidate_patches_applied: $candidate_patches_applied", build)
+        self.assertIn('select(.state == "candidate" and .decision == "apply")', build)
+        self.assertIn('(.patch_channel == "stable" or ((.candidate_patches_applied // -1) == 0))', mark)
+
+    def test_no_run_block_reaches_github_expression_limit(self):
+        # GitHub rejects the whole workflow ("Exceeded max expression length
+        # 21000") when one run: block that contains ${{ }} is longer than that.
+        import re
+        files = list((ROOT / ".github/workflows").glob("*.yml")) + list((ROOT / ".github/actions").glob("*/action.yml"))
+        for path in files:
+            lines = path.read_text().split("\n")
+            i = 0
+            while i < len(lines):
+                m = re.match(r"^(\s*)(?:- )?run: [|>][+-]?\s*$", lines[i])
+                if not m:
+                    i += 1
+                    continue
+                indent = len(m.group(1))
+                j = i + 1
+                while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) > indent):
+                    j += 1
+                size = sum(len(x) + 1 for x in lines[i + 1:j])
+                self.assertLess(size, 20000, f"{path.relative_to(ROOT)}:{i + 1} run block is {size} chars")
+                i = j
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
