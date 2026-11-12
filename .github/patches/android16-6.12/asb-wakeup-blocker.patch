@@ -1,21 +1,3 @@
-diff --git a/drivers/Kconfig b/drivers/Kconfig
-index 7bdad83..e8689ef 100644
---- a/drivers/Kconfig
-+++ b/drivers/Kconfig
-@@ -245,4 +245,13 @@ source "drivers/cdx/Kconfig"
- 
- source "drivers/dpll/Kconfig"
- 
-+config ASB_WAKEUP_BLOCKER
-+	bool "ASB bounded exact-name wakeup source blocker"
-+	depends on PM_SLEEP
-+	default n
-+	help
-+	  Allow root to suppress future events from explicitly named wakeup
-+	  sources through /sys/kernel/asb_wakeup/blocklist. No sources are
-+	  blocked by default; this can break alarms, calls or networking.
-+
- endmenu
 diff --git a/drivers/base/power/Makefile b/drivers/base/power/Makefile
 index 01f1162..94012ef 100644
 --- a/drivers/base/power/Makefile
