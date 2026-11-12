@@ -109,7 +109,7 @@ The BuildInfo report separates **requested features**, **final-config capabiliti
 - 🛠️ [magiskboot method](docs/magiskboot.md)
 - ✅ [Post-install checklist](docs/post-install.md)
 
-After reboot, check vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal behavior and ASB. Only after that should a stable run be marked known-good. If the device does not boot, restore the saved kernel and preserve `console-ramoops` evidence where available.
+After a successful personal boot check, open **Actions → Mark build as known-good** and paste only the stable Build Kernels run URL. This records `boot_attested_only`, not a claim that every device function was tested. For broader attestation, optionally paste the completed Pins checklist covering vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal behavior and ASB. If the device does not boot, restore the saved kernel and preserve `console-ramoops` evidence where available.
 
 ## 🔬 Release discipline
 
