@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 CAPABILITIES = {
@@ -34,6 +35,34 @@ CAPABILITIES = {
         "configs": ["CONFIG_TCP_CONG_BBR"],
         "runtime_paths": ["/proc/sys/net/ipv4/tcp_available_congestion_control"],
         "asb_use": "discover congestion-control availability; BBRv3 is not inferred from this flag",
+    },
+    "network.cake": {
+        "configs": ["CONFIG_NET_SCH_CAKE"],
+        "runtime_paths": ["/sys/module/sch_cake"],
+        "asb_use": "ASB may select CAKE only after a real tc qdisc operation succeeds",
+    },
+    "network.ip_sets": {
+        "configs": [
+            "CONFIG_IP_SET", "CONFIG_IP_SET_BITMAP_IP", "CONFIG_IP_SET_BITMAP_IPMAC",
+            "CONFIG_IP_SET_BITMAP_PORT", "CONFIG_IP_SET_HASH_IP", "CONFIG_IP_SET_HASH_IPMARK",
+            "CONFIG_IP_SET_HASH_IPPORT", "CONFIG_IP_SET_HASH_IPPORTIP",
+            "CONFIG_IP_SET_HASH_IPPORTNET", "CONFIG_IP_SET_HASH_IPMAC", "CONFIG_IP_SET_HASH_MAC",
+            "CONFIG_IP_SET_HASH_NETPORTNET", "CONFIG_IP_SET_HASH_NET", "CONFIG_IP_SET_HASH_NETNET",
+            "CONFIG_IP_SET_HASH_NETPORT", "CONFIG_IP_SET_HASH_NETIFACE", "CONFIG_IP_SET_LIST_SET",
+            "CONFIG_NETFILTER_XT_SET",
+        ],
+        "runtime_paths": ["/sys/module/ip_set"],
+        "asb_use": "netfilter set availability; actual ipset create/add commands still require runtime validation",
+    },
+    "app.rekernel": {
+        "configs": ["CONFIG_REKERNEL", "CONFIG_REKERNEL_NETWORK"],
+        "runtime_paths": [],
+        "asb_use": "external freezer integration through Re-Kernel Generic Netlink; ASB is not a second owner",
+    },
+    "power.wakeup_blocker": {
+        "configs": ["CONFIG_ASB_WAKEUP_BLOCKER"],
+        "runtime_paths": ["/sys/kernel/asb_wakeup/blocklist", "/sys/kernel/asb_wakeup/blocked_events"],
+        "asb_use": "bounded exact-name root policy; empty by default, clear must restore the empty policy",
     },
     "bpf.telemetry": {
         "configs": ["CONFIG_BPF", "CONFIG_BPF_SYSCALL", "CONFIG_DEBUG_INFO_BTF"],
@@ -158,11 +187,21 @@ def make_report(config_path: Path, feature_set: str) -> dict:
         "asb_contract": {
             "schema": 1,
             "ownership": "ASB owns userspace policy; kernel and vendor thermal stack retain their clamps",
-            "control_plane": "standard_linux_interfaces",
-            "custom_sysfs_abi": False,
+            "control_plane": "standard_linux_interfaces" + ("+bounded_exact_name_sysfs" if config.get("CONFIG_ASB_WAKEUP_BLOCKER") in ("y", "m") else ""),
+            "custom_sysfs_abi": config.get("CONFIG_ASB_WAKEUP_BLOCKER") in ("y", "m"),
             "runtime_discovery_required": True,
             "arbitrary_path_value_writer": False,
-            "writers_added": [],
+            "writers_added": ["/sys/kernel/asb_wakeup/blocklist"] if config.get("CONFIG_ASB_WAKEUP_BLOCKER") in ("y", "m") else [],
+            "bounded_interfaces": {
+                "wakeup_blocklist": {
+                    "commands": ["add NAME", "del NAME", "clear"],
+                    "default": "empty",
+                    "max_rules": 16,
+                    "max_name_bytes": 63,
+                    "patterns": False,
+                    "arbitrary_paths": False,
+                }
+            } if config.get("CONFIG_ASB_WAKEUP_BLOCKER") in ("y", "m") else {},
             "controls": controls,
             "external_owners": {
                 "vpn_hide": "VPN Hide app and its matching built-in companion; ASB has no control channel",
@@ -177,12 +216,27 @@ def main() -> int:
     ap.add_argument("--config", required=True)
     ap.add_argument("--feature-set", default="")
     ap.add_argument("--output", required=True)
+    ap.add_argument("--require", action="append", default=[], metavar="CAPABILITY",
+                    help="fail when this capability is absent from the final resolved config")
     a = ap.parse_args()
     report = make_report(Path(a.config), a.feature_set)
     Path(a.output).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     available = sum(c["build_state"] == "available_in_config" for c in report["capabilities"].values())
     print(f"ASB capability report: {available}/{len(report['capabilities'])} groups present in final config; runtime=unknown")
     print(f"ASB control candidates: {len(report['asb_contract']['controls'])} standard interfaces; writable=unknown")
+    failed = []
+    for name in a.require:
+        capability = report["capabilities"].get(name)
+        if capability is None:
+            print(f"required capability is not declared: {name}", file=sys.stderr)
+            failed.append(name)
+        elif capability["build_state"] != "available_in_config":
+            states = ", ".join(f"{k}={v}" for k, v in capability["configs"].items())
+            print(f"required capability missing from FINAL config: {name}: {states}", file=sys.stderr)
+            failed.append(name)
+    if failed:
+        print("requested config lines are not evidence: refusing a build without the selected final capabilities", file=sys.stderr)
+        return 1
     return 0
 
 

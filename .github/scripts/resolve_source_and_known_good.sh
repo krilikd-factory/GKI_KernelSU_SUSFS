@@ -67,7 +67,7 @@ echo "effective_os_patch_level=${EFFECTIVE_OPL}" >> "$GITHUB_OUTPUT"
 # family, one patch level and one root flavor. Anything missing falls
 # back to the latest tip of that component, loudly.
 KG_ROOT=""; KG_SUSFS=""; KG_COMMON=""; KG_NOMOUNT=""; KG_BBG=""
-KG_DS=""; KG_KP=""; KG_AK3=""; KG_KEY=""; KG_VPN=""; KG_USB=""
+KG_DS=""; KG_KP=""; KG_AK3=""; KG_KEY=""; KG_VPN=""; KG_USB=""; KG_RK=""
 if [ "$COMMIT_MODE" = "known-good" ]; then
   KVER_IN="${IN_KVER:-}"
   OPL_IN="$EFFECTIVE_OPL"
@@ -86,6 +86,7 @@ if [ "$COMMIT_MODE" = "known-good" ]; then
     KG_BBG="$(kg bbg_commit)";          KG_DS="$(kg droidspaces_commit)"
     KG_KP="$(kg kernel_patches_commit)"; KG_AK3="$(kg anykernel3_commit)"
     KG_VPN="$(kg vpnhide_commit)";       KG_USB="$(kg usb_arsenal_commit)"
+    KG_RK="$(kg rekernel_commit)"
     echo "[+] known-good set '$KG_KEY' (recorded from $(kg from_run)):"
     jq --arg k "$KG_KEY" '.[$k]' "$KG_FILE"
     KG_EVIDENCE="$(jq -r --arg k "$KG_KEY" '.[$k].device_validation.status // empty' "$KG_FILE")"
