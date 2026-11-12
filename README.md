@@ -53,14 +53,15 @@ Feature availability depends on the selected family and `feature_set`. The table
 | 🛡️ **SUSFS** | susfs4ksu, version-gated compatibility fixes | Kernel-side integration requires the matching userspace setup; no universal invisibility claim |
 | 🧩 **Mounts** | NoMount, Mountify support | NoMount companion is produced separately when requested |
 | 🔐 **Partition guard** | Baseband Guard | Restricts unauthorized access to critical partitions and device nodes |
-| 🌐 **Networking** | WireGuard, BBR/BBRv3 where supported, CUBIC, IPSet, IPv4/IPv6 NAT, conntrack/connmark, CIFS, TTL/HL targets | Actual algorithms and runtime availability are read from final config and the device |
+| 🌐 **Networking** | WireGuard, BBR/BBRv3 where supported, CUBIC, CAKE, IPSet, IPv4/IPv6 NAT, conntrack/connmark, CIFS, TTL/HL targets | NET builds fail if CAKE/IP sets disappear from the final config; runtime `tc`/`ipset` operation still needs device validation |
+| 🧊 **App events** | Re-Kernel built-in with Generic Netlink and network events | Optional `RK` integration for `android16-6.12`; exact source commit is pinned, third-party freezer compatibility is not assumed |
 | 🕵️ **VPN Hide** | Built-in `CONFIG_VPNHIDE=y`, full or net-only integration | Controlled by its own app and matching built-in companion; **do not install `vpnhide-kmod` on top** |
 | 🔌 **USB gadget** | USB Arsenal integration, ISO/DVD/CD-ROM mode where applicable | HID and NCM availability still depends on the selected kernel baseline |
 | 🎮 **Compatibility** | NTSync, DroidSpaces-OSS | Synchronization primitives and container runtime support |
 | 📊 **Tracing** | BTF, eBPF, FUSE-BPF | Build support is not proof that a particular BPF program will load or run |
 | 🧠 **Memory / pressure** | PSI, MGLRU, zram/zsmalloc discovery | ASB must discover live interfaces; config presence alone does not prove runtime state |
 | 🚀 **Performance pass** | Reviewed memory, scheduler, wakeup, filesystem and logging patches | Dry-run and policy gates first; skipped or held patches remain visible in BuildInfo |
-| 🔋 **Power defaults** | Power-efficient workqueues, KFENCE sampling disabled by default | No fixed battery-saving percentage is claimed |
+| 🔋 **Power controls** | Power-efficient workqueues, KFENCE sampling disabled by default, optional ASB exact-name wakeup blocker | `AWL` starts with an empty root-only policy; no automatic block rules or fixed battery-saving percentage |
 | 🔧 **Additional fixes** | Ptrace and Unicode fixes, family-specific compatibility work | Applied only where the version and source tree match |
 
 Full feature notes: **[docs/features.md](docs/features.md)**. OnePlus 15/TOP details: **[docs/KRILIKD.md](docs/KRILIKD.md)**.
@@ -77,7 +78,9 @@ The kernel project publishes evidence; ASB owns userspace policy. The current co
 
 For every control: **discover → check access → capture baseline → write allowlisted value → read back → restore exactly on Stock/uninstall**.
 
-There is deliberately no arbitrary path/value writer and no custom `/sys/kernel/krilikd/*` ABI. VPN Hide retains its own app/companion owner, network policy remains with the existing ASB network runtime, and vendor thermal limits are not bypassed.
+The optional `AWL` feature adds one deliberately narrow ASB ABI: `/sys/kernel/asb_wakeup/blocklist` accepts only root-issued `add NAME`, `del NAME` and `clear` commands for at most 16 exact wakeup-source names. Its policy is empty by default; `/sys/kernel/asb_wakeup/blocked_events` is a read-only counter. There are no patterns, arbitrary path/value writes, automatic block rules or force-release of locks already held. The final-config gate rejects a selected AWL build without this capability. ASB still has to verify the interface and apply only the user's explicit policy on device.
+
+There is deliberately no arbitrary path/value writer and no broad `/sys/kernel/krilikd/*` ABI. VPN Hide retains its own app/companion owner, network policy remains with the existing ASB network runtime, and vendor thermal limits are not bypassed. No OPlus SDP 900 mA writer is included because no confirmed control/readback ABI was found in the reviewed source and diagnostics.
 
 ## 🏗️ Build your own
 
@@ -127,6 +130,7 @@ KRILIKD retains the projects and attribution that make the fork possible, includ
 - [KernelSU](https://github.com/tiann/KernelSU), [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next) and the other root implementations listed in [features.md](docs/features.md)
 - [SUSFS](https://gitlab.com/simonpunk/susfs4ksu) and [susfs4ksu-module](https://github.com/sidex15/susfs4ksu-module)
 - [NoMount](https://github.com/maxsteeel/nomount), [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard), [DroidSpaces-OSS](https://github.com/ravindu644/Droidspaces-OSS)
+- [Re-Kernel](https://github.com/Sakion-Team/Re-Kernel) by the Sakion Team
 - [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal)
 - [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches) and the upstream build-framework lineage
 - [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by **osm0sis**

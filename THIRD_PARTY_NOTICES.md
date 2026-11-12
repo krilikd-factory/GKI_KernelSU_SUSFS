@@ -19,6 +19,7 @@
 | AnyKernel3 | [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | BSD |
 | magiskboot | [topjohnwu/Magisk](https://github.com/topjohnwu/Magisk) via AnyKernel3 | GPL-3.0 |
 | DroidSpaces | [ravindu644/Droidspaces-OSS](https://github.com/ravindu644/Droidspaces-OSS) | GPL-3.0 |
+| Re-Kernel | [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel) | GPL-2.0 |
 
 <details>
 <summary> About magiskboot binaries</summary>
