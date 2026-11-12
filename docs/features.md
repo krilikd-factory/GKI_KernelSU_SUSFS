@@ -63,10 +63,22 @@ Kernel-based su and root access management for Android.
 | --------- | ------------- | -------- |
 | TCP Congestion Control | BBRv1, BBRv3, CUBIC, BIC, Westwood, HTCP | `CONFIG_TCP_CONG_BBR` / `CONFIG_TCP_CONG_CUBIC` etc |
 | WireGuard | Built-in VPN support | `CONFIG_WIREGUARD` |
-| IP Set / IPv6 NAT | Advanced firewall capabilities | `CONFIG_IP_SET` / `CONFIG_IP6_NF_NAT` |
+| CAKE | Queue discipline for ASB network policy; selected NET builds require it in the final resolved config | `CONFIG_NET_SCH_CAKE` |
+| IP Set / IPv6 NAT | Advanced firewall capabilities; selected NET builds require the full IP set family and xt_set in the final config | `CONFIG_IP_SET` / `CONFIG_NETFILTER_XT_SET` / `CONFIG_IP6_NF_NAT` |
 | Conntrack / connmark | Connection marking for packet classification | `CONFIG_NF_CONNTRACK` / `CONFIG_NET_ACT_CONNMARK` |
 | CIFS | SMB/CIFS network filesystem | `CONFIG_CIFS` |
 | TTL Target | Network packet manipulation | `CONFIG_IP_NF_TARGET_TTL` / `CONFIG_IP6_NF_TARGET_HL` |
+
+---
+
+## App event delivery & power policy
+
+| Feature | Description | Source / ABI |
+| --------- | ------------- | -------- |
+| Re-Kernel | Optional built-in Generic Netlink binder/signal/network event source for compatible third-party freezers; `android16-6.12`, feature token `RK` | [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel) / `CONFIG_REKERNEL` |
+| ASB wakeup blocker | Optional empty-by-default root-only exact-name policy, maximum 16 names; no patterns, arbitrary paths or default rules; `android16-6.12`, feature token `AWL` | `/sys/kernel/asb_wakeup/blocklist` / `CONFIG_ASB_WAKEUP_BLOCKER` |
+
+Final config presence does not prove freezer compatibility, safe blocking of a particular wakeup source or physical power savings.
 
 ---
 
