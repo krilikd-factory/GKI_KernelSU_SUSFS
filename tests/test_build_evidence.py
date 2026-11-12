@@ -7,6 +7,8 @@ import json
 import subprocess
 import sys
 import tempfile
+import textwrap
+import types
 import unittest
 from pathlib import Path
 
@@ -21,11 +23,30 @@ def load(name):
     return module
 
 
+def embedded_source(relative_path, marker):
+    """Return the exact Python heredoc executed by a composite action."""
+    text = (ROOT / relative_path).read_text(encoding="utf-8")
+    begin = f"# {marker}_BEGIN"
+    end = f"# {marker}_END"
+    assert text.count(begin) == 1 and text.count(end) == 1
+    return textwrap.dedent(text.split(begin, 1)[1].split(end, 1)[0]).strip() + "\n"
+
+
+def load_embedded(name, relative_path, marker):
+    source = embedded_source(relative_path, marker)
+    module = types.ModuleType(name)
+    module.__file__ = str(ROOT / relative_path) + f":{marker}"
+    exec(compile(source, module.__file__, "exec"), module.__dict__)
+    return module
+
+
 npx = load("new_patches")
 caps = load("kernel_capability_report")
 evidence = load("device_evidence")
-build_summary = load("build_summary")
-rebrand = load("rebrand_anykernel")
+build_summary = load_embedded(
+    "build_summary", ".github/actions/build-summary/action.yml", "KRILIKD_BUILD_SUMMARY")
+rebrand = load_embedded(
+    "rebrand_anykernel", ".github/actions/setup-build-environment/action.yml", "KRILIKD_REBRAND")
 
 
 def policy_entry(state="candidate", **overrides):
@@ -332,6 +353,60 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             with self.assertRaisesRegex(ValueError, "required marker"):
                 rebrand.rebrand(root, "test", "", "aosp", "4k")
 
+    def test_rebrand_ci_no_longer_depends_on_missing_standalone_helper(self):
+        """Regression for the CI exit 2: the YAML changed, but its new helper was absent."""
+        sample = '''kernel.string=Wild Kernels by TheWildJames
+. tools/ak3-core.sh
+ui_print " " "  -> Wild Kernels Supported: $ksu_supported"
+split_boot
+ui_print "WildKernels Telegram Channel:"
+ui_print "Thank you for using Wild Kernels! - TheWildJames"
+'''
+        with tempfile.TemporaryDirectory() as d:
+            checkout = Path(d)
+            anykernel = checkout / "AnyKernel3"
+            anykernel.mkdir()
+            (anykernel / "anykernel.sh").write_text(sample)
+
+            old_helper = checkout / ".github/scripts/rebrand_anykernel.py"
+            old = subprocess.run(
+                [sys.executable, "-I", str(old_helper)], cwd=checkout,
+                text=True, capture_output=True, check=False)
+            self.assertEqual(old.returncode, 2)
+            self.assertIn("No such file or directory", old.stderr)
+
+            result = subprocess.run([
+                sys.executable, "-I", "-", "--root", str(anykernel),
+                "--release", "android16-6.12.69", "--feature-set", "SUSFS+Perf",
+                "--source", "aosp", "--page-size", "4k",
+            ], input=embedded_source(
+                ".github/actions/setup-build-environment/action.yml", "KRILIKD_REBRAND"),
+                cwd=checkout, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("AnyKernel3 presentation: KRILIKD", result.stdout)
+            self.assertIn("KRILIKD", (anykernel / "anykernel.sh").read_text())
+
+    def test_embedded_build_summary_runs_without_standalone_helper(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout = Path(d)
+            output = checkout / "summary.md"
+            result = subprocess.run([
+                sys.executable, "-I", "-", "--workspace", str(checkout),
+                "--output", str(output), "--job-status", "failure",
+                "--file-name", "krilikd-test", "--kernel-version", "6.12",
+                "--sublevel", "69", "--android-version", "android16",
+                "--os-patch-level", "2026-03", "--variant", "KernelSU-Next",
+                "--page-size", "4k", "--feature-set", "Perf",
+                "--family", "android16-6.12",
+            ], input=embedded_source(
+                ".github/actions/build-summary/action.yml", "KRILIKD_BUILD_SUMMARY"),
+                cwd=checkout, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = output.read_text()
+            self.assertIn("❌ Failed", report)
+            self.assertIn("Patch inventory: not generated", report)
+            self.assertIn("Build-verified only", report)
+
     def test_build_summary_consolidates_patch_capability_and_safety_evidence(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -379,19 +454,22 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
         build = (ROOT / ".github/workflows/build.yml").read_text()
         summary = (ROOT / ".github/actions/build-summary/action.yml").read_text()
         self.assertIn("> /tmp/performance-patches-summary.md", performance)
-        self.assertIn("rebrand_anykernel.py", setup)
-        for needle in ('--feature-set "${{ inputs.feature_set }}"', '--page-size "${{ inputs.page_size }}"'):
+        self.assertNotIn(".github/scripts/rebrand_anykernel.py", setup)
+        self.assertNotIn(".github/scripts/build_summary.py", summary)
+        for needle in ("python3 -I -", "KRILIKD_REBRAND_BEGIN", "KRILIKD_REBRAND_END",
+                       '--feature-set "${{ inputs.feature_set }}"', '--page-size "${{ inputs.page_size }}"'):
             self.assertIn(needle, setup)
+        for needle in ("python3 -I -", "KRILIKD_BUILD_SUMMARY_BEGIN", "KRILIKD_BUILD_SUMMARY_END"):
+            self.assertIn(needle, summary)
         for needle in ("family: ${{ inputs.version }}", "droidspaces_commit: ${{ inputs.droidspaces_commit }}",
                        "kernel_patches_commit: ${{ inputs.kernel_patches_commit }}",
                        "anykernel3_commit: ${{ inputs.anykernel3_commit }}"):
             self.assertIn(needle, build)
         self.assertLess(build.index("name: Apply Performance Patches"), build.index("name: Consolidated Build Summary"))
         self.assertIn("${{ github.workspace }}/patch-inventory.json", build)
-        for needle in ('--family "${{ inputs.family }}"', 'build_summary.py'):
-            self.assertIn(needle, summary)
+        self.assertIn('--family "${{ inputs.family }}"', summary)
         self.assertIn('ap.add_argument("--performance-report", default="/tmp/performance-patches-summary.md")',
-                      (SCRIPTS / "build_summary.py").read_text())
+                      embedded_source(".github/actions/build-summary/action.yml", "KRILIKD_BUILD_SUMMARY"))
 
 
 class WorkflowContractTest(unittest.TestCase):
