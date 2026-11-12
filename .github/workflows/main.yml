@@ -143,6 +143,14 @@ on:
         description: "Performance (patches that do not apply to the tree are skipped, not fatal)"
         type: boolean
         default: true
+      use_rekernel:
+        description: "Re-Kernel built-in (android16-6.12; binder/signal/network events for compatible freezers)"
+        type: boolean
+        default: true
+      use_wakeup_blocker:
+        description: "ASB bounded exact-name kernel wakeup blocker (android16-6.12; empty policy by default)"
+        type: boolean
+        default: true
       test_release_notes:
         description: "Render release notes preview only (skip all builds + release)"
         type: boolean
@@ -549,8 +557,10 @@ jobs:
           }
           VPN_SHA="${KG_VPN:-$(latest_tag_sha https://github.com/okhsunrog/vpnhide)}"
           USB_SHA="${KG_USB:-$(resolve_sha https://github.com/ravindu644/USB-Arsenal.git refs/heads/main)}"
+          RK_SHA="${KG_RK:-$(resolve_sha https://github.com/Sakion-Team/Re-Kernel refs/heads/main)}"
           emit vpnhide_commit     "$VPN_SHA"
           emit usb_arsenal_commit "$USB_SHA"
+          emit rekernel_commit    "$RK_SHA"
 
           OEM_COMMIT=""
           if [ "$KERNEL_SOURCE" = "oneplus" ]; then
@@ -562,6 +572,7 @@ jobs:
           EXTRA="$(jq -cn \
             --arg vpnhide_commit "$VPN_SHA" \
             --arg usb_arsenal_commit "$USB_SHA" \
+            --arg rekernel_commit "$RK_SHA" \
             --arg kernel_source "$KERNEL_SOURCE" \
             --arg oem_repo "$OEM_REPO" \
             --arg oem_branch "$OEM_BRANCH" \
@@ -609,7 +620,7 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
-            F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true
+            F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true; F_RK=true; F_AWL=true
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
@@ -617,6 +628,7 @@ jobs:
             F_PTRACE="${{ inputs.use_ptrace }}";  F_UNICODE="${{ inputs.use_unicode }}"
             F_BPF="${{ inputs.use_bpf }}";        F_PERF="${{ inputs.use_perf }}"
             F_VPN="${{ inputs.use_vpnhide }}";    F_USB="${{ inputs.use_usb_arsenal }}"
+            F_RK="${{ inputs.use_rekernel }}";      F_AWL="${{ inputs.use_wakeup_blocker }}"
           fi
 
           FEATURES=""
@@ -632,6 +644,8 @@ jobs:
           [ "$F_PERF" = "true" ] && FEATURES="${FEATURES}Perf+"
           [ "$F_VPN" = "true" ] && FEATURES="${FEATURES}VPN+"
           [ "$F_USB" = "true" ] && FEATURES="${FEATURES}USB+"
+          [ "$F_RK" = "true" ] && FEATURES="${FEATURES}RK+"
+          [ "$F_AWL" = "true" ] && FEATURES="${FEATURES}AWL+"
           echo "feature_set=${FEATURES%+}" >> "$GITHUB_OUTPUT"
 
           # known-good pins commits, not features: say so when this dispatch
