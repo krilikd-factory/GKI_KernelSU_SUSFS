@@ -100,6 +100,28 @@ runs:
           apply_patch "$p" -F3 < "$KP/$p.patch"
         done
 
+        # New upstream patches: every kernel_patches/common/*.patch that no
+        # build step names yet is tried here, so a fresh patch upstream reaches
+        # a commit_mode=latest build without editing this workflow. Filtered by
+        # .github/patch-denylist.txt and the header rule in new_patches.py;
+        # dry-run gated like the rest. known-good builds pin kernel_patches, so
+        # they get exactly the set that booted.
+        NEW_APPLIED=(); NEW_HELD=()
+        while IFS=$'\t' read -r verdict name why; do
+          [ -n "${verdict:-}" ] || continue
+          if [ "$verdict" = "APPLY" ]; then
+            before=${#APPLIED[@]}
+            # -F0: an unreviewed patch must match its context exactly
+            try_patch "$name" -F0 < "$KP/$name.patch"
+            [ "${#APPLIED[@]}" -gt "$before" ] && NEW_APPLIED+=("$name")
+          else
+            NEW_HELD+=("$name")
+            echo "new-patch held back: $name ($why)"
+          fi
+        done < <(python3 -I "${{ github.workspace }}/.github/scripts/new_patches.py" \
+                   --patches "$KP" --repo-root "${{ github.workspace }}")
+        [ "${#NEW_APPLIED[@]}" -eq 0 ] || echo "::notice::New upstream patches applied automatically: ${NEW_APPLIED[*]}"
+
         # Google's GKI AutoFDO profile (Kleaf trees only): build the
         # kernel_aarch64 target with the profile Google ships in-tree but
         # only wires into kernel_aarch64_autofdo.
@@ -115,5 +137,20 @@ runs:
           echo "### KRILIKD Performance patches (TOP)"
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
+          echo "- new upstream patches applied automatically (${#NEW_APPLIED[@]}): ${NEW_APPLIED[*]:-none}"
+          echo "- held back by denylist/header rule (${#NEW_HELD[@]}): ${NEW_HELD[*]:-none}"
           echo "- ${AFDO_MSG}"
         } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Power/perf defaults that do not touch the KMI
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          # Workqueues flagged power-efficient run unbound: the scheduler puts
+          # the work on a CPU that is already awake instead of waking the one
+          # that queued it. Fewer idle exits; same as workqueue.power_efficient=1.
+          CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
+          # KFENCE (sampling heap-bug detector) stays compiled in, but is off
+          # unless booted with kfence.sample_interval=N: no 500 ms sampling
+          # timer and no guarded allocations in normal use.
+          CONFIG_KFENCE_SAMPLE_INTERVAL=0
