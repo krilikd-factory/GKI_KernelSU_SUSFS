@@ -10,12 +10,13 @@
   2. **Stock config guard** — ни одна опция стокового `gki_defconfig` (`=y`/`=m`) не пропала из итогового `.config`;
   3. **проверка VPN Hide** — `CONFIG_VPNHIDE=y` реально в ядре.
 
-**Новые патчи апстрима подхватываются сами.** Любой новый `kernel_patches/common/*.patch`, который ещё не упомянут ни в одном шаге сборки, пробуется автоматически (точное совпадение контекста, `-F0`). Два фильтра:
+**Новые патчи апстрима обнаруживаются автоматически, но не применяются без review.** Каждый новый `kernel_patches/common/*.patch` получает digest и состояние `observed`; `candidate` и `enabled` задаются только через `.github/patch-policy.json`. Точное совпадение контекста и `-F0` остаются обязательными для разрешённых патчей.
 
-- `.github/patch-denylist.txt` — патчи, которые брать нельзя, с причиной (убери строку, чтобы разрешить);
-- правило заголовков: патч, который меняет `.h` не только макросами/комментариями, откладывается — он может сдвинуть CRC. После проверки его можно разрешить в `.github/patch-allowlist.txt`.
+- `.github/patch-denylist.txt` — безусловный запрет с причиной;
+- правило заголовков: патч, который меняет `.h` не только макросами/комментариями, требует отдельного `.github/patch-allowlist.txt`;
+- target/provenance policy отсекает неподходящие семейства, устройства и SoC.
 
-В режиме `known-good` коммит `kernel_patches` закреплён, поэтому набор патчей ровно тот, что загрузился.
+В режиме `known-good` коммит `kernel_patches` закреплён; для новых записей также сверяется digest проверенной patch policy.
 
 **Настройки энергосбережения в ядре** (не трогают KMI):
 
@@ -40,34 +41,62 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, N
 
 Для 6.12 нужен один патч — режим DVD/CD‑ROM у USB mass storage (монтировать ISO и грузить ПК с телефона). HID‑клавиатура/мышь и NCM‑раздача в стоковом GKI уже есть. Приложение — [ravindu644/USB-Arsenal](https://github.com/ravindu644/USB-Arsenal).
 
-## Цикл обновлений
+## Цикл обновлений и каналы патчей
 
-0. Каждый день **KRILIKD Update Check** сам запускает сборку `latest`, если что-то обновилось (один раз на каждый новый набор обновлений) — свежий кандидат всегда ждёт в Actions. Расписания в форке нужно один раз включить на вкладке Actions.
-1. **KRILIKD Update Check** (Actions, ручной запуск + каждый день): таблица «known‑good ↔ сейчас» по всем компонентам с новыми коммитами, неиспользуемые патчи `kernel_patches`, появились ли исходники OnePlus, новости апстрима WildKernels. Галочка `build_latest` сразу запускает сборку с новыми версиями.
-2. **Build Kernels** с `commit_mode=latest` → прошить → проверить загрузку.
-3. Загрузилось → **Mark build as known-good** (ID запуска). Дальше обычный Run (`known-good`) собирает ровно эти коммиты.
-4. Не загрузилось → прошить сохранённое рабочее ядро, прислать `/sys/fs/pstore/console-ramoops*`.
+0. Каждый день **KRILIKD Update Check** запускает `latest`-сборку при обновлении компонентов (один раз на новый набор). Свежие неизвестные патчи при этом только попадают в отчёт: **apply-by-default удалён**.
+1. У каждого ранее не обработанного `kernel_patches/common/*.patch` есть состояние:
+   - `observed` — обнаружен, посчитан SHA-256, но не применяется;
+   - `candidate` — человек указал provenance, лицензию и target в `.github/patch-policy.json`; применяется только при явном `patch_channel=candidate`;
+   - `enabled` — проверенный кандидат разрешён для стабильных сборок.
+2. Denylist и проверка рискованных header-изменений остаются дополнительными барьерами. Allowlist сам по себе не включает патч. Для candidate/enabled обязательны `families`, `devices`, `soc`, `provenance.source` и `provenance.license`; несовпадение с OnePlus 15/SM8850/android16-6.12 блокирует применение.
+3. **Build Kernels**: `stable` применяет только `enabled`; `candidate` дополнительно проверяет `candidate`. Оба канала используют dry-run и `-F0`, затем действуют прежние stock-config и KMI guards.
+4. `patch-inventory.json` в BuildInfo содержит digest, размер, состояние, target, решение и причину по каждому новому патчу. Так свежие патчи появляются регулярно, но не становятся незаметной частью production.
+5. Загрузилось стабильное ядро → заполни `device-validation-template.json` из Pins → **Mark build as known-good** (ID запуска + JSON checklist). Candidate-сборка и незаполненный checklist отклоняются: сначала переведи проверенные патчи в `enabled` и пересобери `stable`.
+6. Не загрузилось → прошить сохранённое рабочее ядро, прислать `/sys/fs/pstore/console-ramoops*`. Для known-good с новой схемой evidence также фиксируется SHA-256 patch policy: её последующее изменение требует новой валидации, а не молчаливого reuse старого verdict.
 
 ## Сборка из исходников OnePlus
 
 `kernel_source = oneplus` берёт `OnePlusOSS/android_kernel_common_oneplus_sm8850`, самую новую ветку `oneplus/sm8850_*_oneplus_15` (или `oneplus_branch`). Инструменты сборки берутся из AOSP‑манифеста той GKI‑версии, на которой основан код OnePlus; подменяется только `common/`. Все фичи и защиты работают так же.
 
-**Защита:** если исходник OnePlus старше стокового ядра телефона (`.github/device.json`: `stock_sublevel`, `stock_patch_level`) — сборка отказывается с объяснением. Сейчас у OnePlus опубликован только Android 16 (6.12.23), а на телефоне ColorOS 17 (6.12.69) — ядро 6.12.23 не загрузит вендорные модули ColorOS 17. Как только OnePlus выложит исходники ColorOS 17, Update Check напишет «Ready», и `kernel_source=oneplus` соберётся. После OTA, сменившего стоковое ядро, обнови `device.json`.
+**Двойная защита:** resolver по-прежнему отклоняет source старше стокового ядра. Новый `source_provenance.py` затем проверяет уже фактически скачанное `kernel/common`: полный Git commit, чистое дерево до feature-патчей, версию/sublevel, семейство, точный OnePlus repository и branch pattern, patch level относительно `.github/device.json`. В `source-provenance.json` сохраняются SHA-256 Makefile, defconfig, BUILD.bazel и build.config.*. Это preflight source identity, а не доказательство загрузки.
+
+Сейчас при несовпадении опубликованного source и стокового 6.12.69/2026-03 сборка обязана отказаться. После OTA, сменившего стоковое ядро, обнови `device.json`.
 
 ## Граница с ASB
 
-KRILIKD даёт безопасные примитивы ядра, телеметрию только на чтение и ограниченные подсказки. ASB остаётся владельцем классификации нагрузки, теплового бюджета, политики по приложениям, LTPO, Smart‑экспериментов и отката. Будущий интерфейс «аренды политики» должен иметь владельца, TTL, ограниченные значения, обратное чтение и автоматический возврат к вендорному состоянию.
+KRILIKD даёт безопасные примитивы ядра, телеметрию только на чтение и ограниченные подсказки. ASB остаётся владельцем классификации нагрузки, теплового бюджета, политики по приложениям, LTPO, Smart‑экспериментов и отката.
 
-Ядро не должно само спорить с ASB за потолки частот CPU, шину памяти, тепловые лимиты и политику модема.
+После сборки `kernel_capability_report.py` читает **финальный resolved `.config`** и создаёт `kernel-capabilities.json`: PSI, MGLRU, zram/zsmalloc, BBR, BPF/BTF, UFS и power-efficient workqueues. Для каждой группы отдельно записаны `build_state` и `runtime_state=unknown`, пути для discovery и назначение для ASB. Наличие CONFIG не выдаётся за работающий runtime interface; BBRv3 не выводится из одного `CONFIG_TCP_CONG_BBR`.
+
+Схема 2 дополнительно публикует **control candidates**, а не доказательство доступности: `mglru_mode`, `kernel_timer_migration` и `kernel_sched_nr_migrate`. Это только закрытый список штатных Linux proc/sysfs-интерфейсов и разрешённых значений. Для каждого зафиксированы `runtime_state=unknown`, `writable=unknown`, обязательные baseline/readback и exact restore. ASB обязан повторно проверить путь, права и значение на устройстве; отчёт из BuildInfo не является разрешением писать и не заменяет собственный allowlist ASB. Smart MGLRU и ручной режим используют одного владельца, а profile/reinforce не обходят настройку прямыми записями.
+
+Кастомный `/sys/kernel/krilikd/*` в этой ревизии **не создан** и не объявляется существующим. Произвольный path/value channel, kernel writers, lease/TTL и vendor QoS не добавляются. VPN Hide управляется только собственными app/companion: ASB не создаёт второй канал и не подменяет их состояние. Существующий network runtime ASB также остаётся единственным владельцем BBR/qdisc/route policy. Camera/audio/modem/thermal остаются у vendor stack; checklist проверяет отсутствие регрессий, а не обещает улучшение.
+
+## Device evidence
+
+Pins artifact содержит `device-validation-template.json`. Обязательные проверки: boot, vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal и ASB. В known-good сохраняются только digest, время, `uname -r` и статус ручной аттестации. Serial, IMEI, account и network identifiers в отчёт не входят и поля с ними отклоняются. Checklist — явная ручная аттестация, а не независимое автоматическое доказательство.
 
 ## Файлы
 
 | Файл | Что |
 |---|---|
-| `.github/known-good.json` | проверенные наборы коммитов |
+| `.github/known-good.json` | проверенные наборы коммитов и evidence digest |
 | `.github/device.json` | телефон и его стоковое ядро |
-| `.github/workflows/update-check.yml` + `scripts/update_check.py` | проверка обновлений |
-| `.github/actions/vpnhide` + `scripts/vpnhide_integrate.py` | VPN Hide |
-| `.github/actions/usb-arsenal` | USB Arsenal |
-| `scripts/kmi_crc_guard.py`, `scripts/stock_config_guard.py` | защиты загрузки |
-| `.github/patch-denylist.txt`, `.github/patch-allowlist.txt` + `scripts/new_patches.py` | автоподхват новых патчей |
+| `.github/patch-policy.json` | observed/candidate/enabled, target и provenance |
+| `.github/patch-denylist.txt`, `.github/patch-allowlist.txt` | дополнительные запреты и header review |
+| `.github/scripts/new_patches.py` | lifecycle classifier и patch inventory |
+| `.github/scripts/source_provenance.py` | preflight фактического AOSP/OnePlus source |
+| `.github/scripts/kernel_capability_report.py` | build-time capability report для ASB |
+| `.github/scripts/device_evidence.py` | template и проверка device checklist |
+| `.github/workflows/update-check.yml` + `scripts/update_check.py` | проверка обновлений без auto-apply |
+| `.github/workflows/mark-known-good.yml` | ручное promotion только stable + device evidence |
+| `scripts/kmi_crc_guard.py`, `scripts/stock_config_guard.py` | прежние защиты загрузки |
+| `tests/test_build_evidence.py` | regression новых contracts |
+
+## Что сознательно не реализовано / не утверждается
+
+- Никакие значения частот, voltage, thermal limits, IRQ affinity, camera/ISP, audio, modem или UFS QoS не hardcode'ятся.
+- Не заявляются проценты прироста FPS, снижения нагрева или расхода: для этого нужны A/B-замеры на OnePlus 15.
+- Не добавлены непроверенные SoC-specific writers, custom sysfs ABI, persistent polling или app-specific политики.
+- KMI guard, stock-config guard, `allow_version_mismatch` и вендорный thermal ownership не ослаблены.
+- Host tests и успешная CI-сборка не равны boot/runtime validation на физическом устройстве.
