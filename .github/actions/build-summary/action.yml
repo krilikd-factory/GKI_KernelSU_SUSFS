@@ -293,7 +293,7 @@ runs:
                 artifact_rows.append(("NoMount-Metamodule", "Separate NoMount companion"))
             table(lines, ("Artifact / file", "Purpose"), artifact_rows)
             lines += [
-                "Flash only the matching build, keep a known-good kernel available, then complete the device checklist before marking the run known-good.",
+                "Flash only the matching build and keep a known-good kernel available. After a personal boot check, paste the run URL into Mark build as known-good; the optional full checklist gives broader device attestation.",
                 "",
             ]
             fixes = Path("/tmp/kernel-fixes-summary.md")
