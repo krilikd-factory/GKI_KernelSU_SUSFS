@@ -1,0 +1,83 @@
+name: 'USB Arsenal kernel patches'
+description: 'ravindu644/USB-Arsenal kernel-side support (port of WildKernels feat-usb-arsenal). Never fails the build: a patch that does not fit is skipped with a warning.'
+
+inputs:
+  kernel_version:
+    description: 'Kernel version (5.10, 5.15, 6.1, 6.6, 6.12)'
+    required: true
+  commit:
+    description: 'USB-Arsenal commit (empty = main tip)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch USB-Arsenal
+      id: fetch
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      run: |
+        set -euo pipefail
+        rm -rf USB-Arsenal && git init -q USB-Arsenal
+        WANT="${{ inputs.commit }}"; WANT="${WANT:-refs/heads/main}"
+        ok=false
+        for i in 1 2 3 4 5; do
+          if git -C USB-Arsenal fetch -q --depth=1 https://github.com/ravindu644/USB-Arsenal.git "$WANT"; then ok=true; break; fi
+          sleep $((i*5))
+        done
+        if [ "$ok" != true ]; then
+          echo "::warning::USB-Arsenal: could not fetch $WANT; skipped"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        git -C USB-Arsenal checkout -q --detach FETCH_HEAD
+        echo "USB_ARSENAL_COMMIT=$(git -C USB-Arsenal rev-parse HEAD)" >> "$GITHUB_ENV"
+        echo "USB-Arsenal at $(git -C USB-Arsenal rev-parse HEAD)"
+        echo "ok=true" >> "$GITHUB_OUTPUT"
+
+    - name: Apply USB-Arsenal kernel patches
+      if: steps.fetch.outputs.ok == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        # On android16-6.12 the stock GKI defconfig already enables every gadget
+        # function USB Arsenal uses (configfs mass storage, F_HID, NCM, NAT +
+        # MASQUERADE); the patch set adds what stock lacks (mass-storage DVD
+        # mode for ISO boot). It only touches gadget-internal code: no qcom /
+        # oplus KMI symbol (fsg_* are not in those lists), and the KMI CRC guard
+        # re-checks that after the build.
+        case "${{ inputs.kernel_version }}" in
+          5.10) D=5.10 ;; 5.15|6.1) D=5.15 ;; 6.6) D=6.6 ;; 6.12|6.18) D=6.12 ;;
+          *) echo "::warning::USB-Arsenal: no patch set for ${{ inputs.kernel_version }}; skipped"; exit 0 ;;
+        esac
+        SRC="${RUNNER_TEMP}/USB-Arsenal/kernel-patches/${D}"
+        [ -d "$SRC" ] || { echo "::warning::USB-Arsenal: $SRC missing; skipped"; exit 0; }
+        mapfile -t PATCHES < <(find "$SRC" -maxdepth 1 -name '*.patch' | sort)
+        CHECK="${{ github.workspace }}/.github/scripts/usb_arsenal_already_present.py"
+        APPLIED=(); PRESENT=(); FAILED=()
+        for p in "${PATCHES[@]}"; do
+          n="$(basename "$p")"
+          if patch -p1 --forward --no-backup-if-mismatch --dry-run -f < "$p" >/dev/null 2>&1; then
+            patch -p1 --forward --no-backup-if-mismatch -f < "$p" >/dev/null; APPLIED+=("$n")
+          elif python3 -I "$CHECK" "$p"; then
+            PRESENT+=("$n")
+          else
+            FAILED+=("$n")
+            patch -p1 --forward --no-backup-if-mismatch --dry-run -f < "$p" 2>&1 | grep -E 'FAILED|Hunk|Reversed' | head -4 | sed 's/^/    /' || true
+          fi
+        done
+        echo "USB-Arsenal (${D}): applied ${#APPLIED[@]} [${APPLIED[*]:-}], already present ${#PRESENT[@]}, not applied ${#FAILED[@]} [${FAILED[*]:-}]"
+        [ "${#FAILED[@]}" -eq 0 ] || echo "::warning::USB-Arsenal: ${FAILED[*]} did not apply to this tree; that optional support is absent"
+        echo "### USB Arsenal: applied ${#APPLIED[@]}, present ${#PRESENT[@]}, skipped ${#FAILED[@]}" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Ensure USB Arsenal gadget/NAT configs
+      if: steps.fetch.outputs.ok == 'true'
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_USB_CONFIGFS=y
+          CONFIG_USB_CONFIGFS_MASS_STORAGE=y
+          CONFIG_USB_CONFIGFS_F_HID=y
+          CONFIG_USB_CONFIGFS_NCM=y
+          CONFIG_IP_NF_NAT=y
+          CONFIG_IP_NF_TARGET_MASQUERADE=y
