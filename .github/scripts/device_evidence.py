@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Create and validate privacy-bounded manual device-validation attestations.
 
-A passed checklist is an explicit user attestation, not automated proof. It is
-required before a successful *stable* build can become known-good. Candidate
-builds remain ineligible until their reviewed patches are enabled and rebuilt.
+A passed checklist is an explicit user attestation, not automated proof. A
+URL-only promotion instead records the dispatcher's narrower manual boot
+confirmation and labels it boot_attested_only. Both modes require a successful
+*stable* build. Candidate builds remain ineligible until their reviewed patches
+are enabled and rebuilt.
 """
 from __future__ import annotations
 
@@ -92,6 +94,28 @@ def validate_one(report: dict, pins_path: Path) -> dict:
     }
 
 
+def boot_attestation(pins_path: Path, confirmed_at: str) -> dict:
+    """Record only the manual boot confirmation implied by a URL-only dispatch."""
+    _, pins = pins_entry(pins_path)
+    if not isinstance(confirmed_at, str) or not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", confirmed_at):
+        raise ValueError("confirmed_at must be an explicit UTC timestamp")
+    run_id = pins.get("from_run", "").rstrip("/").rsplit("/", 1)[-1]
+    if not re.fullmatch(r"[0-9]+", run_id):
+        raise ValueError("candidate is not bound to a numeric Actions run")
+    payload = {
+        "status": "boot_attested_only",
+        "run_id": run_id,
+        "build": pins["file"],
+        "tested_at": confirmed_at,
+        "attestation": "manual_boot_confirmation_by_workflow_dispatcher",
+        "scope": "boot only; vendor modules, display, network, camera, audio, storage, thermal and ASB not attested",
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    payload["sha256"] = hashlib.sha256(canonical).hexdigest()
+    return payload
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="command", required=True)
@@ -100,23 +124,38 @@ def main() -> int:
     tpl.add_argument("--output", required=True)
     val = sub.add_parser("validate")
     val.add_argument("--pins", action="append", required=True)
-    val.add_argument("--data", required=True, help="JSON object or array of completed reports")
+    val.add_argument("--data", default="", help="optional JSON object/array of completed full reports")
+    val.add_argument("--boot-confirmed", action="store_true",
+                     help="record only the dispatcher's manual boot confirmation; requires --confirmed-at")
+    val.add_argument("--confirmed-at", default="", help="UTC timestamp for --boot-confirmed")
     val.add_argument("--output", required=True)
     a = ap.parse_args()
     if a.command == "template":
         result = template(Path(a.pins))
     else:
-        if len(a.data) > 262144:
-            raise ValueError("validation JSON is too large")
-        decoded = json.loads(a.data)
-        reports = decoded if isinstance(decoded, list) else [decoded]
+        has_data = bool(a.data.strip())
+        if has_data == a.boot_confirmed:
+            raise ValueError("use exactly one of --data or --boot-confirmed")
+        if a.confirmed_at and not a.boot_confirmed:
+            raise ValueError("--confirmed-at is valid only with --boot-confirmed")
+        if a.boot_confirmed and not a.confirmed_at:
+            raise ValueError("--boot-confirmed requires --confirmed-at")
         result = {}
-        for pin in a.pins:
-            _, entry = pins_entry(Path(pin))
-            matches = [r for r in reports if isinstance(r, dict) and r.get("build") == entry["file"]]
-            if len(matches) != 1:
-                raise ValueError(f"need exactly one validation report for {entry['file']}")
-            result[entry["file"]] = validate_one(matches[0], Path(pin))
+        if a.boot_confirmed:
+            for pin in a.pins:
+                _, entry = pins_entry(Path(pin))
+                result[entry["file"]] = boot_attestation(Path(pin), a.confirmed_at)
+        else:
+            if len(a.data) > 262144:
+                raise ValueError("validation JSON is too large")
+            decoded = json.loads(a.data)
+            reports = decoded if isinstance(decoded, list) else [decoded]
+            for pin in a.pins:
+                _, entry = pins_entry(Path(pin))
+                matches = [r for r in reports if isinstance(r, dict) and r.get("build") == entry["file"]]
+                if len(matches) != 1:
+                    raise ValueError(f"need exactly one validation report for {entry['file']}")
+                result[entry["file"]] = validate_one(matches[0], Path(pin))
     Path(a.output).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0
 

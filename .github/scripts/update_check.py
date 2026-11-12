@@ -229,7 +229,7 @@ def main() -> int:
     summary["fingerprint"] = hashlib.sha256(json.dumps(tips).encode()).hexdigest()[:16]
 
     md += [f"**Components with updates: {summary['updates']}.** "
-           "To try component updates: run *Build Kernels* with `commit_mode=latest`. New unreviewed patches remain observed; use `patch_channel=candidate` only after adding a scoped policy entry. Promote known-good only after the device checklist.", ""]
+           "To try component updates: run *Build Kernels* with `commit_mode=latest`. New unreviewed patches remain observed; use `patch_channel=candidate` only after adding a scoped policy entry. After your boot check, promote known-good with the run URL; the full device checklist is optional and recorded separately.", ""]
     text = "\n".join(md)
     print(text)
     if a.report:

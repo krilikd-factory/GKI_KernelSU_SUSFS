@@ -88,6 +88,10 @@ if [ "$COMMIT_MODE" = "known-good" ]; then
     KG_VPN="$(kg vpnhide_commit)";       KG_USB="$(kg usb_arsenal_commit)"
     echo "[+] known-good set '$KG_KEY' (recorded from $(kg from_run)):"
     jq --arg k "$KG_KEY" '.[$k]' "$KG_FILE"
+    KG_EVIDENCE="$(jq -r --arg k "$KG_KEY" '.[$k].device_validation.status // empty' "$KG_FILE")"
+    if [ "$KG_EVIDENCE" = "boot_attested_only" ]; then
+      echo "::warning::This known-good set has URL-only manual boot attestation; the full device checklist was not attested."
+    fi
     KG_POLICY="$(kg patch_policy_sha256)"
     if [ -n "$KG_POLICY" ]; then
       CURRENT_POLICY="$(sha256sum .github/patch-policy.json | cut -d' ' -f1)"
@@ -97,7 +101,7 @@ if [ "$COMMIT_MODE" = "known-good" ]; then
       }
     fi
   else
-    echo "::warning::commit_mode=known-good but no known-good set for '${KG_KEY:-this selection}' - building LATEST tips. After this build boots, run the 'Mark build as known-good' workflow with this run's id."
+    echo "::warning::commit_mode=known-good but no known-good set for '${KG_KEY:-this selection}' - building LATEST tips. After this build boots, paste its run URL into 'Mark build as known-good'."
   fi
 fi
 echo "known_good_key=${KG_ROOT:+$KG_KEY}" >> "$GITHUB_OUTPUT"
