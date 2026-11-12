@@ -1,0 +1,12 @@
+# kernel_patches/common patches the Performance (TOP) step must NOT pick up
+# automatically.  Format:  <patch name without .patch>   # reason
+# Remove a line to let the next build try that patch (dry-run + guards apply).
+
+add_limitation_scaling_min_freq      # uses Qualcomm-only cpu_lp_mask/cpu_perf_mask; does not compile on GKI
+re_write_limitation_scaling_min_freq # same family as above
+use_unlikely_wrap_cpufreq            # only edits the min-freq patch above
+adjust_cpu_scan_order                # WALT (vendor module) picks CPUs on this phone; can only hurt
+force_tcp_nodelay                    # rewrites every TCP setsockopt into TCP_NODELAY; breaks keepalive etc.
+IPv6_NAT_FIX                         # only hides IP6_NF_NAT from /proc/config.gz
+fake_config                          # spoofs /proc/config.gz; not a kernel improvement
+hide_adb_jdwp_sockets                # blocks every app from @jdwp-control and /dev/socket/adbd: hides USB debugging, but breaks debugging apps from Android Studio

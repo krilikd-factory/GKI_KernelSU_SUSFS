@@ -1,0 +1,3 @@
+# Patches that edit a header beyond macros/comments but were reviewed and are
+# known not to change any type the vendor modules rely on.
+# Format:  <patch name without .patch>   # who checked / why it is safe
