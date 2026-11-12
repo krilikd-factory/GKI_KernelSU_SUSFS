@@ -22,6 +22,30 @@ runs:
         [ -f "$PATCH" ] || { echo "::error::missing $PATCH" >&2; exit 1; }
         git apply --check "$PATCH"
         git apply "$PATCH"
+        python3 - <<'PY'
+        # ASB_WAKEUP_KCONFIG_BEGIN
+        from pathlib import Path
+        p = Path("drivers/Kconfig")
+        text = p.read_text()
+        assert "config ASB_WAKEUP_BLOCKER" not in text, "duplicate ASB wakeup Kconfig entry"
+        assert text.endswith("\nendmenu\n"), "drivers/Kconfig final menu anchor changed"
+        block = (
+            'config ASB_WAKEUP_BLOCKER\n'
+            '\tbool "ASB bounded exact-name wakeup source blocker"\n'
+            '\tdepends on PM_SLEEP\n'
+            '\tdefault n\n'
+            '\thelp\n'
+            '\t  Allow root to suppress future events from explicitly named wakeup\n'
+            '\t  sources through /sys/kernel/asb_wakeup/blocklist. No sources are\n'
+            '\t  blocked by default; this can break alarms, calls or networking.\n'
+            '\n'
+        )
+        prefix = text[:-len("endmenu\n")]
+        if not prefix.endswith("\n\n"):
+            prefix += "\n"
+        p.write_text(prefix + block + "endmenu\n")
+        # ASB_WAKEUP_KCONFIG_END
+        PY
         grep -Fqx 'obj-$(CONFIG_ASB_WAKEUP_BLOCKER)	+= asb_wakeup_blocker.o' drivers/base/power/Makefile
         [ "$(grep -c 'asb_wakeup_source_blocked(ws->name)' drivers/base/power/wakeup.c)" -eq 2 ]
         grep -Fq 'config ASB_WAKEUP_BLOCKER' drivers/Kconfig
