@@ -296,6 +296,11 @@ runs:
                 lines += ["### 🌙 ASB wakeup blocker", "",
                           f"Reviewed patch SHA-256 `{md(wakeup_sha)}`. Exact-name list, empty by default; physical suspend/modem/alarm/call/charging behavior is not attested.", ""]
 
+            sdp_sha = env.get("OPLUS_SDP_900MA_PATCH_SHA256")
+            if sdp_sha:
+                lines += ["### 🔌 OPLUS SDP 900 mA", "",
+                          f"Vendored patch SHA-256 `{md(sdp_sha)}`. Only the USB data-port limit is raised (500 → 900 mA); check `/proc/sdp900ma` on the device. Actual charging current is not attested.", ""]
+
             lines += ["### 📦 Artifacts and next step", ""]
             artifact_rows = [
                 (f"{a.file_name}-AnyKernel3", "Flashable kernel package"),
