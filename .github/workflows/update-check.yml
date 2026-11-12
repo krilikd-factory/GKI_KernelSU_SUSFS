@@ -5,7 +5,9 @@ name: KRILIKD Update Check
 # new commits: KernelSU-Next, SUSFS, NoMount, Baseband-guard, DroidSpaces,
 # kernel_patches, AnyKernel3, USB-Arsenal, VPN Hide releases, the kernel
 # source itself, plus OnePlus source availability and upstream workflow news.
-# Optionally starts a commit_mode=latest build when something is newer.
+# The daily scheduled run starts a commit_mode=latest build by itself when
+# something is newer (once per set of updates); a manual run does so only
+# with build_latest ticked.
 
 on:
   workflow_dispatch:
@@ -49,6 +51,7 @@ jobs:
             --json update-summary.json
           cat update-report.md >> "$GITHUB_STEP_SUMMARY"
           echo "updates=$(jq -r .updates update-summary.json)" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$(jq -r .fingerprint update-summary.json)" >> "$GITHUB_OUTPUT"
 
       - name: Upload report
         uses: actions/upload-artifact@v7
@@ -58,12 +61,36 @@ jobs:
             update-report.md
             update-summary.json
 
+      # A scheduled run starts the latest build by itself, once per distinct
+      # set of upstream updates: the cache entry keyed on the fingerprint of
+      # the new tips marks "a candidate for exactly these updates was already
+      # built". So there is always a fresh candidate kernel waiting, and no
+      # rebuild loop while you have not marked it known-good yet.
+      - name: Was a candidate for these updates already built?
+        id: seen
+        if: steps.check.outputs.updates != '0'
+        uses: actions/cache/restore@v6
+        with:
+          path: update-summary.json
+          key: latest-candidate-${{ steps.check.outputs.fingerprint }}
+          lookup-only: true
+
       - name: Start a latest build
-        if: inputs.build_latest && steps.check.outputs.updates != '0'
+        id: start
+        if: >-
+          steps.check.outputs.updates != '0' &&
+          (inputs.build_latest || (github.event_name == 'schedule' && steps.seen.outputs.cache-hit != 'true'))
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f commit_mode=latest
-          echo "Started Build Kernels (commit_mode=latest). Flash it; if it boots, run 'Mark build as known-good'." >> "$GITHUB_STEP_SUMMARY"
+          echo "Started Build Kernels (commit_mode=latest) for update set ${{ steps.check.outputs.fingerprint }}. Flash it; if it boots, run 'Mark build as known-good'." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remember that this update set has a candidate
+        if: steps.start.outcome == 'success' && steps.seen.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: update-summary.json
+          key: latest-candidate-${{ steps.check.outputs.fingerprint }}
