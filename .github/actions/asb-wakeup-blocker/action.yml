@@ -1,0 +1,47 @@
+name: 'ASB bounded wakeup-source blocker'
+description: 'Apply the reviewed android16-6.12 exact-name wakeup blocker and enable its empty-by-default sysfs policy'
+
+inputs:
+  version:
+    description: 'Kernel family; this reviewed patch is exclusively for android16-6.12'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Apply reviewed blocker patch
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        [ "${{ inputs.version }}" = "android16-6.12" ] || {
+          echo "::error::ASB wakeup blocker has only been reviewed for android16-6.12" >&2
+          exit 1
+        }
+        PATCH="${{ github.workspace }}/.github/patches/android16-6.12/asb-wakeup-blocker.patch"
+        [ -f "$PATCH" ] || { echo "::error::missing $PATCH" >&2; exit 1; }
+        git apply --check "$PATCH"
+        git apply "$PATCH"
+        grep -Fqx 'obj-$(CONFIG_ASB_WAKEUP_BLOCKER)	+= asb_wakeup_blocker.o' drivers/base/power/Makefile
+        [ "$(grep -c 'asb_wakeup_source_blocked(ws->name)' drivers/base/power/wakeup.c)" -eq 2 ]
+        grep -Fq 'config ASB_WAKEUP_BLOCKER' drivers/Kconfig
+        test -f drivers/base/power/asb_wakeup_blocker.c
+        test -f include/linux/asb_wakeup_blocker.h
+        echo "ASB_WAKEUP_BLOCKER_PATCH_SHA256=$(sha256sum "$PATCH" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+    - name: Enable blocker with an empty policy
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_ASB_WAKEUP_BLOCKER=y
+
+    - name: Summarize safety contract
+      shell: bash
+      run: |
+        {
+          echo '### ASB wakeup blocker'
+          echo '- Built-in exact-name rules: maximum 16, 63 bytes each; no patterns or arbitrary paths.'
+          echo '- `/sys/kernel/asb_wakeup/blocklist`: root-only `add NAME`, `del NAME`, `clear`.'
+          echo '- Default policy is empty. Existing active locks are not force-released.'
+          echo '- Build/config evidence is not physical suspend, modem, alarm or charging validation.'
+        } >> "$GITHUB_STEP_SUMMARY"
