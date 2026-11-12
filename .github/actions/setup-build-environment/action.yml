@@ -16,6 +16,14 @@ inputs:
     description: 'Pinned AnyKernel3 commit (empty = gki-2.0 tip)'
     required: false
     default: ''
+  feature_set:
+    description: 'Feature flags shown by the installer'
+    required: false
+    default: ''
+  page_size:
+    description: 'ARM64 page size shown by the installer'
+    required: false
+    default: '4k'
 
 runs:
   using: composite
@@ -63,6 +71,17 @@ runs:
           git -C "${{ github.workspace }}/AnyKernel3" checkout "${{ inputs.anykernel3_commit }}"
           [ "$(git -C "${{ github.workspace }}/AnyKernel3" rev-parse HEAD)" = "${{ inputs.anykernel3_commit }}" ] || { echo "AnyKernel3 pin mismatch" >&2; exit 1; }
         fi
+
+        # Keep upstream's installer logic and AnyKernel3 attribution, but replace
+        # its Wild banner/community promotion with this build's own factual card.
+        # The transform fails on unknown upstream layouts instead of leaving a
+        # partly rebranded ZIP. No repository, support or donation link is invented.
+        python3 -I .github/scripts/rebrand_anykernel.py \
+          --root "${{ github.workspace }}/AnyKernel3" \
+          --release "${{ inputs.version }}.${{ inputs.sublevel }}" \
+          --feature-set "${{ inputs.feature_set }}" \
+          --source "${KERNEL_SOURCE:-aosp}" \
+          --page-size "${{ inputs.page_size }}"
 
     # NOTE: the old 'Install build deps for BTF generation (android12-5.10)'
     # step (apt-get dwarves + libelf-dev) was removed. It was a leftover
