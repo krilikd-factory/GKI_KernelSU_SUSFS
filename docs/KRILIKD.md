@@ -52,6 +52,7 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, N
 3. **Build Kernels**: `stable` применяет только `enabled`; `candidate` дополнительно проверяет `candidate`. Оба канала используют dry-run и `-F0`, затем действуют прежние stock-config и KMI guards.
 4. `patch-inventory.json` в BuildInfo содержит digest, размер, состояние, target, решение и причину по каждому новому патчу. Так свежие патчи появляются регулярно, но не становятся незаметной частью production.
 5. Загрузилось стабильное ядро → открой **Mark build as known-good** и вставь только ссылку на его successful runner. Пустой checklist означает `boot_attested_only` — твоё ручное подтверждение именно boot. Для более широкой аттестации можно опционально вставить заполненный `device-validation-template.json` из Pins. Candidate-сборки по-прежнему отклоняются: сначала переведи проверенные патчи в `enabled` и пересобери `stable`.
+   Сборку канала `candidate` тоже можно отметить, если в ней не применился ни один candidate-патч (поле `candidate_patches_applied: 0` в Pins): её исходники те же, что у `stable`. Сборка, где candidate-патчи применились, known-good стать не может.
 6. Не загрузилось → прошить сохранённое рабочее ядро, прислать `/sys/fs/pstore/console-ramoops*`. Для known-good с новой схемой evidence также фиксируется SHA-256 patch policy: её последующее изменение требует новой валидации, а не молчаливого reuse старого verdict.
 
 ## Сборка из исходников OnePlus
