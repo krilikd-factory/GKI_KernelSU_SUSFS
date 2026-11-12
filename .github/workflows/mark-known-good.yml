@@ -1,6 +1,8 @@
 name: Mark build as known-good
 
-# Run this AFTER a stable build booted and every device checklist item passed.
+# Run this AFTER you personally booted a stable build. The simple mode needs
+# only the Build Kernels run URL and records boot_attested_only. Optionally paste
+# a completed device checklist for the broader attested_passed scope.
 # Candidate builds and build-only success are deliberately not enough.
 # It copies that run's component pins (the *-Pins artifact every successful
 # build leg uploads: KernelSU-Next, SUSFS, kernel/common, NoMount, BBG,
@@ -17,18 +19,19 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: "Run ID or run URL of the Build Kernels run whose kernel BOOTED"
+        description: "Paste the Build Kernels run URL whose kernel you personally BOOTED"
         required: true
         type: string
       build:
-        description: "Only this build of the run (e.g. 6.12.69-android16-2026-03-KernelSU-Next); empty = every build in the run"
+        description: "Optional: one build name; empty = every build in the run"
         required: false
         type: string
         default: ""
       device_validation:
-        description: "Completed device-validation-template.json from the Pins artifact (or an array for several builds); every check must be passed"
-        required: true
+        description: "Optional full checklist JSON; leave empty for boot-only confirmation"
+        required: false
         type: string
+        default: ""
 
 concurrency:
   group: known-good
@@ -80,8 +83,17 @@ jobs:
           done
           ARGS=()
           for f in "${FILES[@]}"; do ARGS+=(--pins "$f"); done
-          python3 -I .github/scripts/device_evidence.py validate \
-            "${ARGS[@]}" --data "$DEVICE_VALIDATION" --output device-validation-metadata.json
+          if [ -n "${DEVICE_VALIDATION//[[:space:]]/}" ]; then
+            python3 -I .github/scripts/device_evidence.py validate \
+              "${ARGS[@]}" --data "$DEVICE_VALIDATION" --output device-validation-metadata.json
+          else
+            # Manual dispatch is the owner's explicit boot attestation. It does
+            # not claim the rest of the physical device checklist was run.
+            python3 -I .github/scripts/device_evidence.py validate \
+              "${ARGS[@]}" --boot-confirmed --confirmed-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --output device-validation-metadata.json
+            echo "::notice::URL-only mode: recording boot_attested_only; the full device checklist was not attested."
+          fi
           cat device-validation-metadata.json
           echo "RUN=$RUN" >> "$GITHUB_ENV"
 
@@ -106,6 +118,7 @@ jobs:
             exit 0
           fi
           KEYS="$(echo "$NEW" | jq -r 'keys | join(", ")')"
+          EVIDENCE_STATE="$(jq -r '[.[].status] | unique | join(", ")' device-validation-metadata.json)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$KG"
@@ -115,4 +128,8 @@ jobs:
             echo "### Marked known-good"
             echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN}"
             echo "- sets: ${KEYS}"
+            echo "- device evidence: ${EVIDENCE_STATE}"
+            if [ "$EVIDENCE_STATE" = "boot_attested_only" ]; then
+              echo "- scope: manual boot confirmation only; other device checks were not attested"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

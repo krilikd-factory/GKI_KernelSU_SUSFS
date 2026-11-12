@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f commit_mode=latest
-          echo "Started Build Kernels (commit_mode=latest) for update set ${{ steps.check.outputs.fingerprint }}. Stable build only observes unknown patches. After device checks, submit the Pins validation template through 'Mark build as known-good'." >> "$GITHUB_STEP_SUMMARY"
+          echo "Started Build Kernels (commit_mode=latest) for update set ${{ steps.check.outputs.fingerprint }}. Stable build only observes unknown patches. After your boot check, paste this run URL into 'Mark build as known-good'; the full Pins checklist remains optional." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remember that this update set has a candidate
         if: steps.start.outcome == 'success' && steps.seen.outputs.cache-hit != 'true'
