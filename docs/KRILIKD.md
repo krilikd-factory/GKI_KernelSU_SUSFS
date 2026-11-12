@@ -27,7 +27,7 @@
 
 ## Что в ядре по умолчанию
 
-KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, NAT, …), DroidSpaces, NTSync, Ptrace‑fix, Unicode‑fix, BTF/eBPF/FUSE‑BPF, Performance (TOP), **VPN Hide**, **USB Arsenal**.
+KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, CAKE, IP sets, NAT, …), DroidSpaces, NTSync, Ptrace‑fix, Unicode‑fix, BTF/eBPF/FUSE‑BPF, Performance (TOP), **VPN Hide**, **USB Arsenal**. Для `android16-6.12` также доступны отключаемые **Re-Kernel (`RK`)** и **ASB wakeup blocker (`AWL`)**; в `All` они включены, а соответствующие inputs основного workflow по умолчанию включены.
 
 ### VPN Hide (встроенный)
 
@@ -40,6 +40,14 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, N
 ### USB Arsenal
 
 Для 6.12 нужен один патч — режим DVD/CD‑ROM у USB mass storage (монтировать ISO и грузить ПК с телефона). HID‑клавиатура/мышь и NCM‑раздача в стоковом GKI уже есть. Приложение — [ravindu644/USB-Arsenal](https://github.com/ravindu644/USB-Arsenal).
+
+### Re-Kernel и wakeup blocker
+
+`RK` скачивает только точный полный commit официального [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel), встраивает `LKM-Source` как `drivers/rekernel` и включает Generic Netlink/network events. Commit и digest исходников попадают в Pins/BuildInfo; known-good сохраняет Re-Kernel pin. Это канал binder/signal/network events для совместимых сторонних «заморозчиков», а не собственный freezer ASB и не доказательство, что конкретное приложение уже умеет с ним работать.
+
+`AWL` применяет отдельный reviewed patch только к `android16-6.12`. Он добавляет root-only `/sys/kernel/asb_wakeup/blocklist` (`add NAME`, `del NAME`, `clear`) и read-only `/sys/kernel/asb_wakeup/blocked_events`. Разрешены максимум 16 точных printable-ASCII имён длиной 1–63 байта, без пробелов, путей, glob/regex и правил по умолчанию. Пустой список не добавляет работы в hot path благодаря static key; уже удерживаемые блокировки принудительно не снимаются. ASB применяет только явный список пользователя, сверяет readback и очищает частично применённый список при ошибке, Safe mode и удалении.
+
+Выбранные `NET`, `RK` и `AWL` проходят fail-closed проверку **финального resolved `.config`**: если CAKE, любой обязательный IP set/`NETFILTER_XT_SET`, Re-Kernel или blocker исчезли после Kconfig resolution, сборка останавливается. Requested config lines сами по себе доказательством не считаются.
 
 ## Цикл обновлений и каналы патчей
 
@@ -67,11 +75,11 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, N
 
 KRILIKD даёт безопасные примитивы ядра, телеметрию только на чтение и ограниченные подсказки. ASB остаётся владельцем классификации нагрузки, теплового бюджета, политики по приложениям, LTPO, Smart‑экспериментов и отката.
 
-После сборки `kernel_capability_report.py` читает **финальный resolved `.config`** и создаёт `kernel-capabilities.json`: PSI, MGLRU, zram/zsmalloc, BBR, BPF/BTF, UFS и power-efficient workqueues. Для каждой группы отдельно записаны `build_state` и `runtime_state=unknown`, пути для discovery и назначение для ASB. Наличие CONFIG не выдаётся за работающий runtime interface; BBRv3 не выводится из одного `CONFIG_TCP_CONG_BBR`.
+После сборки `kernel_capability_report.py` читает **финальный resolved `.config`** и создаёт `kernel-capabilities.json`: PSI, MGLRU, zram/zsmalloc, BBR, CAKE, IP sets, Re-Kernel, wakeup blocker, BPF/BTF, UFS и power-efficient workqueues. Для каждой группы отдельно записаны `build_state` и `runtime_state=unknown`, пути для discovery и назначение для ASB. Наличие CONFIG не выдаётся за работающий runtime interface; BBRv3 не выводится из одного `CONFIG_TCP_CONG_BBR`, а реальные `tc`/`ipset` операции требуют отдельной проверки.
 
 Схема 2 дополнительно публикует **control candidates**, а не доказательство доступности: `mglru_mode`, `kernel_timer_migration` и `kernel_sched_nr_migrate`. Это только закрытый список штатных Linux proc/sysfs-интерфейсов и разрешённых значений. Для каждого зафиксированы `runtime_state=unknown`, `writable=unknown`, обязательные baseline/readback и exact restore. ASB обязан повторно проверить путь, права и значение на устройстве; отчёт из BuildInfo не является разрешением писать и не заменяет собственный allowlist ASB. Smart MGLRU и ручной режим используют одного владельца, а profile/reinforce не обходят настройку прямыми записями.
 
-Кастомный `/sys/kernel/krilikd/*` в этой ревизии **не создан** и не объявляется существующим. Произвольный path/value channel, kernel writers, lease/TTL и vendor QoS не добавляются. VPN Hide управляется только собственными app/companion: ASB не создаёт второй канал и не подменяет их состояние. Существующий network runtime ASB также остаётся единственным владельцем BBR/qdisc/route policy. Camera/audio/modem/thermal остаются у vendor stack; checklist проверяет отсутствие регрессий, а не обещает улучшение.
+Единственный новый custom ABI в этой ревизии — узкий `/sys/kernel/asb_wakeup/*` при выбранном `AWL`, описанный выше. Кастомный `/sys/kernel/krilikd/*` **не создан**. Произвольный path/value channel, другие kernel writers, lease/TTL и vendor QoS не добавляются. VPN Hide управляется только собственными app/companion: ASB не создаёт второй канал и не подменяет их состояние. Существующий network runtime ASB также остаётся единственным владельцем BBR/qdisc/route policy. Camera/audio/modem/thermal остаются у vendor stack; checklist проверяет отсутствие регрессий, а не обещает улучшение. Подтверждённого OPlus SDP-интерфейса для 900 мА с readback не найдено, поэтому writer зарядного тока не добавлен.
 
 ## Device evidence
 
@@ -89,7 +97,9 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 | `.github/patch-denylist.txt`, `.github/patch-allowlist.txt` | дополнительные запреты и header review |
 | `.github/scripts/new_patches.py` | lifecycle classifier и patch inventory |
 | `.github/scripts/source_provenance.py` | preflight фактического AOSP/OnePlus source |
-| `.github/scripts/kernel_capability_report.py` | build-time capability report для ASB |
+| `.github/scripts/kernel_capability_report.py` | build-time capability report и fail-closed `--require` для выбранных final-config features |
+| `.github/actions/rekernel/action.yml` | exact-commit интеграция Re-Kernel и provenance |
+| `.github/actions/asb-wakeup-blocker/action.yml` + `.github/patches/android16-6.12/asb-wakeup-blocker.patch` | reviewed blocker integration и пустой по умолчанию sysfs policy |
 | `.github/scripts/device_evidence.py` | URL-only boot attestation, template и проверка полного device checklist |
 | `.github/workflows/update-check.yml` + `scripts/update_check.py` | проверка обновлений без auto-apply |
 | `.github/workflows/mark-known-good.yml` | ручное promotion только stable + явный evidence scope |
@@ -100,6 +110,9 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 
 - Никакие значения частот, voltage, thermal limits, IRQ affinity, camera/ISP, audio, modem или UFS QoS не hardcode'ятся.
 - Не заявляются проценты прироста FPS, снижения нагрева или расхода: для этого нужны A/B-замеры на OnePlus 15.
-- Не добавлены непроверенные SoC-specific writers, custom sysfs ABI, persistent polling или app-specific политики.
+- Не добавлены непроверенные SoC-specific writers, произвольный sysfs path/value ABI, persistent polling или app-specific политики; единственный новый ABI ограничен exact-name wakeup rules.
+- Не реализован `oplus_sdp_900ma`: нет подтверждённого OPlus control/readback ABI, поэтому отсутствие writer не маскируется под успех.
+- Не заданы wakeup-имена по умолчанию и не доказана безопасность блокировки любого конкретного источника. Suspend, modem, Wi‑Fi, alarms, calls и charging требуют полевой проверки.
+- Не утверждается совместимость конкретного freezer с Re-Kernel или фактическое unfreeze-by-event до on-device теста.
 - KMI guard, stock-config guard, `allow_version_mismatch` и вендорный thermal ownership не ослаблены.
-- Host tests и успешная CI-сборка не равны boot/runtime validation на физическом устройстве.
+- Host tests, source-anchor apply check и успешная CI-сборка не равны boot/runtime validation на физическом устройстве.
