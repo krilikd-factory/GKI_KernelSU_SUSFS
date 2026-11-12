@@ -124,9 +124,50 @@ class CapabilityReportTest(unittest.TestCase):
             self.assertEqual(report["capabilities"]["memory.psi"]["build_state"], "available_in_config")
             self.assertEqual(report["capabilities"]["memory.mglru"]["runtime_state"], "unknown")
             self.assertEqual(report["capabilities"]["network.bbr"]["build_state"], "not_available_in_config")
+            self.assertEqual(report["schema"], 2)
             self.assertFalse(report["asb_contract"]["custom_sysfs_abi"])
+            self.assertEqual(report["asb_contract"]["control_plane"], "standard_linux_interfaces")
+            self.assertFalse(report["asb_contract"]["arbitrary_path_value_writer"])
             self.assertEqual(report["asb_contract"]["writers_added"], [])
             self.assertEqual(report["final_config_sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_control_contract_is_bounded_and_never_claims_runtime_writability(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".config"
+            path.write_text("CONFIG_LRU_GEN=y\n")
+            controls = caps.make_report(path, "VPN")["asb_contract"]["controls"]
+            self.assertEqual(set(controls), {"mglru_mode", "kernel_timer_migration", "kernel_sched_nr_migrate"})
+            for name, control in controls.items():
+                self.assertEqual(control["interface"], "standard_linux")
+                self.assertEqual(control["runtime_state"], "unknown")
+                self.assertEqual(control["writable"], "unknown")
+                self.assertEqual(control["baseline"], "required_before_first_write")
+                self.assertTrue(control["readback_required"])
+                self.assertEqual(control["restore"], "exact_captured_value")
+                self.assertTrue(control["runtime_path"].startswith(("/proc/sys/kernel/", "/sys/kernel/mm/lru_gen/")))
+                self.assertIn("stock", control["requests"], name)
+            self.assertEqual(controls["mglru_mode"]["build_state"], "available_in_config")
+            self.assertEqual(controls["mglru_mode"]["requests"]["smart"], ["5", "7"])
+            self.assertEqual(controls["kernel_sched_nr_migrate"]["requests"]["16"], ["16"])
+            self.assertNotIn("32", controls["kernel_sched_nr_migrate"]["requests"])
+
+    def test_missing_mglru_config_does_not_create_a_control_claim(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".config"
+            path.write_text("# CONFIG_LRU_GEN is not set\n")
+            control = caps.make_report(path, "")["asb_contract"]["controls"]["mglru_mode"]
+            self.assertEqual(control["build_state"], "not_available_in_config")
+            self.assertEqual(control["configs"]["CONFIG_LRU_GEN"], "n")
+            self.assertEqual(control["runtime_state"], "unknown")
+            self.assertEqual(control["writable"], "unknown")
+
+    def test_vpn_hide_has_no_second_asb_owner(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".config"
+            path.write_text("CONFIG_VPNHIDE=y\n")
+            contract = caps.make_report(path, "VPN")["asb_contract"]
+            self.assertIn("VPN Hide app", contract["external_owners"]["vpn_hide"])
+            self.assertNotIn("vpn_hide", contract["controls"])
 
 
 class DeviceEvidenceTest(unittest.TestCase):
