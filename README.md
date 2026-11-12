@@ -1,116 +1,134 @@
 <div align="center">
 
-# KRILIKD — GKI 2.0 kernel fork for Android devices (5.10+)
+# ⚡ KRILIKD
+### Evidence-first Android kernel forge
+
+**GKI 2.0 build framework · reproducible component pins · reviewed patch lifecycle · ASB integration**
 
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-[![Third-Party Notices](https://img.shields.io/badge/notices-THIRD__PARTY_NOTICES-lightgrey.svg)](THIRD_PARTY_NOTICES.md)
+[![Third-party notices](https://img.shields.io/badge/upstream-attribution-lightgrey.svg)](THIRD_PARTY_NOTICES.md)
+[![Primary target](https://img.shields.io/badge/OnePlus_15-SM8850-7c3aed.svg)](docs/KRILIKD.md)
+[![Primary branch](https://img.shields.io/badge/android16-6.12-TOP-059669.svg)](docs/KRILIKD.md)
 
 </div>
 
 > [!CAUTION]
-> Wild Kernels is not responsible for bricked devices or damage. By flashing, you assume all risk. Back up your data and understand the risks before flashing.
+> Flashing a custom kernel can leave a device unbootable. Keep a known-good boot image, back up your data and flash only the artifact matching your device, kernel family and patch level. **Build-verified does not mean boot-verified.**
 
----
+## 🚀 What makes this fork different
 
-## About
+KRILIKD is an independent fork built on the Wild Kernels build framework and its upstream ecosystem. The fork-specific work is not a promise of “more FPS”; it is a more explicit engineering and release trail:
 
-KRILIKD kernels are built on [Google's GKI sources](https://android.googlesource.com/kernel/common/) with KernelSU and SUSFS for root hiding and detection evasion — broad compatibility, not guaranteed for every device.
+- 🧬 **Source provenance** — the downloaded AOSP or OnePlus tree is checked after checkout, not merely selected by a workflow label.
+- 🩹 **Patch lifecycle** — new upstream patches start as `observed`; only reviewed `candidate` or `enabled` entries can reach their intended channels.
+- 🎯 **Target filtering** — family, device and SoC are hard filters for reviewed patches.
+- 🛡️ **Boot-safety evidence** — KMI CRC and stock-config guards run after Kconfig resolution; rejected patches are collected.
+- 🧾 **Structured BuildInfo** — final `.config`, source identity, component commits, patch decisions, capabilities and safety reports travel with the build.
+- 🎛️ **Bounded ASB contract** — standard Linux interfaces, runtime rediscovery, closed value lists, baseline capture, readback and exact restore.
+- ✅ **Known-good promotion** — a stable run needs separate manual on-device evidence; a successful CI job is not promoted automatically.
 
----
+## 💎 Primary build: OnePlus 15 TOP
 
-## Features
+| Item | Target |
+|---|---|
+| 📱 Device | OnePlus 15 / CPH2745 |
+| 🔥 Platform | SM8850 |
+| 🤖 ROM baseline | ColorOS 17 |
+| 🐧 Kernel family | `android16-6.12` |
+| 📌 Verified baseline in project config | `6.12.69`, patch level `2026-03` |
+| 📄 ARM64 pages | `4k` |
+| 👑 Root implementation | KernelSU-Next + SUSFS |
+| ⚙️ Mode | **TOP** — one curated mode, not a hidden overclock preset |
+| 🌱 Source choice | AOSP GKI or compatible OnePlus source, subject to provenance checks |
 
-- **KernelSU / KernelSU-Next / BakaSU / FinaSU / Suki-SU Ultra / KowSU** — root implementations
-- **susfs4ksu** — root hiding (incl. Ptrace Leak Fix, Unicode Fix)
-- **NoMount / Mountify** — mount metamodules
-- **Baseband Guard** — partition protection
-- **Networking** — WireGuard, BBR, IPSet, CIFS
-- **TMPFS** — xattr / POSIX ACLs
-- **BPF** — BTF / eBPF / FUSE-BPF
-- **Performance** — incl. NTSync
-- **DroidSpaces** — container runtime
+The target matrix evolves with upstream and stock kernels. The authoritative values for a particular run are its **Pins** and **BuildInfo**, not this README snapshot.
 
-> [!TIP]
-> Full documentation: [Wiki](https://github.com/WildKernels/GKI_KernelSU_SUSFS/wiki)
+## ✨ Feature map
 
----
+Feature availability depends on the selected family and `feature_set`. The table describes what the build framework can integrate; a run's BuildInfo identifies what was actually requested and confirmed in its final configuration.
 
-## Build Your Own Kernel
+| Area | Features | Practical scope |
+|---|---|---|
+| 👑 **Root** | KernelSU, KernelSU-Next, BakaSU, FinaSU, SukiSU Ultra, KowSU | Selectable root implementations; manager and kernel commits are pinned per run |
+| 🛡️ **SUSFS** | susfs4ksu, version-gated compatibility fixes | Kernel-side integration requires the matching userspace setup; no universal invisibility claim |
+| 🧩 **Mounts** | NoMount, Mountify support | NoMount companion is produced separately when requested |
+| 🔐 **Partition guard** | Baseband Guard | Restricts unauthorized access to critical partitions and device nodes |
+| 🌐 **Networking** | WireGuard, BBR/BBRv3 where supported, CUBIC, IPSet, IPv4/IPv6 NAT, conntrack/connmark, CIFS, TTL/HL targets | Actual algorithms and runtime availability are read from final config and the device |
+| 🕵️ **VPN Hide** | Built-in `CONFIG_VPNHIDE=y`, full or net-only integration | Controlled by its own app and matching built-in companion; **do not install `vpnhide-kmod` on top** |
+| 🔌 **USB gadget** | USB Arsenal integration, ISO/DVD/CD-ROM mode where applicable | HID and NCM availability still depends on the selected kernel baseline |
+| 🎮 **Compatibility** | NTSync, DroidSpaces-OSS | Synchronization primitives and container runtime support |
+| 📊 **Tracing** | BTF, eBPF, FUSE-BPF | Build support is not proof that a particular BPF program will load or run |
+| 🧠 **Memory / pressure** | PSI, MGLRU, zram/zsmalloc discovery | ASB must discover live interfaces; config presence alone does not prove runtime state |
+| 🚀 **Performance pass** | Reviewed memory, scheduler, wakeup, filesystem and logging patches | Dry-run and policy gates first; skipped or held patches remain visible in BuildInfo |
+| 🔋 **Power defaults** | Power-efficient workqueues, KFENCE sampling disabled by default | No fixed battery-saving percentage is claimed |
+| 🔧 **Additional fixes** | Ptrace and Unicode fixes, family-specific compatibility work | Applied only where the version and source tree match |
 
-Fork the repository and follow **[Build Your Own Kernel](docs/build-from-fork.md)** to select one kernel family, patch level, root implementation, and feature set in GitHub Actions.
+Full feature notes: **[docs/features.md](docs/features.md)**. OnePlus 15/TOP details: **[docs/KRILIKD.md](docs/KRILIKD.md)**.
 
-KRILIKD (OnePlus 15, ColorOS 17, GKI 6.12.69): one **TOP** mode, built-in **VPN Hide**, **USB Arsenal**, optional build from **OnePlus kernel source**, boot-safety guards and a known-good / update-check cycle — see **[docs/KRILIKD.md](docs/KRILIKD.md)**. Run **KRILIKD Update Check** in Actions to see which components are newer than your last kernel that booted.
+## 🎛️ KRILIKD × AutoSystemBoost
 
----
+The kernel project publishes evidence; ASB owns userspace policy. The current contract exposes descriptions of three **standard Linux** controls:
 
-## Installation
+| Control | Closed requests | Required behavior |
+|---|---|---|
+| `mglru_mode` | `stock`, `off`, `on`, `smart` | Numeric MGLRU readback; Smart `5/7` only in Smart mode |
+| `kernel_timer_migration` | `stock`, `off`, `on` | Exact `0/1` readback |
+| `kernel_sched_nr_migrate` | `stock`, `1`, `2`, `4`, `8`, `16` | Bounded integer write and exact readback |
 
-See **[Installation Guide](https://github.com/WildKernels/GKI_KernelSU_SUSFS/wiki/Installation)**.
+For every control: **discover → check access → capture baseline → write allowlisted value → read back → restore exactly on Stock/uninstall**.
 
----
+There is deliberately no arbitrary path/value writer and no custom `/sys/kernel/krilikd/*` ABI. VPN Hide retains its own app/companion owner, network policy remains with the existing ASB network runtime, and vendor thermal limits are not bypassed.
 
-## Our Projects
+## 🏗️ Build your own
 
-| Device | Repository | Description |
-| -------- | ------------ | ------------- |
-| **Multi** | [GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Google GKI sources — built to be generic and work across many devices |
-| **Pixel** | [Sultan_KernelSU_SUSFS](https://github.com/WildKernels/Sultan_KernelSU_SUSFS) | Custom kernels for specific Pixel devices — built from Sultan sources |
-| **Samsung** | [Samsung_KernelSU_SUSFS](https://github.com/WildKernels/Samsung_KernelSU_SUSFS) | Built from Samsung sources and manifest |
-| **OnePlus** | [OnePlus_KernelSU_SUSFS](https://github.com/WildKernels/OnePlus_KernelSU_SUSFS) | Built from OnePlus sources and manifest |
+1. **Fork this repository.** Do not use the upstream Wild repository as the source of fork-specific settings.
+2. Open **Actions → Build Kernels** and select one family, patch level, root implementation and feature set.
+3. Choose `stable` for enabled patches only or `candidate` for an explicitly reviewed candidate experiment.
+4. For the OnePlus target, choose AOSP or OnePlus source and keep the provenance/stock-version guards enabled.
+5. Download the matching artifacts from the completed run.
 
----
+Detailed guide: **[docs/build-from-fork.md](docs/build-from-fork.md)**.
 
-## Special Thanks
+### 📦 What a run gives you
 
-**These amazing people and projects make this possible:**
+| Artifact | Contents |
+|---|---|
+| `*-AnyKernel3` | Flashable kernel package with KRILIKD installer presentation |
+| `*-BuildInfo` | Structured Markdown report, final `.config`, source provenance, capability JSON, patch inventory, KMI and stock-config reports |
+| `*-Pins` | Exact component pins and a device-validation template |
+| `VPNHide-Builtin-Module` | Matching companion for built-in VPN Hide when that feature is part of the release |
+| `NoMount-Metamodule` | Separate NoMount companion when requested |
+| `*-Rejects` | Patch rejects, if any were produced |
 
-- **KernelSU** — [tiann](https://github.com/tiann/KernelSU)
-- **KernelSU-Next** — [rifsxd](https://github.com/KernelSU-Next/KernelSU-Next)
-- **KernelSU-Next SUSFS Fork** — [pershoot](https://github.com/pershoot/KernelSU-Next)
-- **BakaSU** (formerly ReSukiSU) — [BakaSU](https://github.com/Baka-SU/BakaSU)
-- **FinaSU** — [LyraVoid](https://github.com/LyraVoid/FinaSU)
-- **Suki-SU Ultra** — [SukiSU Ultra](https://github.com/sukisu-ultra/sukisu-ultra)
-- **KowSU** (KOWX712's KernelSU fork) — [KowSU](https://github.com/KOWX712/KernelSU)
-- **Magic-KSU** — [5ec1cff](https://github.com/5ec1cff/KernelSU)
-- **SUSFS** — [simonpunk](https://gitlab.com/simonpunk/susfs4ksu)
-- **SUSFS Module** — [sidex15](https://github.com/sidex15)
-- **NoMount** — [maxsteeel](https://github.com/maxsteeel/nomount)
-- **DroidSpaces-OSS** — [ravindu644](https://github.com/ravindu644/Droidspaces-OSS)
-- **Baseband-guard (BBG)** — [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard)
-- **Kernel Patches** — [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches)
-- **AnyKernel3** — [osm0sis](https://github.com/osm0sis/AnyKernel3)
-- **Sultan Kernels (Pixel)** — [kerneltoast](https://github.com/kerneltoast)
-- **Device Boot Fix** — [Boot fix commit](https://github.com/Anything-at-25-00/android_kernel_common_android12-5.10/commit/2476d262b597fe8af82cfb7aaf96676f51c6b4ed)
+The BuildInfo report separates **requested features**, **final-config capabilities**, **patch decisions** and **on-device unknowns**. The main Performance patch pass and the reviewed upstream-patch inventory are consolidated there instead of living in unrelated job sections.
 
-**Contributors to this repository:**
+## ⚡ Install and validate
 
-[![Contributors](https://contrib.rocks/image?repo=WildKernels/GKI_KernelSU_SUSFS)](https://github.com/WildKernels/GKI_KernelSU_SUSFS/graphs/contributors)
+- 📖 [Installation](docs/installation.md)
+- 💫 [Kernel Flasher](docs/kernelflasher.md)
+- 🛠️ [magiskboot method](docs/magiskboot.md)
+- ✅ [Post-install checklist](docs/post-install.md)
 
-Have an idea or improvement in mind? Contributions are always welcome — feel free to open a pull request or share your thoughts!
+After reboot, check vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal behavior and ASB. Only after that should a stable run be marked known-good. If the device does not boot, restore the saved kernel and preserve `console-ramoops` evidence where available.
 
----
+## 🔬 Release discipline
 
-## Community
+- New upstream patches are **observed, not auto-applied**.
+- Candidate and enabled entries require provenance, license and target scope.
+- Denylist and risky-header review remain independent barriers.
+- LTO is intentionally disabled for the primary `android16-6.12` target because of the Rust/BTF/Android boot constraint documented in [KRILIKD.md](docs/KRILIKD.md).
+- No thermal bypass, hardcoded voltage/frequency table, universal 1 Hz promise or unverified performance percentage is part of this project.
 
-<div align="center">
+## 🙏 Upstream and credits
 
-[![Telegram Group](https://img.shields.io/badge/Telegram-%40WildKernelsTG-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/WildKernelsTG)
-[![Telegram DM](https://img.shields.io/badge/Telegram-%40TheWildJames-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/TheWildJames)
+KRILIKD retains the projects and attribution that make the fork possible, including:
 
-</div>
+- [Google GKI / Android common kernel](https://android.googlesource.com/kernel/common/)
+- [KernelSU](https://github.com/tiann/KernelSU), [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next) and the other root implementations listed in [features.md](docs/features.md)
+- [SUSFS](https://gitlab.com/simonpunk/susfs4ksu) and [susfs4ksu-module](https://github.com/sidex15/susfs4ksu-module)
+- [NoMount](https://github.com/maxsteeel/nomount), [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard), [DroidSpaces-OSS](https://github.com/ravindu644/Droidspaces-OSS)
+- [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal)
+- [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches) and the upstream build-framework lineage
+- [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by **osm0sis**
 
-Need help? Open an issue in this repository or reach out on Telegram. Please ask in the [WildKernelsTG group](https://t.me/WildKernelsTG) first for general issues. DMs to [@TheWildJames](https://t.me/TheWildJames) are always open — use for priority / very important, or if you just want to talk and learn.
-
----
-
-## Donations
-
-> [!IMPORTANT]
-> **Kind note:** A donation is truly just a gift — not a payment for support, features, or priority. It doesn't unlock anything extra on our side and doesn't change how we help you; everyone gets the same community support whether you donate or not. Think of it as a kind “thank you” to help keep development going — not a transaction. If you do choose to give, we're genuinely grateful, but please never feel obligated.
-
-- PayPal: [bauhd@outlook.com](mailto:bauhd@outlook.com)
-- Card: <https://buy.stripe.com/5kQ28sdi08Nr0Xc2fU5os00>
-- LTC: `MVaN1ToSuks2cdK9mB3M8EHCfzQSyEMf6h`
-- BTC: `3BBXAMS4ZuCZwfbTXxWGczxHF4isymeyxG`
-- ETH: `0x2b9C846c84d58717e784458406235C09a834274e`
-- Patreon: <https://patreon.com/WildKernels>
+See **[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)** for attribution and licensing. Issues and pull requests should contain build IDs, BuildInfo and non-sensitive device evidence rather than serial numbers, IMEI, account data or network identifiers.
