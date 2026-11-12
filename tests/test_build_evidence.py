@@ -313,6 +313,94 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
                                  text=True, capture_output=True, check=False)
             self.assertNotEqual(bad.returncode, 0)
 
+    def test_wakeup_and_rekernel_compose_in_workflow_order(self):
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        wakeup_step = "      - name: Integrate ASB wakeup blocker\n"
+        rekernel_step = "      - name: Integrate Re-Kernel\n"
+        self.assertEqual(build.count(wakeup_step), 1)
+        self.assertEqual(build.count(rekernel_step), 1)
+        self.assertLess(build.index(wakeup_step), build.index(rekernel_step))
+
+        patch = ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker.patch"
+        action = (ROOT / ".github/actions/rekernel/action.yml").read_text()
+        marker = "python3 - \"$TREE\" \"$DST\" <<'PY'\n"
+        rekernel_source = textwrap.dedent(
+            action.split(marker, 1)[1].split("\n        PY", 1)[0]) + "\n"
+
+        def prepare(tree):
+            (tree / "drivers/base/power").mkdir(parents=True)
+            (tree / "drivers/Kconfig").write_text(
+                'source "drivers/cdx/Kconfig"\n\nsource "drivers/dpll/Kconfig"\n\nendmenu\n')
+            (tree / "drivers/base/power/Makefile").write_text(
+                "# SPDX-License-Identifier: GPL-2.0\n"
+                "obj-$(CONFIG_PM)\t+= sysfs.o generic_ops.o common.o qos.o runtime.o wakeirq.o\n"
+                "obj-$(CONFIG_PM_SLEEP)\t+= main.o wakeup.o wakeup_stats.o\n"
+                "obj-$(CONFIG_PM_TRACE_RTC)\t+= trace.o\n"
+                "obj-$(CONFIG_HAVE_CLK)\t+= clock_ops.o\n"
+                "obj-$(CONFIG_PM_QOS_KUNIT_TEST) += qos-test.o\n")
+            (tree / "drivers/base/power/wakeup.c").write_text("\n".join([
+                "#include <linux/irq.h>", "#include <linux/irqdesc.h>",
+                "#include <linux/wakeup_reason.h>", "#include <trace/events/power.h>", "",
+                "#include \"power.h\"", "", "void __pm_stay_awake(struct wakeup_source *ws)", "{",
+                "\tunsigned long flags;", "", "\tif (!ws)", "\t\treturn;", "",
+                "\tspin_lock_irqsave(&ws->lock, flags);", "}",
+                "void pm_wakeup_ws_event(struct wakeup_source *ws, unsigned int msec, bool hard)", "{",
+                "\tunsigned long flags;", "\tunsigned long expires;", "",
+                "\tif (!ws)", "\t\treturn;", "", "\tspin_lock_irqsave(&ws->lock, flags);", "}", "",
+            ]))
+
+        def integrate_rekernel(tree):
+            dst = tree / "drivers/rekernel"
+            dst.mkdir()
+            (dst / "Makefile").write_text("obj-m := rekernel.o\nrekernel-y := main.o\n")
+            (dst / "Kconfig").write_text(
+                'config REKERNEL\n\tbool "Re:Kernel module"\n\tdepends on MODULES\n'
+                '\thelp\n\t  Tips: Enabling this will build Re-Kernel as a module\n')
+            (tree / "drivers/Makefile").write_text("obj-y += base/\n")
+            result = subprocess.run(
+                [sys.executable, "-c", rekernel_source, str(tree), str(dst)],
+                text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+        # AWL without RK must still apply to the original reviewed anchors.
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            prepare(tree)
+            result = subprocess.run(["git", "apply", str(patch)], cwd=tree,
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            kconfig = (tree / "drivers/Kconfig").read_text()
+            self.assertIn("config ASB_WAKEUP_BLOCKER", kconfig)
+            self.assertNotIn("drivers/rekernel/Kconfig", kconfig)
+
+        # AWL followed by RK is the CI order: both exact integrations survive.
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            prepare(tree)
+            result = subprocess.run(["git", "apply", str(patch)], cwd=tree,
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            integrate_rekernel(tree)
+            kconfig = (tree / "drivers/Kconfig").read_text()
+            self.assertEqual(kconfig.count("config ASB_WAKEUP_BLOCKER"), 1)
+            self.assertEqual(kconfig.count('source "drivers/rekernel/Kconfig"'), 1)
+            self.assertLess(kconfig.index("config ASB_WAKEUP_BLOCKER"),
+                            kconfig.index('source "drivers/rekernel/Kconfig"'))
+            self.assertTrue(kconfig.endswith("\n\nendmenu\n"))
+            makefile = (tree / "drivers/Makefile").read_text()
+            self.assertIn("obj-$(CONFIG_REKERNEL) += rekernel/", makefile)
+
+        # Reproduce the released failure: the old RK -> AWL order must not pass.
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            prepare(tree)
+            integrate_rekernel(tree)
+            result = subprocess.run(["git", "apply", "--check", str(patch)], cwd=tree,
+                                    text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("drivers/Kconfig", result.stderr)
+            self.assertIn("patch does not apply", result.stderr)
+
 
 class DeviceEvidenceTest(unittest.TestCase):
     def setUp(self):
