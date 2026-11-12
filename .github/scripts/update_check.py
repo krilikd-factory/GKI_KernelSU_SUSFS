@@ -88,8 +88,6 @@ def main() -> int:
     md: list[str] = ["# KRILIKD update check", ""]
     summary: dict = {"sets": {}, "updates": 0}
 
-    # every action, not just Performance: networking/unicode steps use some too
-    used_text = "\n".join(p.read_text() for p in (root / ".github/actions").glob("*/action.yml"))
 
     for key in keys:
         kg = kg_all.get(key)
@@ -163,21 +161,27 @@ def main() -> int:
         md.append("")
         md += details
 
-        # Performance: kernel_patches/common patches the TOP mode does not use
+        # New kernel_patches/common patches: what the next latest build will
+        # try on its own, and what is held back (same rules as the build).
         with tempfile.TemporaryDirectory() as d:
             git("init", "-q", d)
-            if subprocess.run(["git", "-C", d, "fetch", "-q", "--depth=1", "--filter=blob:none",
+            if subprocess.run(["git", "-C", d, "fetch", "-q", "--depth=1",
                                "https://github.com/WildKernels/kernel_patches.git", "refs/heads/main"]).returncode == 0:
-                names = git("-C", d, "ls-tree", "--name-only", "FETCH_HEAD", "common/", check=False).split()
-                unused = sorted(Path(n).stem for n in names if n.endswith(".patch") and Path(n).stem not in used_text)
-                md += ["### kernel_patches/common not used by any build step", ""]
-                md += [f"- `{u}`" for u in unused] or ["- none"]
-                md += ["", "Not wired in on purpose: `force_tcp_nodelay` (rewrites every TCP setsockopt), "
-                       "`*limitation_scaling_min_freq*` (Qualcomm-only cpu masks, not in GKI), "
-                       "`use_unlikely_wrap_cpufreq` (only edits that min-freq patch), "
-                       "`adjust_cpu_scan_order` (WALT picks CPUs on this phone), "
-                       "`IPv6_NAT_FIX` (only hides IP6_NF_NAT in /proc/config.gz), `fake_config`.", ""]
-                sets["kernel_patches_unused"] = unused
+                git("-C", d, "checkout", "-q", "FETCH_HEAD", "--", "common")
+                sys.path.insert(0, str(Path(__file__).resolve().parent))
+                import new_patches as npx
+                deny = npx.read_list(root / ".github/patch-denylist.txt")
+                allow = npx.read_list(root / ".github/patch-allowlist.txt")
+                rows = list(npx.classify(Path(d) / "common", root / ".github/actions", deny, allow))
+                will = [n for v, n, _ in rows if v == "APPLY"]
+                held = [(n, w) for v, n, w in rows if v == "SKIP"]
+                md += ["### New kernel_patches/common patches", "",
+                       "Applied automatically by the next build (if they fit the tree): "
+                       + (", ".join(f"`{n}`" for n in will) or "none"), ""]
+                md += [f"- held back: `{n}` - {w}" for n, w in held]
+                md.append("")
+                sets["new_patches_auto"] = will
+                sets["new_patches_held"] = [n for n, _ in held]
 
     # OnePlus source availability vs the phone's stock kernel
     repo = device.get("oneplus_kernel_repo", "")
@@ -207,6 +211,11 @@ def main() -> int:
         if subprocess.run(["git", "-C", d, "fetch", "-q", "--filter=tree:0", "--depth=15", up, "refs/heads/main"]).returncode == 0:
             md += ["## Upstream workflow (WildKernels/GKI_KernelSU_SUSFS main), latest commits", "```",
                    *git("-C", d, "log", "--format=%h %cs %s", "-15", "FETCH_HEAD", check=False).splitlines(), "```", ""]
+
+    import hashlib
+    tips = sorted((k, n, v.get("tip", "")) for k, comp in summary["sets"].items()
+                  for n, v in comp.items() if isinstance(v, dict) and v.get("status") == "newer")
+    summary["fingerprint"] = hashlib.sha256(json.dumps(tips).encode()).hexdigest()[:16]
 
     md += [f"**Components with updates: {summary['updates']}.** "
            "To try them: run *Build Kernels* with `commit_mode=latest`, flash, and if it boots run *Mark build as known-good*.", ""]
