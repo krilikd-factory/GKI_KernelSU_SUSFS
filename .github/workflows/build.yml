@@ -196,6 +196,8 @@ jobs:
           sublevel: ${{ inputs.sublevel }}
           kernel_patches_commit: ${{ inputs.kernel_patches_commit }}
           anykernel3_commit: ${{ inputs.anykernel3_commit }}
+          feature_set: ${{ inputs.feature_set }}
+          page_size: ${{ inputs.page_size }}
 
       - name: Download Kernel Repository
         uses: ./.github/actions/download-kernel
@@ -627,8 +629,12 @@ jobs:
           variant: ${{ inputs.variant }}
           page_size: ${{ inputs.page_size }}
           feature_set: ${{ inputs.feature_set }}
+          family: ${{ inputs.version }}
           nomount_commit: ${{ inputs.nomount_commit }}
           susfs_commit: ${{ inputs.susfs_commit }}
+          droidspaces_commit: ${{ inputs.droidspaces_commit }}
+          kernel_patches_commit: ${{ inputs.kernel_patches_commit }}
+          anykernel3_commit: ${{ inputs.anykernel3_commit }}
 
       - name: Upload Artifacts
         id: kernel-artifact
