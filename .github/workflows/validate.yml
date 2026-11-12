@@ -31,3 +31,6 @@ jobs:
 
       - name: Validate Python syntax
         run: python3 .github/scripts/validate_python.py
+
+      - name: Run build-evidence and patch-lifecycle regressions
+        run: python3 tests/run.py

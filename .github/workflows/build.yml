@@ -92,6 +92,11 @@ on:
         required: false
         type: string
         default: "{}"
+      patch_channel:
+        description: "stable = enabled only; candidate = reviewed candidates for the selected target"
+        required: false
+        type: string
+        default: "stable"
       stock_config_artifact:
         description: "Artifact name with prefetched stock configs (stock_<kver>[_16k].config)"
         required: false
@@ -116,6 +121,7 @@ jobs:
       PIN_VPNHIDE_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').vpnhide_commit }}
       PIN_USB_ARSENAL_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').usb_arsenal_commit }}
       KERNEL_SOURCE: ${{ fromJSON(inputs.extra_pins || '{}').kernel_source || 'aosp' }}
+      PATCH_CHANNEL: ${{ inputs.patch_channel }}
       OEM_REPO: ${{ fromJSON(inputs.extra_pins || '{}').oem_repo }}
       OEM_BRANCH: ${{ fromJSON(inputs.extra_pins || '{}').oem_branch }}
       OEM_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').oem_commit }}
@@ -198,6 +204,24 @@ jobs:
           android_version: ${{ inputs.android_version }}
           kernel_version: ${{ inputs.kernel_version }}
           os_patch_level: ${{ inputs.os_patch_level }}
+
+      - name: Preflight actual source and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I .github/scripts/source_provenance.py \
+            --tree kernel/common \
+            --output source-provenance.json \
+            --device-file .github/device.json \
+            --base-manifest kernel/.repo/manifests/default.xml \
+            --source "${KERNEL_SOURCE:-aosp}" \
+            --family "${{ inputs.version }}" \
+            --expected-kernel "${{ inputs.kernel_version }}" \
+            --expected-sublevel "${{ inputs.sublevel }}" \
+            --patch-level "${{ inputs.os_patch_level }}" \
+            --commit "${KERNEL_SOURCE_COMMIT:-}" \
+            --oem-repo "${OEM_REPO:-}" \
+            --oem-branch "${OEM_BRANCH:-}"
 
       - name: Spoof /proc/config.gz With Stock Config
         uses: ./.github/actions/stock-config
@@ -462,6 +486,22 @@ jobs:
         if: contains(inputs.feature_set, 'Perf')
         with:
           kernel_version: ${{ inputs.kernel_version }}
+          kernel_family: ${{ inputs.version }}
+          patch_channel: ${{ inputs.patch_channel }}
+          device: ${{ fromJSON(inputs.extra_pins || '{}').device || '' }}
+          soc: ${{ fromJSON(inputs.extra_pins || '{}').soc || '' }}
+
+      - name: Inventory patches when Performance is disabled
+        if: "!contains(inputs.feature_set, 'Perf')"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I .github/scripts/new_patches.py \
+            --patches kernel_patches/common --repo-root . --channel stable \
+            --family "${{ inputs.version }}" \
+            --device "${{ fromJSON(inputs.extra_pins || '{}').device || '' }}" \
+            --soc "${{ fromJSON(inputs.extra_pins || '{}').soc || '' }}" \
+            --format json --output patch-inventory.json
 
       - name: Setup Misc Configs
         uses: ./.github/actions/misc
@@ -563,6 +603,16 @@ jobs:
           page_size: ${{ inputs.page_size }}
           allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
 
+      - name: Generate ASB kernel capability report
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f kernel-final.config ] || { echo "ERROR: final .config was not preserved" >&2; exit 1; }
+          python3 -I .github/scripts/kernel_capability_report.py \
+            --config kernel-final.config --feature-set "${{ inputs.feature_set }}" \
+            --output kernel-capabilities.json
+
       - name: Consolidated Build Summary
         id: build-summary
         if: always()
@@ -606,7 +656,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.extract.outputs.file_name }}-BuildInfo
-          path: /tmp/build-summary-${{ steps.build-summary.outputs.summary_base }}.md
+          path: |
+            /tmp/build-summary-${{ steps.build-summary.outputs.summary_base }}.md
+            ${{ github.workspace }}/source-provenance.json
+            ${{ github.workspace }}/kernel-final.config
+            ${{ github.workspace }}/kernel-capabilities.json
+            ${{ github.workspace }}/patch-inventory.json
+            ${{ github.workspace }}/kmi-crc-report.txt
+            ${{ github.workspace }}/stock-config-report.txt
           if-no-files-found: warn
           compression-level: 9
 
@@ -641,6 +698,11 @@ jobs:
             --arg vpnhide_commit "$(full "${VPNHIDE_COMMIT:-}")" \
             --arg vpnhide_mode "${VPNHIDE_MODE:-}" \
             --arg usb_arsenal_commit "$(full "${USB_ARSENAL_COMMIT:-}")" \
+            --arg patch_channel "${PATCH_CHANNEL:-stable}" \
+            --arg patch_policy_sha256 "$(sha256sum .github/patch-policy.json | cut -d' ' -f1)" \
+            --arg patch_inventory_sha256 "$(sha256sum patch-inventory.json | cut -d' ' -f1)" \
+            --arg source_provenance_sha256 "$(sha256sum source-provenance.json | cut -d' ' -f1)" \
+            --arg capabilities_sha256 "$(sha256sum kernel-capabilities.json | cut -d' ' -f1)" \
             --arg kernel_source "${KERNEL_SOURCE:-aosp}" \
             --arg oem_repo "${OEM_REPO:-}" \
             --arg oem_branch "${OEM_BRANCH:-}" \
@@ -654,14 +716,22 @@ jobs:
               vpnhide_commit: $vpnhide_commit, vpnhide_mode: $vpnhide_mode,
               usb_arsenal_commit: $usb_arsenal_commit,
               kernel_source: $kernel_source, oem_repo: $oem_repo, oem_branch: $oem_branch,
+              patch_channel: $patch_channel, patch_policy_sha256: $patch_policy_sha256,
+              patch_inventory_sha256: $patch_inventory_sha256,
+              source_provenance_sha256: $source_provenance_sha256,
+              capabilities_sha256: $capabilities_sha256,
               feature_set: $feature_set, lto: $lto, mode: "top", from_run: $from_run}}' \
             > "${{ github.workspace }}/known-good-candidate.json"
           cat "${{ github.workspace }}/known-good-candidate.json"
+          python3 -I .github/scripts/device_evidence.py template \
+            --pins known-good-candidate.json --output device-validation-template.json
 
       - name: Upload component pins
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.extract.outputs.file_name }}-Pins
-          path: ${{ github.workspace }}/known-good-candidate.json
+          path: |
+            ${{ github.workspace }}/known-good-candidate.json
+            ${{ github.workspace }}/device-validation-template.json
           if-no-files-found: error

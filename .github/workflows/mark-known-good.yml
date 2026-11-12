@@ -1,6 +1,7 @@
 name: Mark build as known-good
 
-# Run this AFTER you flashed a kernel from a "Build Kernels" run and it booted.
+# Run this AFTER a stable build booted and every device checklist item passed.
+# Candidate builds and build-only success are deliberately not enough.
 # It copies that run's component pins (the *-Pins artifact every successful
 # build leg uploads: KernelSU-Next, SUSFS, kernel/common, NoMount, BBG,
 # DroidSpaces, kernel_patches, AnyKernel3 commits) into
@@ -24,6 +25,10 @@ on:
         required: false
         type: string
         default: ""
+      device_validation:
+        description: "Completed device-validation-template.json from the Pins artifact (or an array for several builds); every check must be passed"
+        required: true
+        type: string
 
 concurrency:
   group: known-good
@@ -38,6 +43,7 @@ jobs:
       - name: Fetch the run's component pins
         env:
           GH_TOKEN: ${{ github.token }}
+          DEVICE_VALIDATION: ${{ inputs.device_validation }}
           RUN_IN: ${{ inputs.run_id }}
           BUILD_IN: ${{ inputs.build }}
         run: |
@@ -46,6 +52,7 @@ jobs:
           [[ "$RUN" =~ ^[0-9]+$ ]] || { echo "ERROR: '$RUN_IN' is not a run id or run URL" >&2; exit 1; }
           CONCL="$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion,workflowName --jq '.workflowName + " / " + (.conclusion // "in progress")')"
           echo "Run $RUN: $CONCL"
+          [[ "$CONCL" == *" / success" ]] || { echo "ERROR: only a successful build run can become known-good" >&2; exit 1; }
           PATTERN="*-Pins"
           [ -n "$BUILD_IN" ] && PATTERN="${BUILD_IN}-Pins"
           gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --pattern "$PATTERN" --dir pins
@@ -53,6 +60,16 @@ jobs:
           FILES=(pins/*/known-good-candidate.json)
           [ "${#FILES[@]}" -gt 0 ] || { echo "ERROR: run $RUN has no '$PATTERN' artifact (built before pin recording existed, or expired)" >&2; exit 1; }
           printf 'pins: %s\n' "${FILES[@]}"
+          # Candidate channels are intentionally not promotable: enable the
+          # reviewed patches in patch-policy.json, make a stable rebuild, then
+          # validate that exact artifact on the device.
+          for f in "${FILES[@]}"; do
+            jq -e 'to_entries[0].value | .patch_channel == "stable"
+                   and (.patch_inventory_sha256|test("^[0-9a-f]{64}$"))
+                   and (.source_provenance_sha256|test("^[0-9a-f]{64}$"))
+                   and (.capabilities_sha256|test("^[0-9a-f]{64}$"))' "$f" >/dev/null \
+              || { echo "ERROR: $f is a candidate or lacks build evidence; refusing known-good" >&2; exit 1; }
+          done
           # Every recorded set must carry real commits for the parts that decide
           # whether it boots; refuse to mark a half-empty set as known-good.
           for f in "${FILES[@]}"; do
@@ -61,6 +78,11 @@ jobs:
                      and (.kernel_source_commit|test("^[0-9a-f]{40}$"))' "$f" >/dev/null \
               || { echo "ERROR: $f lacks root_commit/kernel_source_commit" >&2; cat "$f" >&2; exit 1; }
           done
+          ARGS=()
+          for f in "${FILES[@]}"; do ARGS+=(--pins "$f"); done
+          python3 -I .github/scripts/device_evidence.py validate \
+            "${ARGS[@]}" --data "$DEVICE_VALIDATION" --output device-validation-metadata.json
+          cat device-validation-metadata.json
           echo "RUN=$RUN" >> "$GITHUB_ENV"
 
       - name: Merge into known-good.json and commit
@@ -69,13 +91,14 @@ jobs:
           KG=.github/known-good.json
           [ -f "$KG" ] || echo '{}' > "$KG"
           NEW="$(jq -s 'reduce .[] as $x ({}; . + $x)' pins/*/known-good-candidate.json)"
-          jq -S --argjson new "$NEW" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+          jq -S --argjson new "$NEW" --argjson validations "$(cat device-validation-metadata.json)" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
             reduce ($new | to_entries[]) as $e (.;
               (if has($e.key) and (.[$e.key].root_commit != $e.value.root_commit
                                    or .[$e.key].kernel_source_commit != $e.value.kernel_source_commit
                                    or .[$e.key].susfs_commit != $e.value.susfs_commit)
                then .[$e.key + "@previous"] = .[$e.key] else . end)
-              | .[$e.key] = ($e.value + {marked_at: $at}))' "$KG" > "$KG.tmp"
+              | .[$e.key] = ($e.value + {marked_at: $at,
+                  device_validation: $validations[$e.value.file]}))' "$KG" > "$KG.tmp"
           mv "$KG.tmp" "$KG"
           cat "$KG"
           if git diff --quiet -- "$KG"; then

@@ -53,6 +53,14 @@ on:
         description: "Keep stock KMI generation suffix in kernel version (fix #265)"
         type: boolean
         default: true
+      patch_channel:
+        description: "stable = enabled reviewed patches only; candidate = also test candidate patches scoped to this device (never auto-promoted)"
+        required: false
+        type: choice
+        options:
+          - stable
+          - candidate
+        default: stable
       commit_mode:
         description: "known-good = exact commits of your last build that booted (.github/known-good.json; falls back to latest when empty), latest = branch tips, verified = audited pins"
         required: false
@@ -558,6 +566,8 @@ jobs:
             --arg oem_repo "$OEM_REPO" \
             --arg oem_branch "$OEM_BRANCH" \
             --arg oem_commit "$OEM_COMMIT" \
+            --arg device "$(jq -r .model .github/device.json)" \
+            --arg soc "$(jq -r .soc .github/device.json)" \
             '$ARGS.named')"
           echo "extra_pins=${EXTRA}" >> "$GITHUB_OUTPUT"
           echo "extra_pins: ${EXTRA}"
@@ -834,6 +844,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android13-5-10:
@@ -868,6 +879,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android13-5-15:
@@ -902,6 +914,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android14-5-15:
@@ -936,6 +949,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android14-6-1:
@@ -970,6 +984,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android15-6-6:
@@ -1004,6 +1019,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android16-6-12:
@@ -1038,6 +1054,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   build-android17-6-18:
@@ -1077,6 +1094,7 @@ jobs:
       pin_kernel_common: ${{ needs.resolve-sources.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ needs.resolve-sources.outputs.pin_bbg_commit }}
       extra_pins: ${{ needs.resolve-sources.outputs.extra_pins }}
+      patch_channel: ${{ inputs.patch_channel || 'stable' }}
     secrets: inherit
 
   telegram-announce:
