@@ -59,7 +59,9 @@ runs:
         text = p.read_text()
         old = "obj-m := rekernel.o"
         assert text.count(old) == 1, "unexpected Re-Kernel Makefile"
-        p.write_text(text.replace(old, "obj-$(CONFIG_REKERNEL) += rekernel.o"))
+        text = text.replace(old, "obj-$(CONFIG_REKERNEL) += rekernel.o")
+        text += ("" if text.endswith("\n") else "\n") + "ccflags-y += -I$(srctree)/drivers/rekernel\n"
+        p.write_text(text)
         p = dst / "Kconfig"
         text = p.read_text()
         old = "depends on MODULES"
@@ -83,6 +85,8 @@ runs:
         p.write_text(text)
         PY
         grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel.o' "$DST/Makefile"
+        grep -Fqx 'ccflags-y += -I$(srctree)/drivers/rekernel' "$DST/Makefile"
+        grep -Fq '#include <../android/binder_internal.h>' "$DST/rekernel_binder.c"
         grep -Fq 'depends on ANDROID_VENDOR_HOOKS && NET && NETFILTER' "$DST/Kconfig"
         grep -Fq 'source "drivers/rekernel/Kconfig"' "$TREE/drivers/Kconfig"
         grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' "$TREE/drivers/Makefile"
