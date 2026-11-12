@@ -1,0 +1,316 @@
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index 7bdad83..e8689ef 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -245,4 +245,13 @@ source "drivers/cdx/Kconfig"
+ 
+ source "drivers/dpll/Kconfig"
+ 
++config ASB_WAKEUP_BLOCKER
++	bool "ASB bounded exact-name wakeup source blocker"
++	depends on PM_SLEEP
++	default n
++	help
++	  Allow root to suppress future events from explicitly named wakeup
++	  sources through /sys/kernel/asb_wakeup/blocklist. No sources are
++	  blocked by default; this can break alarms, calls or networking.
++
+ endmenu
+diff --git a/drivers/base/power/Makefile b/drivers/base/power/Makefile
+index 01f1162..94012ef 100644
+--- a/drivers/base/power/Makefile
++++ b/drivers/base/power/Makefile
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: GPL-2.0
+ obj-$(CONFIG_PM)	+= sysfs.o generic_ops.o common.o qos.o runtime.o wakeirq.o
+ obj-$(CONFIG_PM_SLEEP)	+= main.o wakeup.o wakeup_stats.o
++obj-$(CONFIG_ASB_WAKEUP_BLOCKER)	+= asb_wakeup_blocker.o
+ obj-$(CONFIG_PM_TRACE_RTC)	+= trace.o
+ obj-$(CONFIG_HAVE_CLK)	+= clock_ops.o
+ obj-$(CONFIG_PM_QOS_KUNIT_TEST) += qos-test.o
+diff --git a/drivers/base/power/wakeup.c b/drivers/base/power/wakeup.c
+index c010c03..daaeab9 100644
+--- a/drivers/base/power/wakeup.c
++++ b/drivers/base/power/wakeup.c
+@@ -18,6 +18,7 @@
+ #include <linux/irq.h>
+ #include <linux/irqdesc.h>
+ #include <linux/wakeup_reason.h>
++#include <linux/asb_wakeup_blocker.h>
+ #include <trace/events/power.h>
+ 
+ #include "power.h"
+@@ -610,7 +611,7 @@ void __pm_stay_awake(struct wakeup_source *ws)
+ {
+ 	unsigned long flags;
+ 
+-	if (!ws)
++	if (!ws || asb_wakeup_source_blocked(ws->name))
+ 		return;
+ 
+ 	spin_lock_irqsave(&ws->lock, flags);
+@@ -798,7 +799,7 @@ void pm_wakeup_ws_event(struct wakeup_source *ws, unsigned int msec, bool hard)
+ 	unsigned long flags;
+ 	unsigned long expires;
+ 
+-	if (!ws)
++	if (!ws || asb_wakeup_source_blocked(ws->name))
+ 		return;
+ 
+ 	spin_lock_irqsave(&ws->lock, flags);
+diff --git a/drivers/base/power/asb_wakeup_blocker.c b/drivers/base/power/asb_wakeup_blocker.c
+new file mode 100644
+index 0000000..73882f8
+--- /dev/null
++++ b/drivers/base/power/asb_wakeup_blocker.c
+@@ -0,0 +1,228 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Bounded, exact-name wakeup-source blocking for explicit administrator policy.
++ *
++ * There are deliberately no default rules.  The interface accepts at most 16
++ * printable names (63 bytes each), never a path, pattern or arbitrary value.
++ * Existing active sources are not force-relaxed; only future events are ignored.
++ */
++#include <linux/atomic.h>
++#include <linux/ctype.h>
++#include <linux/errno.h>
++#include <linux/jump_label.h>
++#include <linux/kernel.h>
++#include <linux/kobject.h>
++#include <linux/list.h>
++#include <linux/mutex.h>
++#include <linux/rcupdate.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++
++#define ASB_WAKEUP_MAX_RULES 16
++#define ASB_WAKEUP_NAME_MAX 63
++
++struct asb_wakeup_rule {
++	struct list_head node;
++	struct rcu_head rcu;
++	char name[ASB_WAKEUP_NAME_MAX + 1];
++};
++
++static LIST_HEAD(asb_wakeup_rules);
++static DEFINE_MUTEX(asb_wakeup_rules_lock);
++static DEFINE_STATIC_KEY_FALSE(asb_wakeup_rules_active);
++static atomic64_t asb_wakeup_blocked_events = ATOMIC64_INIT(0);
++static struct kobject *asb_wakeup_kobj;
++
++bool asb_wakeup_source_blocked(const char *name)
++{
++	struct asb_wakeup_rule *rule;
++	bool blocked = false;
++
++	if (!static_branch_unlikely(&asb_wakeup_rules_active) || !name)
++		return false;
++
++	rcu_read_lock();
++	list_for_each_entry_rcu(rule, &asb_wakeup_rules, node) {
++		if (strcmp(rule->name, name) == 0) {
++			atomic64_inc(&asb_wakeup_blocked_events);
++			blocked = true;
++			break;
++		}
++	}
++	rcu_read_unlock();
++	return blocked;
++}
++
++static bool asb_wakeup_name_valid(const char *name)
++{
++	size_t i, len = strlen(name);
++
++	if (!len || len > ASB_WAKEUP_NAME_MAX)
++		return false;
++	for (i = 0; i < len; i++) {
++		unsigned char c = name[i];
++
++		if (!isprint(c) || isspace(c) || c == '/' || c == '\\')
++			return false;
++	}
++	return true;
++}
++
++static ssize_t blocklist_show(struct kobject *kobj, struct kobj_attribute *attr,
++			      char *buf)
++{
++	struct asb_wakeup_rule *rule;
++	size_t pos = 0;
++
++	mutex_lock(&asb_wakeup_rules_lock);
++	list_for_each_entry(rule, &asb_wakeup_rules, node)
++		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%s\n", rule->name);
++	mutex_unlock(&asb_wakeup_rules_lock);
++	return pos;
++}
++
++static int asb_wakeup_add(const char *name)
++{
++	struct asb_wakeup_rule *rule;
++	int count = 0;
++
++	if (!asb_wakeup_name_valid(name))
++		return -EINVAL;
++
++	mutex_lock(&asb_wakeup_rules_lock);
++	list_for_each_entry(rule, &asb_wakeup_rules, node) {
++		count++;
++		if (strcmp(rule->name, name) == 0) {
++			mutex_unlock(&asb_wakeup_rules_lock);
++			return 0;
++		}
++	}
++	if (count >= ASB_WAKEUP_MAX_RULES) {
++		mutex_unlock(&asb_wakeup_rules_lock);
++		return -ENOSPC;
++	}
++
++	rule = kzalloc(sizeof(*rule), GFP_KERNEL);
++	if (!rule) {
++		mutex_unlock(&asb_wakeup_rules_lock);
++		return -ENOMEM;
++	}
++	strscpy(rule->name, name, sizeof(rule->name));
++	if (list_empty(&asb_wakeup_rules))
++		static_branch_inc(&asb_wakeup_rules_active);
++	list_add_rcu(&rule->node, &asb_wakeup_rules);
++	mutex_unlock(&asb_wakeup_rules_lock);
++	return 0;
++}
++
++static int asb_wakeup_del(const char *name)
++{
++	struct asb_wakeup_rule *rule;
++	int ret = -ENOENT;
++
++	if (!asb_wakeup_name_valid(name))
++		return -EINVAL;
++
++	mutex_lock(&asb_wakeup_rules_lock);
++	list_for_each_entry(rule, &asb_wakeup_rules, node) {
++		if (strcmp(rule->name, name) == 0) {
++			list_del_rcu(&rule->node);
++			if (list_empty(&asb_wakeup_rules))
++				static_branch_dec(&asb_wakeup_rules_active);
++			kfree_rcu(rule, rcu);
++			ret = 0;
++			break;
++		}
++	}
++	mutex_unlock(&asb_wakeup_rules_lock);
++	return ret;
++}
++
++static void asb_wakeup_clear(void)
++{
++	struct asb_wakeup_rule *rule, *tmp;
++	bool had_rules;
++
++	mutex_lock(&asb_wakeup_rules_lock);
++	had_rules = !list_empty(&asb_wakeup_rules);
++	list_for_each_entry_safe(rule, tmp, &asb_wakeup_rules, node) {
++		list_del_rcu(&rule->node);
++		kfree_rcu(rule, rcu);
++	}
++	if (had_rules)
++		static_branch_dec(&asb_wakeup_rules_active);
++	mutex_unlock(&asb_wakeup_rules_lock);
++}
++
++static ssize_t blocklist_store(struct kobject *kobj, struct kobj_attribute *attr,
++			       const char *buf, size_t count)
++{
++	char *copy, *command, *name;
++	int ret;
++
++	if (!count || count > 96)
++		return -EINVAL;
++	copy = kmemdup_nul(buf, count, GFP_KERNEL);
++	if (!copy)
++		return -ENOMEM;
++	command = strim(copy);
++	name = strchr(command, ' ');
++	if (name) {
++		*name++ = '\0';
++		name = strim(name);
++	} else {
++		name = strchr(command, '\t');
++		if (name) {
++			*name++ = '\0';
++			name = strim(name);
++		}
++	}
++
++	if (strcmp(command, "clear") == 0 && !name) {
++		asb_wakeup_clear();
++		ret = 0;
++	} else if (strcmp(command, "add") == 0 && name) {
++		ret = asb_wakeup_add(name);
++	} else if (strcmp(command, "del") == 0 && name) {
++		ret = asb_wakeup_del(name);
++	} else {
++		ret = -EINVAL;
++	}
++	kfree(copy);
++	return ret ? ret : count;
++}
++
++static ssize_t blocked_events_show(struct kobject *kobj,
++				   struct kobj_attribute *attr, char *buf)
++{
++	return sysfs_emit(buf, "%lld\n", atomic64_read(&asb_wakeup_blocked_events));
++}
++
++static struct kobj_attribute asb_wakeup_blocklist_attr =
++	__ATTR(blocklist, 0600, blocklist_show, blocklist_store);
++static struct kobj_attribute asb_wakeup_events_attr =
++	__ATTR(blocked_events, 0444, blocked_events_show, NULL);
++
++static struct attribute *asb_wakeup_attrs[] = {
++	&asb_wakeup_blocklist_attr.attr,
++	&asb_wakeup_events_attr.attr,
++	NULL,
++};
++ATTRIBUTE_GROUPS(asb_wakeup);
++
++static int __init asb_wakeup_blocker_init(void)
++{
++	int ret;
++
++	asb_wakeup_kobj = kobject_create_and_add("asb_wakeup", kernel_kobj);
++	if (!asb_wakeup_kobj)
++		return -ENOMEM;
++	ret = sysfs_create_groups(asb_wakeup_kobj, asb_wakeup_groups);
++	if (ret) {
++		kobject_put(asb_wakeup_kobj);
++		asb_wakeup_kobj = NULL;
++	}
++	return ret;
++}
++late_initcall(asb_wakeup_blocker_init);
+diff --git a/include/linux/asb_wakeup_blocker.h b/include/linux/asb_wakeup_blocker.h
+new file mode 100644
+index 0000000..3eab0f1
+--- /dev/null
++++ b/include/linux/asb_wakeup_blocker.h
+@@ -0,0 +1,16 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef _LINUX_ASB_WAKEUP_BLOCKER_H
++#define _LINUX_ASB_WAKEUP_BLOCKER_H
++
++#include <linux/types.h>
++
++#ifdef CONFIG_ASB_WAKEUP_BLOCKER
++bool asb_wakeup_source_blocked(const char *name);
++#else
++static inline bool asb_wakeup_source_blocked(const char *name)
++{
++	return false;
++}
++#endif
++
++#endif /* _LINUX_ASB_WAKEUP_BLOCKER_H */
