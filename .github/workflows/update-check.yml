@@ -1,0 +1,69 @@
+name: KRILIKD Update Check
+
+# What is newer than the kernel that booted? Compares every component of the
+# known-good set (.github/known-good.json) with its upstream tip and lists the
+# new commits: KernelSU-Next, SUSFS, NoMount, Baseband-guard, DroidSpaces,
+# kernel_patches, AnyKernel3, USB-Arsenal, VPN Hide releases, the kernel
+# source itself, plus OnePlus source availability and upstream workflow news.
+# Optionally starts a commit_mode=latest build when something is newer.
+
+on:
+  workflow_dispatch:
+    inputs:
+      known_good_key:
+        description: "Known-good set to compare (empty = all)"
+        required: false
+        type: string
+        default: ""
+      build_latest:
+        description: "If anything is newer, start Build Kernels with commit_mode=latest"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: update-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare known-good with upstream
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I .github/scripts/update_check.py \
+            --repo-root . \
+            --key "${{ inputs.known_good_key }}" \
+            --report update-report.md \
+            --json update-summary.json
+          cat update-report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "updates=$(jq -r .updates update-summary.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload report
+        uses: actions/upload-artifact@v7
+        with:
+          name: update-report
+          path: |
+            update-report.md
+            update-summary.json
+
+      - name: Start a latest build
+        if: inputs.build_latest && steps.check.outputs.updates != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f commit_mode=latest
+          echo "Started Build Kernels (commit_mode=latest). Flash it; if it boots, run 'Mark build as known-good'." >> "$GITHUB_STEP_SUMMARY"

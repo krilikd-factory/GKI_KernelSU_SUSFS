@@ -101,16 +101,11 @@ on:
         required: false
         type: string
         default: ""
-      lto:
-        description: "full or thin"
+      extra_pins:
+        description: "JSON: vpnhide_commit, usb_arsenal_commit, kernel_source, oem_repo, oem_branch, oem_commit"
         required: false
         type: string
-        default: "full"
-      performance_profile:
-        description: "KRILIKD profile: safe, balanced, or lab"
-        required: false
-        type: string
-        default: "balanced"
+        default: "{}"
 
 jobs:
   generate-matrix:
@@ -367,7 +362,6 @@ jobs:
       pin_susfs_commit: ${{ inputs.pin_susfs_commit }}
       pin_kernel_common: ${{ inputs.pin_kernel_common }}
       pin_bbg_commit: ${{ inputs.pin_bbg_commit }}
-      lto: ${{ inputs.lto }}
-      performance_profile: ${{ inputs.performance_profile }}
+      extra_pins: ${{ inputs.extra_pins }}
       stock_config_artifact: stock-configs-${{ needs.generate-matrix.outputs.version_slug }}
     secrets: inherit

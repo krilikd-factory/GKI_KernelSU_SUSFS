@@ -88,15 +88,10 @@ on:
         required: false
         type: string
         default: ""
-      lto:
+      extra_pins:
         required: false
         type: string
-        default: "full"
-      performance_profile:
-        description: "KRILIKD performance profile: safe, balanced, or lab"
-        required: false
-        type: string
-        default: "balanced"
+        default: "{}"
       stock_config_artifact:
         description: "Artifact name with prefetched stock configs (stock_<kver>[_16k].config)"
         required: false
@@ -107,9 +102,7 @@ jobs:
   build-gki:
     name: "${{ inputs.kernel_version }}.${{ inputs.sublevel }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }} (${{ inputs.variant }})"
     runs-on: ubuntu-latest
-    # Full LTO links vmlinux in one ~30-50 min step (and may need a thin
-    # retry), so the old 120 min budget is too tight.
-    timeout-minutes: 200
+    timeout-minutes: 150
     env:
       # SUSFS release to build against. susfs-setup checks out the newest
       # commit of the gki branch that declares this SUSFS_VERSION (fails if
@@ -119,6 +112,13 @@ jobs:
       PIN_SUSFS_COMMIT: ${{ inputs.pin_susfs_commit }}
       PIN_KERNEL_COMMON: ${{ inputs.pin_kernel_common }}
       PIN_BBG_COMMIT: ${{ inputs.pin_bbg_commit }}
+      # extra_pins (JSON) unpacked; empty values = "not pinned / not used".
+      PIN_VPNHIDE_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').vpnhide_commit }}
+      PIN_USB_ARSENAL_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').usb_arsenal_commit }}
+      KERNEL_SOURCE: ${{ fromJSON(inputs.extra_pins || '{}').kernel_source || 'aosp' }}
+      OEM_REPO: ${{ fromJSON(inputs.extra_pins || '{}').oem_repo }}
+      OEM_BRANCH: ${{ fromJSON(inputs.extra_pins || '{}').oem_branch }}
+      OEM_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').oem_commit }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
@@ -462,7 +462,6 @@ jobs:
         if: contains(inputs.feature_set, 'Perf')
         with:
           kernel_version: ${{ inputs.kernel_version }}
-          performance_profile: ${{ inputs.performance_profile }}
 
       - name: Setup Misc Configs
         uses: ./.github/actions/misc
@@ -493,6 +492,23 @@ jobs:
         with:
           commit: ${{ inputs.nomount_commit }}
           kernel_version: ${{ inputs.kernel_version }}
+
+      # After every layer that edits fs/ and net/ (SUSFS, NoMount, ...):
+      # vpnhide's integrator anchors on the tree as it stands now.
+      - name: Integrate VPN Hide (built-in)
+        if: contains(inputs.feature_set, 'VPN') || inputs.feature_set == 'All'
+        uses: ./.github/actions/vpnhide
+        with:
+          version: ${{ inputs.version }}
+          commit: ${{ env.PIN_VPNHIDE_COMMIT }}
+          build_name: ${{ steps.extract.outputs.file_name }}
+
+      - name: Integrate USB Arsenal
+        if: contains(inputs.feature_set, 'USB') || inputs.feature_set == 'All'
+        uses: ./.github/actions/usb-arsenal
+        with:
+          kernel_version: ${{ inputs.kernel_version }}
+          commit: ${{ env.PIN_USB_ARSENAL_COMMIT }}
 
       - name: Apply Kernel Branding
         uses: ./.github/actions/apply-kernel-branding
@@ -546,7 +562,6 @@ jobs:
           version: ${{ inputs.version }}
           page_size: ${{ inputs.page_size }}
           allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
-          lto: ${{ inputs.lto }}
 
       - name: Consolidated Build Summary
         id: build-summary
@@ -608,6 +623,7 @@ jobs:
             [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]] && echo "$1" || echo ""
           }
           KEY="${{ inputs.version }}-${{ inputs.os_patch_level }}/${{ inputs.variant }}"
+          [ "${KERNEL_SOURCE:-aosp}" = "oneplus" ] && KEY="${KEY}+oneplus"
           jq -n \
             --arg key "$KEY" \
             --arg file "${{ steps.extract.outputs.file_name }}" \
@@ -622,6 +638,12 @@ jobs:
             --arg anykernel3_commit "$(full "${{ inputs.anykernel3_commit }}")" \
             --arg feature_set "${{ inputs.feature_set }}" \
             --arg lto "${KERNEL_LTO:-}" \
+            --arg vpnhide_commit "$(full "${VPNHIDE_COMMIT:-}")" \
+            --arg vpnhide_mode "${VPNHIDE_MODE:-}" \
+            --arg usb_arsenal_commit "$(full "${USB_ARSENAL_COMMIT:-}")" \
+            --arg kernel_source "${KERNEL_SOURCE:-aosp}" \
+            --arg oem_repo "${OEM_REPO:-}" \
+            --arg oem_branch "${OEM_BRANCH:-}" \
             --arg from_run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             '{($key): {file: $file, root_commit: $root_commit, root_version: $root_version,
               susfs_commit: $susfs_commit, kernel_source_commit: $kernel_source_commit,
@@ -629,7 +651,10 @@ jobs:
               droidspaces_commit: $droidspaces_commit,
               kernel_patches_commit: $kernel_patches_commit,
               anykernel3_commit: $anykernel3_commit,
-              feature_set: $feature_set, lto: $lto, performance_profile: "${{ inputs.performance_profile }}", from_run: $from_run}}' \
+              vpnhide_commit: $vpnhide_commit, vpnhide_mode: $vpnhide_mode,
+              usb_arsenal_commit: $usb_arsenal_commit,
+              kernel_source: $kernel_source, oem_repo: $oem_repo, oem_branch: $oem_branch,
+              feature_set: $feature_set, lto: $lto, mode: "top", from_run: $from_run}}' \
             > "${{ github.workspace }}/known-good-candidate.json"
           cat "${{ github.workspace }}/known-good-candidate.json"
 
