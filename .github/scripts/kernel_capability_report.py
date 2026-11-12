@@ -64,6 +64,11 @@ CAPABILITIES = {
         "runtime_paths": ["/sys/kernel/asb_wakeup/blocklist", "/sys/kernel/asb_wakeup/blocked_events"],
         "asb_use": "bounded exact-name root policy; empty by default, clear must restore the empty policy",
     },
+    "charging.sdp_900ma": {
+        "configs": ["CONFIG_OPLUS_SDP_900MA"],
+        "runtime_paths": ["/proc/sdp900ma"],
+        "asb_use": "read-only status of the early-boot SDP input-current edit; ASB must not write charger limits itself",
+    },
     "bpf.telemetry": {
         "configs": ["CONFIG_BPF", "CONFIG_BPF_SYSCALL", "CONFIG_DEBUG_INFO_BTF"],
         "runtime_paths": ["/sys/kernel/btf/vmlinux"],
