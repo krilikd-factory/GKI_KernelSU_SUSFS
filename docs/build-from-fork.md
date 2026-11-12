@@ -85,9 +85,9 @@ The dispatch form deliberately stays at GitHub's maximum of 25 inputs. Two group
 | Grouped input | Choices |
 | --- | --- |
 | Compatibility patches | `both`, `ptrace`, `unicode`, `none` |
-| Re-Kernel and/or ASB wakeup blocker | `both`, `rekernel`, `wakeup-blocker`, `none` |
+| Re-Kernel / ASB wakeup blocker / SDP 900 mA | `all`, `both`, `rekernel`, `wakeup-blocker`, `sdp-900ma`, `none` |
 
-The latter two features apply only to `android16-6.12`. Selecting the wakeup blocker does not add a default block rule: its policy starts empty. Scheduled builds retain the previous all-features behavior.
+These features apply only to `android16-6.12`; `all` adds SDP 900 mA to `both`. Selecting the wakeup blocker does not add a default block rule: its policy starts empty. Scheduled builds retain the previous all-features behavior.
 
 ### Example: Current Android 15 / Linux 6.6 LTS
 

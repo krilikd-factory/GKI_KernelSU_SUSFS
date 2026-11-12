@@ -77,6 +77,7 @@ Kernel-based su and root access management for Android.
 | --------- | ------------- | -------- |
 | Re-Kernel | Optional built-in Generic Netlink binder/signal/network event source for compatible third-party freezers; `android16-6.12`, feature token `RK` | [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel) / `CONFIG_REKERNEL` |
 | ASB wakeup blocker | Optional empty-by-default root-only exact-name policy, maximum 16 names; no patterns, arbitrary paths or default rules; `android16-6.12`, feature token `AWL` | `/sys/kernel/asb_wakeup/blocklist` / `CONFIG_ASB_WAKEUP_BLOCKER` |
+| OPLUS SDP 900 mA | Optional early-boot device-tree edit raising only the USB data-port (SDP) input limit from 500 to 900 mA; status in `/proc/sdp900ma`, boot parameter `oplus_sdp_900ma=0` disables; `android16-6.12`, feature token `SDP900` | [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches) |
 
 Final config presence does not prove freezer compatibility, safe blocking of a particular wakeup source or physical power savings.
 

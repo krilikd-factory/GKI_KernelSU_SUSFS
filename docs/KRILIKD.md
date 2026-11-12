@@ -49,12 +49,22 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, C
 
 Выбранные `NET`, `RK` и `AWL` проходят fail-closed проверку **финального resolved `.config`**: если CAKE, любой обязательный IP set/`NETFILTER_XT_SET`, Re-Kernel или blocker исчезли после Kconfig resolution, сборка останавливается. Requested config lines сами по себе доказательством не считаются.
 
+### SDP 900 mA
+
+`SDP900` применяет вендоренный `.github/patches/android16-6.12/oplus-sdp-900ma.patch` (WildKernels/kernel_patches `a9ccf6e`, `oneplus/0001-misc-oplus-sdp-900ma.patch`). На раннем boot он правит live device tree: лимит входного тока для обычного USB-порта данных (SDP) поднимается с 500 до 900 mA, включая таблицу мощности charger V2. Вендорные модули зарядки остаются стоковыми, DCP/CDP/PD не трогаются, все температурные ограничения работают как раньше. Состояние на устройстве: `cat /proc/sdp900ma`. Отключить без пересборки: параметр загрузки `oplus_sdp_900ma=0`, либо выбрать `both`. Для портов USB 2.0 это выше спецификации (500 mA); сборка не доказывает фактический ток зарядки.
+
+### Исправления v13
+
+- Run 117316696254 падал на компиляции `asb_wakeup_blocker.c`: `list_for_each_entry_rcu`, `list_add_rcu`, `list_del_rcu` объявлены в `<linux/rculist.h>`, а не в `<linux/list.h>`. Патч теперь включает `<linux/rculist.h>` и собственный `<linux/asb_wakeup_blocker.h>`; тест проверяет соответствие includes используемым API.
+- Fail-closed `--require` никогда не срабатывал: `feature_set` разделён `+`, а проверка искала `,RK,`. Теперь сравнение идёт по `+TOKEN+`.
+- Makefile Re-Kernel получает `ccflags-y += -I$(srctree)/drivers/rekernel`, чтобы `#include <../android/binder_internal.h>` находился и при in-tree сборке.
+
 ## Ручной запуск: лимит GitHub inputs
 
 В v10 форма **Build Kernels** содержит ровно **25 inputs** — верхний предел GitHub для `workflow_dispatch`. Прежние 27 inputs вызывали startup failure ещё до запуска jobs. Четыре независимых выбора сохранены в двух grouped choices:
 
 - `compatibility_patches`: `both`, `ptrace`, `unicode`, `none`;
-- `power_app_features`: `both`, `rekernel`, `wakeup-blocker`, `none`.
+- `power_app_features`: `all` (Re-Kernel + wakeup blocker + SDP 900 mA, по умолчанию), `both` (первые два), `rekernel`, `wakeup-blocker`, `sdp-900ma`, `none`.
 
 Resolver раскрывает choices в прежние feature flags; release-notes preview использует те же значения и не ссылается на удалённые inputs. Scheduled builds по-прежнему включают обе группы полностью. Regression разбирает YAML, проверяет лимит и все mappings, включая отсутствие устаревших ссылок.
 
@@ -109,6 +119,7 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 | `.github/scripts/kernel_capability_report.py` | build-time capability report и fail-closed `--require` для выбранных final-config features |
 | `.github/actions/rekernel/action.yml` | exact-commit интеграция Re-Kernel и provenance |
 | `.github/actions/asb-wakeup-blocker/action.yml` + `.github/patches/android16-6.12/asb-wakeup-blocker.patch` | reviewed blocker integration и пустой по умолчанию sysfs policy |
+| `.github/actions/oplus-sdp-900ma/action.yml` + `.github/patches/android16-6.12/oplus-sdp-900ma.patch` | вендоренный SDP 900 mA и проверка anchors |
 | `.github/scripts/device_evidence.py` | URL-only boot attestation, template и проверка полного device checklist |
 | `.github/workflows/update-check.yml` + `scripts/update_check.py` | проверка обновлений без auto-apply |
 | `.github/workflows/mark-known-good.yml` | ручное promotion только stable + явный evidence scope |
