@@ -80,6 +80,15 @@ Recommended settings for a first build:
 
 Root Flavor choices are `KernelSU-Next`, `KernelSU`, `BakaSU`, `SukiSU-Ultra`, `KowSU`, `FinaSU`, `No Root`, or `All`. `All` builds only KernelSU-Next, KernelSU, and BakaSU. `KowSU` always tracks the latest `master` tip and errors out if SUSFS is enabled. `FinaSU` is pinned in verified mode and errors out if SUSFS is disabled (its kernel hard-depends on the susfs headers). `No Root` produces a kernel with no root implementation (and no manager APK). Install the matching manager after flashing a rooted build; see [Post-install Setup](post-install.md).
 
+The dispatch form deliberately stays at GitHub's maximum of 25 inputs. Two grouped choices retain all four former boolean combinations:
+
+| Grouped input | Choices |
+| --- | --- |
+| Compatibility patches | `both`, `ptrace`, `unicode`, `none` |
+| Re-Kernel and/or ASB wakeup blocker | `both`, `rekernel`, `wakeup-blocker`, `none` |
+
+The latter two features apply only to `android16-6.12`. Selecting the wakeup blocker does not add a default block rule: its policy starts empty. Scheduled builds retain the previous all-features behavior.
+
 ### Example: Current Android 15 / Linux 6.6 LTS
 
 Use:

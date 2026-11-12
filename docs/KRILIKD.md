@@ -49,6 +49,15 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, C
 
 Выбранные `NET`, `RK` и `AWL` проходят fail-closed проверку **финального resolved `.config`**: если CAKE, любой обязательный IP set/`NETFILTER_XT_SET`, Re-Kernel или blocker исчезли после Kconfig resolution, сборка останавливается. Requested config lines сами по себе доказательством не считаются.
 
+## Ручной запуск: лимит GitHub inputs
+
+В v10 форма **Build Kernels** содержит ровно **25 inputs** — верхний предел GitHub для `workflow_dispatch`. Прежние 27 inputs вызывали startup failure ещё до запуска jobs. Четыре независимых выбора сохранены в двух grouped choices:
+
+- `compatibility_patches`: `both`, `ptrace`, `unicode`, `none`;
+- `power_app_features`: `both`, `rekernel`, `wakeup-blocker`, `none`.
+
+Resolver раскрывает choices в прежние feature flags; release-notes preview использует те же значения и не ссылается на удалённые inputs. Scheduled builds по-прежнему включают обе группы полностью. Regression разбирает YAML, проверяет лимит и все mappings, включая отсутствие устаревших ссылок.
+
 ## Цикл обновлений и каналы патчей
 
 0. Каждый день **KRILIKD Update Check** запускает `latest`-сборку при обновлении компонентов (один раз на новый набор). Свежие неизвестные патчи при этом только попадают в отчёт: **apply-by-default удалён**.
