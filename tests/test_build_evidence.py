@@ -24,6 +24,8 @@ def load(name):
 npx = load("new_patches")
 caps = load("kernel_capability_report")
 evidence = load("device_evidence")
+build_summary = load("build_summary")
+rebrand = load("rebrand_anykernel")
 
 
 def policy_entry(state="candidate", **overrides):
@@ -286,6 +288,110 @@ class SourceProvenanceTest(unittest.TestCase):
         (self.tree / "Makefile").write_text((self.tree / "Makefile").read_text() + "# dirty\n")
         with self.assertRaises(ValueError):
             self.run_preflight()
+
+
+class PresentationContractTest(unittest.TestCase):
+    def test_readme_is_fork_specific_without_upstream_community_promotion(self):
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        for needle in ("VPN Hide", "USB Arsenal", "NTSync", "DroidSpaces", "Baseband Guard",
+                       "kernel_sched_nr_migrate", "BuildInfo", "Source provenance", "Patch lifecycle"):
+            self.assertIn(needle, text)
+        for forbidden in ("t.me/WildKernels", "wildkernels.dev", "TheWildJames", "🌿", "🍁", "## Donations"):
+            self.assertNotIn(forbidden, text)
+        self.assertIn("WildKernels/kernel_patches", text)  # attribution remains
+        self.assertIn("Build-verified does not mean boot-verified", text)
+
+    def test_anykernel_rebrand_preserves_logic_and_removes_wild_promotion(self):
+        sample = '''kernel.string=Wild Kernels by TheWildJames aka Morgan Weedman
+. tools/ak3-core.sh
+ui_print " " "  -> Wild Kernels Supported: $ksu_supported"
+split_boot
+ui_print "WildKernels Telegram Channel:"
+ui_print "https://t.me/WildKernelsTG"
+ui_print "Thank you for using Wild Kernels! - TheWildJames"
+'''
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "anykernel.sh").write_text(sample)
+            rebrand.rebrand(root, "android16-6.12.69", "SUSFS+VPN+USB", "aosp", "4k")
+            script = (root / "anykernel.sh").read_text()
+            banner = (root / "banner").read_text()
+            for forbidden in ("Wild", "TheWildJames", "t.me", "🌿", "🍁"):
+                self.assertNotIn(forbidden, script + banner)
+            self.assertIn(". tools/ak3-core.sh", script)
+            self.assertIn("split_boot", script)
+            self.assertIn("KRILIKD GKI compatibility check", script)
+            self.assertIn("Build verified only", script)
+            self.assertIn("osm0sis", script)
+            self.assertIn("K R I L I K D", banner)
+
+    def test_anykernel_unknown_layout_fails_instead_of_shipping_old_branding(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "anykernel.sh").write_text("kernel.string=changed\n")
+            with self.assertRaisesRegex(ValueError, "required marker"):
+                rebrand.rebrand(root, "test", "", "aosp", "4k")
+
+    def test_build_summary_consolidates_patch_capability_and_safety_evidence(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            config = root / "kernel-final.config"
+            config.write_text("CONFIG_PSI=y\nCONFIG_LRU_GEN=y\n")
+            report = caps.make_report(config, "SUSFS+Perf+VPN")
+            (root / "kernel-capabilities.json").write_text(json.dumps(report))
+            (root / "patch-inventory.json").write_text(json.dumps({
+                "schema": 1, "channel": "stable",
+                "target": {"family": "android16-6.12", "device": "CPH2745", "soc": "sm8850"},
+                "patches": [{"name": "reviewed", "state": "observed", "decision": "skip",
+                             "reason": "not reviewed", "sha256": "a" * 64}],
+            }))
+            (root / "kmi-crc-report.txt").write_text("match\n")
+            (root / "stock-config-report.txt").write_text("match\n")
+            perf = root / "performance.md"
+            perf.write_text("- applied (2): one two\n- patch channel: stable\n")
+            args = build_summary.parser().parse_args([
+                "--workspace", str(root), "--output", str(root / "out.md"), "--job-status", "success",
+                "--file-name", "krilikd-test", "--kernel-version", "6.12", "--sublevel", "69",
+                "--android-version", "android16", "--os-patch-level", "2026-03",
+                "--variant", "KernelSU-Next", "--page-size", "4k", "--feature-set", "SUSFS+Perf+VPN",
+                "--family", "android16-6.12", "--performance-report", str(perf),
+            ])
+            text = build_summary.render(args, {
+                "ROOT_IMPLEMENTATION": "KernelSU-Next", "KERNEL_SOURCE": "aosp",
+                "KERNEL_SOURCE_COMMIT": "b" * 40, "KERNEL_LTO": "NONE", "REJ_COUNT": "0",
+                "VPNHIDE_MODE": "full", "VPNHIDE_VERSION": "1.3.1", "VPNHIDE_COMMIT": "c" * 40,
+            })
+            for needle in ("# ⚡ KRILIKD Build Report", "### 🩹 Patch decisions", "reviewed",
+                           "Main Performance pass", "applied (2): one two", "mglru_mode",
+                           "⚠️ Requires separate on-device validation", "Build-verified only"):
+                self.assertIn(needle, text)
+            self.assertNotIn("runtime interface writability or device compatibility.\"", text)
+            self.assertNotIn("NoMount-Metamodule", text)
+            args.feature_set = "Perf"
+            sparse = build_summary.render(args, {"KERNEL_SOURCE": "aosp"})
+            self.assertIn("| SUSFS | not requested | N/A | N/A |", sparse)
+            self.assertNotIn("VPNHide-Builtin-Module", sparse)
+            self.assertNotIn("KernelSU-Next (legacy path)", sparse)
+
+    def test_performance_pass_is_saved_for_buildinfo(self):
+        performance = (ROOT / ".github/actions/performance/action.yml").read_text()
+        setup = (ROOT / ".github/actions/setup-build-environment/action.yml").read_text()
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        summary = (ROOT / ".github/actions/build-summary/action.yml").read_text()
+        self.assertIn("> /tmp/performance-patches-summary.md", performance)
+        self.assertIn("rebrand_anykernel.py", setup)
+        for needle in ('--feature-set "${{ inputs.feature_set }}"', '--page-size "${{ inputs.page_size }}"'):
+            self.assertIn(needle, setup)
+        for needle in ("family: ${{ inputs.version }}", "droidspaces_commit: ${{ inputs.droidspaces_commit }}",
+                       "kernel_patches_commit: ${{ inputs.kernel_patches_commit }}",
+                       "anykernel3_commit: ${{ inputs.anykernel3_commit }}"):
+            self.assertIn(needle, build)
+        self.assertLess(build.index("name: Apply Performance Patches"), build.index("name: Consolidated Build Summary"))
+        self.assertIn("${{ github.workspace }}/patch-inventory.json", build)
+        for needle in ('--family "${{ inputs.family }}"', 'build_summary.py'):
+            self.assertIn(needle, summary)
+        self.assertIn('ap.add_argument("--performance-report", default="/tmp/performance-patches-summary.md")',
+                      (SCRIPTS / "build_summary.py").read_text())
 
 
 class WorkflowContractTest(unittest.TestCase):
