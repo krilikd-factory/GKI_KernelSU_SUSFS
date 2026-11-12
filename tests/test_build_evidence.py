@@ -635,6 +635,41 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
 
 
 class WorkflowContractTest(unittest.TestCase):
+    def test_dispatch_input_limit_and_grouped_feature_selectability(self):
+        """GitHub rejects a workflow at startup when dispatch has over 25 inputs."""
+        import yaml
+
+        path = ROOT / ".github/workflows/main.yml"
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        trigger = document.get("on", document.get(True))
+        inputs = trigger["workflow_dispatch"]["inputs"]
+        self.assertLessEqual(len(inputs), 25)
+        self.assertEqual(len(inputs), 25)  # no accidental silent loss of an existing control
+        self.assertNotIn("use_ptrace", inputs)
+        self.assertNotIn("use_unicode", inputs)
+        self.assertNotIn("use_rekernel", inputs)
+        self.assertNotIn("use_wakeup_blocker", inputs)
+        self.assertIn("test_release_notes", inputs)
+        for name in ("compatibility_patches", "power_app_features"):
+            self.assertEqual(inputs[name]["type"], "choice")
+            self.assertEqual(inputs[name]["default"], "both")
+            self.assertEqual(inputs[name]["options"], ["both", inputs[name]["options"][1],
+                                                       inputs[name]["options"][2], "none"])
+        self.assertEqual(inputs["compatibility_patches"]["options"][1:3], ["ptrace", "unicode"])
+        self.assertEqual(inputs["power_app_features"]["options"][1:3], ["rekernel", "wakeup-blocker"])
+
+        text = path.read_text(encoding="utf-8")
+        for token in ('case "${{ inputs.compatibility_patches }}" in',
+                      'case "${{ inputs.power_app_features }}" in',
+                      'ptrace)  F_PTRACE=true;  F_UNICODE=false',
+                      'unicode) F_PTRACE=false; F_UNICODE=true',
+                      'rekernel)       F_RK=true;  F_AWL=false',
+                      'wakeup-blocker) F_RK=false; F_AWL=true'):
+            self.assertIn(token, text)
+        for removed in ("inputs.use_ptrace", "inputs.use_unicode", "inputs.use_rekernel",
+                        "inputs.use_wakeup_blocker"):
+            self.assertNotIn(removed, text)
+
     def test_channel_reaches_every_family_and_performance(self):
         main = (ROOT / ".github/workflows/main.yml").read_text()
         prepare = (ROOT / ".github/workflows/prepare.yml").read_text()
