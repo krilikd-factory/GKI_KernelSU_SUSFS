@@ -4,6 +4,21 @@ inputs:
   kernel_version:
     description: 'Kernel version (e.g., 6.1)'
     required: true
+  kernel_family:
+    description: 'GKI family used for patch target filtering'
+    required: true
+  patch_channel:
+    description: 'stable applies enabled patches; candidate may also apply reviewed candidates'
+    required: false
+    default: 'stable'
+  device:
+    description: 'Device model used for patch target filtering'
+    required: false
+    default: ''
+  soc:
+    description: 'SoC used for patch target filtering'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -100,27 +115,39 @@ runs:
           apply_patch "$p" -F3 < "$KP/$p.patch"
         done
 
-        # New upstream patches: every kernel_patches/common/*.patch that no
-        # build step names yet is tried here, so a fresh patch upstream reaches
-        # a commit_mode=latest build without editing this workflow. Filtered by
-        # .github/patch-denylist.txt and the header rule in new_patches.py;
-        # dry-run gated like the rest. known-good builds pin kernel_patches, so
-        # they get exactly the set that booted.
+        # New upstream patches are observed by default. Stable builds apply only
+        # human-reviewed "enabled" entries; an explicit candidate build may also
+        # apply reviewed "candidate" entries for the exact family/device/SoC.
+        # The JSON inventory is uploaded with BuildInfo and records content IDs,
+        # policy state, target scope and every apply/hold decision.
+        CHANNEL="${{ inputs.patch_channel }}"
+        case "$CHANNEL" in stable|candidate) ;; *) echo "ERROR: invalid patch channel '$CHANNEL'" >&2; exit 1 ;; esac
+        INVENTORY="${{ github.workspace }}/patch-inventory.json"
+        TSV="$(mktemp)"
+        python3 -I "${{ github.workspace }}/.github/scripts/new_patches.py" \
+          --patches "$KP" --repo-root "${{ github.workspace }}" \
+          --channel "$CHANNEL" --family "${{ inputs.kernel_family }}" \
+          --device "${{ inputs.device }}" --soc "${{ inputs.soc }}" \
+          --format json --output "$INVENTORY"
+        python3 -I "${{ github.workspace }}/.github/scripts/new_patches.py" \
+          --patches "$KP" --repo-root "${{ github.workspace }}" \
+          --channel "$CHANNEL" --family "${{ inputs.kernel_family }}" \
+          --device "${{ inputs.device }}" --soc "${{ inputs.soc }}" --format tsv > "$TSV"
         NEW_APPLIED=(); NEW_HELD=()
-        while IFS=$'\t' read -r verdict name why; do
+        while IFS=$'\t' read -r verdict name state why digest; do
           [ -n "${verdict:-}" ] || continue
           if [ "$verdict" = "APPLY" ]; then
             before=${#APPLIED[@]}
-            # -F0: an unreviewed patch must match its context exactly
+            # Candidate/enabled patches still require exact context and dry-run.
             try_patch "$name" -F0 < "$KP/$name.patch"
             [ "${#APPLIED[@]}" -gt "$before" ] && NEW_APPLIED+=("$name")
           else
-            NEW_HELD+=("$name")
-            echo "new-patch held back: $name ($why)"
+            NEW_HELD+=("$name:$state")
+            echo "new-patch held back: $name [$state] ($why) sha256=$digest"
           fi
-        done < <(python3 -I "${{ github.workspace }}/.github/scripts/new_patches.py" \
-                   --patches "$KP" --repo-root "${{ github.workspace }}")
-        [ "${#NEW_APPLIED[@]}" -eq 0 ] || echo "::notice::New upstream patches applied automatically: ${NEW_APPLIED[*]}"
+        done < "$TSV"
+        rm -f "$TSV"
+        [ "${#NEW_APPLIED[@]}" -eq 0 ] || echo "::notice::Reviewed $CHANNEL patches applied: ${NEW_APPLIED[*]}"
 
         # Google's GKI AutoFDO profile (Kleaf trees only): build the
         # kernel_aarch64 target with the profile Google ships in-tree but
@@ -137,8 +164,10 @@ runs:
           echo "### KRILIKD Performance patches (TOP)"
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
-          echo "- new upstream patches applied automatically (${#NEW_APPLIED[@]}): ${NEW_APPLIED[*]:-none}"
-          echo "- held back by denylist/header rule (${#NEW_HELD[@]}): ${NEW_HELD[*]:-none}"
+          echo "- patch channel: ${CHANNEL}"
+          echo "- reviewed new patches applied (${#NEW_APPLIED[@]}): ${NEW_APPLIED[*]:-none}"
+          echo "- observed/held patches (${#NEW_HELD[@]}): ${NEW_HELD[*]:-none}"
+          echo "- inventory: patch-inventory.json (BuildInfo artifact)"
           echo "- ${AFDO_MSG}"
         } >> "$GITHUB_STEP_SUMMARY"
 
