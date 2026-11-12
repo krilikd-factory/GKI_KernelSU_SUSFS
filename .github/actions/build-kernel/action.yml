@@ -144,6 +144,9 @@ runs:
           exit 1
         fi
         echo "Verifying page size using $CONFIG_FILE"
+        # Preserve the exact resolved config for the post-build ASB capability
+        # report and BuildInfo evidence. This copies, never edits, .config.
+        cp "$CONFIG_FILE" "${{ github.workspace }}/kernel-final.config"
         grep -E '^(# )?CONFIG_ARM64_(4K|16K|64K)_PAGES|^CONFIG_ARM64_PAGE_SHIFT' "$CONFIG_FILE" || true
         echo "--- LTO / AutoFDO in final .config ---"
         grep -E '^(# )?CONFIG_LTO_(NONE|CLANG|CLANG_THIN|CLANG_FULL)[= ]|^CONFIG_AUTOFDO_CLANG' "$CONFIG_FILE" || true
