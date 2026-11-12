@@ -14,10 +14,6 @@ inputs:
     required: false
     type: boolean
     default: false
-  lto:
-    description: 'full (Google GKI release setting) or thin. full falls back to thin when its build fails (typically out of memory on the runner).'
-    required: false
-    default: 'full'
   kmi_symbol_lists:
     description: 'Vendor symbol lists (gki/aarch64/symbols/<name>) whose CRCs must match stock. Empty = skip the guard.'
     required: false
@@ -106,47 +102,16 @@ runs:
             # CRC guard below.
             BAZEL_TARGETS=(//common:kernel_aarch64/Image //common:kernel_aarch64/vmlinux.symvers)
           fi
-          # --config=fast pins ThinLTO; an explicit --lto after it overrides.
-          # Full LTO is what Google ships for GKI; if it fails here (the usual
-          # cause is the 4-core/16 GB runner running out of memory on the
-          # single vmlinux link) retry with ThinLTO instead of failing the leg.
-          LTO="${{ inputs.lto }}"; LTO="${LTO:-full}"
-          kbuild() { # <lto|empty>  empty = exactly the old command (fast => thin)
-            local LTO_FLAG=()
-            [ -n "$1" ] && LTO_FLAG=(--lto="$1")
-            tools/bazel build \
-              --config=fast \
-              "${LTO_FLAG[@]}" \
-              "${PAGE_SIZE_FLAGS[@]}" \
-              --disk_cache=/home/runner/.cache/bazel \
-              "${BAZEL_TARGETS[@]}"
-          }
-          if [ "$LTO" = "full" ]; then
-            echo "Memory before full-LTO build:"; free -h || true
-            set +e
-            kbuild full 2>&1 | tee /tmp/kbuild-full.log
-            RC=${PIPESTATUS[0]}
-            set -e
-            if [ "$RC" -eq 0 ]; then
-              USED_LTO=full
-            elif grep -qE ': (fatal )?error: |undefined reference to|Error [0-9]+$' /tmp/kbuild-full.log \
-                 && ! grep -qiE 'killed|out of memory|signal 9|ld\.lld: error: .*(memory|mmap)' /tmp/kbuild-full.log; then
-              # A source/compile error fails the same way with ThinLTO; do not
-              # spend another 10+ minutes proving it.
-              echo "::error::Kernel build failed with a compile error (not an LTO/memory problem); see the errors above" >&2
-              exit "$RC"
-            else
-              echo "::warning::Full LTO build failed without a compile error (usually OOM); retrying with ThinLTO (the previous default command)"
-              free -h || true
-              kbuild ""
-              USED_LTO=thin
-            fi
-          else
-            kbuild "$LTO"
-            USED_LTO="$LTO"
-          fi
-          echo "KERNEL_LTO=$USED_LTO" >> "$GITHUB_ENV"
-          echo "### Kernel LTO: $USED_LTO" >> "$GITHUB_STEP_SUMMARY"
+          # No LTO on purpose: on android16-6.12 any LTO makes CONFIG_RUST
+          # unselectable while DEBUG_INFO_BTF=y (init/Kconfig: depends on
+          # !DEBUG_INFO_BTF || (... && !LTO)), which silently drops the built-in
+          # Rust ashmem and the Rust binder. --config=fast gives LTO_NONE, the
+          # same as Google's own GKI build of this branch.
+          tools/bazel build \
+            --config=fast \
+            "${PAGE_SIZE_FLAGS[@]}" \
+            --disk_cache=/home/runner/.cache/bazel \
+            "${BAZEL_TARGETS[@]}"
         fi
 
     - name: 'Verify Page Size in Generated .config'
@@ -228,6 +193,32 @@ runs:
           exit 1
         fi
         echo "Page size verified: ${PAGE_SIZE}"
+        LTO_NOW="$(sed -n 's/^CONFIG_LTO_\(NONE\|CLANG_THIN\|CLANG_FULL\)=y$/\1/p' "$CONFIG_FILE" | head -n1)"
+        echo "KERNEL_LTO=${LTO_NOW:-unknown}" >> "$GITHUB_ENV"
+
+        # VPN Hide: the integrator added the code, set-kernel-config asked for
+        # it - make sure Kconfig really kept it (NET/INET/IPV6/PROC_FS deps).
+        if [ -n "${VPNHIDE_MODE:-}" ]; then
+          grep -q '^CONFIG_VPNHIDE=y$' "$CONFIG_FILE" || {
+            echo "::error::VPN Hide was integrated (${VPNHIDE_MODE}) but CONFIG_VPNHIDE=y is not in the final .config" >&2; exit 1; }
+          echo "VPN Hide verified: CONFIG_VPNHIDE=y ($(grep -E '^(# )?CONFIG_VPNHIDE_FS_HIDING' "$CONFIG_FILE" || echo 'FS_HIDING n/a'))"
+        fi
+
+        # Stock config guard: every option the stock gki_defconfig sets to y/m
+        # must survive into the final .config. Catches a feature that knocks out
+        # a stock dependency (e.g. LTO+BTF dropping Rust ashmem/binder): such a
+        # kernel compiles but cannot boot Android.
+        STOCK_DEF="$(mktemp)"
+        if git -C common show HEAD:arch/arm64/configs/gki_defconfig > "$STOCK_DEF" 2>/dev/null && [ -s "$STOCK_DEF" ]; then
+          if ! python3 -I "${{ github.workspace }}/.github/scripts/stock_config_guard.py" \
+               --stock "$STOCK_DEF" --final "$CONFIG_FILE" \
+               --report "${{ github.workspace }}/stock-config-report.txt"; then
+            echo "::error::Stock kernel options were lost (listed above). Such a kernel builds but may not boot Android; refusing to package it." >&2
+            exit 1
+          fi
+        else
+          echo "::warning::stock gki_defconfig not readable from git; stock config guard skipped"
+        fi
 
     - name: 'KMI CRC guard (stock vendor modules must still load)'
       # A build whose KMI symbol CRCs drifted boots to the logo and hangs:
