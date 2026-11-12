@@ -707,6 +707,7 @@ jobs:
             --arg patch_channel "${PATCH_CHANNEL:-stable}" \
             --arg patch_policy_sha256 "$(sha256sum .github/patch-policy.json | cut -d' ' -f1)" \
             --arg patch_inventory_sha256 "$(sha256sum patch-inventory.json | cut -d' ' -f1)" \
+            --argjson candidate_patches_applied "$(jq '[.patches[] | select(.state == "candidate" and .decision == "apply")] | length' patch-inventory.json)" \
             --arg source_provenance_sha256 "$(sha256sum source-provenance.json | cut -d' ' -f1)" \
             --arg capabilities_sha256 "$(sha256sum kernel-capabilities.json | cut -d' ' -f1)" \
             --arg kernel_source "${KERNEL_SOURCE:-aosp}" \
@@ -724,6 +725,7 @@ jobs:
               kernel_source: $kernel_source, oem_repo: $oem_repo, oem_branch: $oem_branch,
               patch_channel: $patch_channel, patch_policy_sha256: $patch_policy_sha256,
               patch_inventory_sha256: $patch_inventory_sha256,
+              candidate_patches_applied: $candidate_patches_applied,
               source_provenance_sha256: $source_provenance_sha256,
               capabilities_sha256: $capabilities_sha256,
               feature_set: $feature_set, lto: $lto, mode: "top", from_run: $from_run}}' \

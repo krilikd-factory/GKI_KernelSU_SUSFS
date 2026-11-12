@@ -63,15 +63,20 @@ jobs:
           FILES=(pins/*/known-good-candidate.json)
           [ "${#FILES[@]}" -gt 0 ] || { echo "ERROR: run $RUN has no '$PATTERN' artifact (built before pin recording existed, or expired)" >&2; exit 1; }
           printf 'pins: %s\n' "${FILES[@]}"
-          # Candidate channels are intentionally not promotable: enable the
-          # reviewed patches in patch-policy.json, make a stable rebuild, then
-          # validate that exact artifact on the device.
+          # A build that applied candidate patches is intentionally not
+          # promotable: enable the reviewed patches in patch-policy.json, make
+          # a stable rebuild, then validate that exact artifact on the device.
+          # A candidate-channel build that applied NO candidate patch has the
+          # same sources as a stable one, so it is accepted.
           for f in "${FILES[@]}"; do
-            jq -e 'to_entries[0].value | .patch_channel == "stable"
-                   and (.patch_inventory_sha256|test("^[0-9a-f]{64}$"))
+            jq -e 'to_entries[0].value
+                   | (.patch_channel == "stable" or ((.candidate_patches_applied // -1) == 0))' "$f" >/dev/null \
+              || { echo "::error::$(basename "$(dirname "$f")"): built with patch_channel=candidate (candidate patches applied: $(jq -r 'to_entries[0].value.candidate_patches_applied // "not recorded by that build"' "$f")). Only a stable build, or a candidate build that applied no candidate patch, can become known-good. Use the run URL of a patch_channel=stable build of the same commits." >&2; exit 1; }
+            jq -e 'to_entries[0].value
+                   | (.patch_inventory_sha256|test("^[0-9a-f]{64}$"))
                    and (.source_provenance_sha256|test("^[0-9a-f]{64}$"))
                    and (.capabilities_sha256|test("^[0-9a-f]{64}$"))' "$f" >/dev/null \
-              || { echo "ERROR: $f is a candidate or lacks build evidence; refusing known-good" >&2; exit 1; }
+              || { echo "::error::$f lacks build evidence (patch inventory / source provenance / capabilities digests); it was built by an older workflow. Rebuild, then mark that run." >&2; exit 1; }
           done
           # Every recorded set must carry real commits for the parts that decide
           # whether it boots; refuse to mark a half-empty set as known-good.
