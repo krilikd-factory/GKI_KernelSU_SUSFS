@@ -39,6 +39,8 @@ KRILIKD kernels are built on [Google's GKI sources](https://android.googlesource
 
 Fork the repository and follow **[Build Your Own Kernel](docs/build-from-fork.md)** to select one kernel family, patch level, root implementation, and feature set in GitHub Actions.
 
+KRILIKD (OnePlus 15, ColorOS 17, GKI 6.12.69): one **TOP** mode, built-in **VPN Hide**, **USB Arsenal**, optional build from **OnePlus kernel source**, boot-safety guards and a known-good / update-check cycle — see **[docs/KRILIKD.md](docs/KRILIKD.md)**. Run **KRILIKD Update Check** in Actions to see which components are newer than your last kernel that booted.
+
 ---
 
 ## Installation
