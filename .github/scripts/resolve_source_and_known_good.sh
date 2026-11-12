@@ -88,6 +88,14 @@ if [ "$COMMIT_MODE" = "known-good" ]; then
     KG_VPN="$(kg vpnhide_commit)";       KG_USB="$(kg usb_arsenal_commit)"
     echo "[+] known-good set '$KG_KEY' (recorded from $(kg from_run)):"
     jq --arg k "$KG_KEY" '.[$k]' "$KG_FILE"
+    KG_POLICY="$(kg patch_policy_sha256)"
+    if [ -n "$KG_POLICY" ]; then
+      CURRENT_POLICY="$(sha256sum .github/patch-policy.json | cut -d' ' -f1)"
+      [ "$KG_POLICY" = "$CURRENT_POLICY" ] || {
+        echo "::error::patch-policy.json changed after this known-good set was validated. Review/enable patches and validate a new stable build; do not silently reuse the old verdict." >&2
+        exit 1
+      }
+    fi
   else
     echo "::warning::commit_mode=known-good but no known-good set for '${KG_KEY:-this selection}' - building LATEST tips. After this build boots, run the 'Mark build as known-good' workflow with this run's id."
   fi

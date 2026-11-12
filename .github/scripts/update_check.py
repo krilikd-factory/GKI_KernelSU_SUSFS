@@ -172,16 +172,27 @@ def main() -> int:
                 import new_patches as npx
                 deny = npx.read_list(root / ".github/patch-denylist.txt")
                 allow = npx.read_list(root / ".github/patch-allowlist.txt")
-                rows = list(npx.classify(Path(d) / "common", root / ".github/actions", deny, allow))
-                will = [n for v, n, _ in rows if v == "APPLY"]
-                held = [(n, w) for v, n, w in rows if v == "SKIP"]
+                policy = npx.read_policy(root / ".github/patch-policy.json")
+                rows = npx.inventory(Path(d) / "common", root / ".github/actions", deny, allow,
+                                     policy, channel="stable", family=device.get("stock_kernel_family", ""),
+                                     device=device.get("model", ""), soc=device.get("soc", ""))
+                enabled = [r["name"] for r in rows if r["decision"] == "apply"]
+                observed = [r["name"] for r in rows if r["state"] == "observed"]
+                candidates = [r["name"] for r in rows if r["state"] == "candidate"]
+                held = [(r["name"], r["state"], r["reason"]) for r in rows if r["decision"] != "apply"]
                 md += ["### New kernel_patches/common patches", "",
-                       "Applied automatically by the next build (if they fit the tree): "
-                       + (", ".join(f"`{n}`" for n in will) or "none"), ""]
-                md += [f"- held back: `{n}` - {w}" for n, w in held]
+                       "Enabled and eligible for the next stable build: "
+                       + (", ".join(f"`{n}`" for n in enabled) or "none"),
+                       "Observed (never auto-applied): "
+                       + (", ".join(f"`{n}`" for n in observed) or "none"),
+                       "Reviewed candidates (require an explicit candidate build): "
+                       + (", ".join(f"`{n}`" for n in candidates) or "none"), ""]
+                md += [f"- held: `{n}` [{state}] - {w}" for n, state, w in held]
                 md.append("")
-                sets["new_patches_auto"] = will
-                sets["new_patches_held"] = [n for n, _ in held]
+                sets["new_patches_enabled"] = enabled
+                sets["new_patches_observed"] = observed
+                sets["new_patches_candidates"] = candidates
+                sets["new_patches_held"] = [n for n, _, _ in held]
 
     # OnePlus source availability vs the phone's stock kernel
     repo = device.get("oneplus_kernel_repo", "")
@@ -218,7 +229,7 @@ def main() -> int:
     summary["fingerprint"] = hashlib.sha256(json.dumps(tips).encode()).hexdigest()[:16]
 
     md += [f"**Components with updates: {summary['updates']}.** "
-           "To try them: run *Build Kernels* with `commit_mode=latest`, flash, and if it boots run *Mark build as known-good*.", ""]
+           "To try component updates: run *Build Kernels* with `commit_mode=latest`. New unreviewed patches remain observed; use `patch_channel=candidate` only after adding a scoped policy entry. Promote known-good only after the device checklist.", ""]
     text = "\n".join(md)
     print(text)
     if a.report:
