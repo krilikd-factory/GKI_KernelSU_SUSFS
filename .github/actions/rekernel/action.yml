@@ -1,0 +1,111 @@
+name: 'Re-Kernel built-in'
+description: 'Fetch an exact Sakion-Team/Re-Kernel commit and integrate LKM-Source as built-in drivers/rekernel'
+
+inputs:
+  version:
+    description: 'Kernel family; reviewed integration is exclusively for android16-6.12'
+    required: true
+  commit:
+    description: 'Exact full Re-Kernel Git commit'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Fetch exact Re-Kernel source
+      shell: bash
+      run: |
+        set -euo pipefail
+        [ "${{ inputs.version }}" = "android16-6.12" ] || {
+          echo "::error::Re-Kernel built-in integration has only been reviewed for android16-6.12" >&2
+          exit 1
+        }
+        WANT="${{ inputs.commit }}"
+        [[ "$WANT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Re-Kernel requires a full lowercase commit SHA" >&2; exit 1; }
+        rm -rf "$RUNNER_TEMP/rekernel"
+        git init -q "$RUNNER_TEMP/rekernel"
+        ok=false
+        for i in 1 2 3 4 5; do
+          if git -C "$RUNNER_TEMP/rekernel" fetch -q --depth=1 https://github.com/Sakion-Team/Re-Kernel "$WANT"; then ok=true; break; fi
+          sleep $((i * 3))
+        done
+        [ "$ok" = true ] || { echo "::error::could not fetch Re-Kernel $WANT" >&2; exit 1; }
+        git -C "$RUNNER_TEMP/rekernel" checkout -q --detach FETCH_HEAD
+        ACTUAL="$(git -C "$RUNNER_TEMP/rekernel" rev-parse HEAD)"
+        [ "$ACTUAL" = "$WANT" ] || { echo "::error::Re-Kernel commit mismatch: $ACTUAL != $WANT" >&2; exit 1; }
+        for f in Kconfig Makefile rekernel_main.c rekernel_netlink.c rekernel_binder.c rekernel_signal.c rekernel_netfilter.c rekernel_internal.h rekernel.h; do
+          [ -f "$RUNNER_TEMP/rekernel/LKM-Source/$f" ] || { echo "::error::Re-Kernel file missing: $f" >&2; exit 1; }
+        done
+        [ -f "$RUNNER_TEMP/rekernel/LICENSE" ] || { echo "::error::Re-Kernel LICENSE missing" >&2; exit 1; }
+        if find "$RUNNER_TEMP/rekernel/LKM-Source" -type l | grep -q .; then
+          echo "::error::Re-Kernel LKM-Source must not contain symlinks" >&2; exit 1
+        fi
+
+    - name: Integrate built-in driver with exact anchors
+      shell: bash
+      run: |
+        set -euo pipefail
+        SRC="$RUNNER_TEMP/rekernel/LKM-Source"
+        TREE="${{ github.workspace }}/kernel/common"
+        DST="$TREE/drivers/rekernel"
+        [ ! -e "$DST" ] || { echo "::error::drivers/rekernel already exists" >&2; exit 1; }
+        cp -a "$SRC" "$DST"
+        cp "$RUNNER_TEMP/rekernel/LICENSE" "$DST/LICENSE.rekernel"
+        python3 - "$TREE" "$DST" <<'PY'
+        from pathlib import Path
+        import sys
+        tree, dst = map(Path, sys.argv[1:])
+        p = dst / "Makefile"
+        text = p.read_text()
+        old = "obj-m := rekernel.o"
+        assert text.count(old) == 1, "unexpected Re-Kernel Makefile"
+        p.write_text(text.replace(old, "obj-$(CONFIG_REKERNEL) += rekernel.o"))
+        p = dst / "Kconfig"
+        text = p.read_text()
+        old = "depends on MODULES"
+        assert text.count(old) == 1, "unexpected Re-Kernel Kconfig"
+        text = text.replace(old, "depends on ANDROID_VENDOR_HOOKS && NET && NETFILTER")
+        text = text.replace('bool "Re:Kernel module"', 'bool "Re:Kernel built-in"')
+        text = text.replace("Tips: Enabling this will build Re-Kernel as a module",
+                            "Build Re-Kernel into the kernel; Generic Netlink is the default transport")
+        p.write_text(text)
+        p = tree / "drivers/Makefile"
+        text = p.read_text()
+        line = "obj-$(CONFIG_REKERNEL) += rekernel/"
+        assert line not in text, "duplicate Re-Kernel Makefile entry"
+        p.write_text(text + ("\n" if text and not text.endswith("\n") else "") + line + "\n")
+        p = tree / "drivers/Kconfig"
+        text = p.read_text()
+        line = 'source "drivers/rekernel/Kconfig"'
+        assert line not in text, "duplicate Re-Kernel Kconfig source"
+        assert text.endswith("\nendmenu\n"), "drivers/Kconfig final menu anchor changed"
+        text = text[:-len("endmenu\n")] + line + "\n\nendmenu\n"
+        p.write_text(text)
+        PY
+        grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel.o' "$DST/Makefile"
+        grep -Fq 'depends on ANDROID_VENDOR_HOOKS && NET && NETFILTER' "$DST/Kconfig"
+        grep -Fq 'source "drivers/rekernel/Kconfig"' "$TREE/drivers/Kconfig"
+        grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' "$TREE/drivers/Makefile"
+
+    - name: Enable Re-Kernel and network events
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_REKERNEL=y
+          CONFIG_REKERNEL_NETWORK=y
+          CONFIG_REKERNEL_LEGACY_NETLINK=n
+
+    - name: Record component provenance
+      shell: bash
+      run: |
+        set -euo pipefail
+        COMMIT="$(git -C "$RUNNER_TEMP/rekernel" rev-parse HEAD)"
+        echo "REKERNEL_COMMIT=$COMMIT" >> "$GITHUB_ENV"
+        cd "$RUNNER_TEMP/rekernel"
+        DIGEST="$(find LKM-Source LICENSE -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+        jq -n --arg repo 'https://github.com/Sakion-Team/Re-Kernel' \
+          --arg commit "$COMMIT" --arg mode 'builtin-LKM-Source' \
+          --arg transport 'generic-netlink' --arg source_tree_sha256 "$DIGEST" \
+          '{schema:1,repo:$repo,commit:$commit,mode:$mode,transport:$transport,network_events:true,source_tree_sha256:$source_tree_sha256,scope:"source and integration evidence; userspace freezer compatibility and on-device unfreeze require separate validation"}' \
+          > "${{ github.workspace }}/rekernel-provenance.json"
+        echo "Re-Kernel built-in at $COMMIT (Generic Netlink, network events enabled)" >> "$GITHUB_STEP_SUMMARY"
