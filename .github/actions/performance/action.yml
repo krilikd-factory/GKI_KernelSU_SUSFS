@@ -160,8 +160,10 @@ runs:
 
         echo "[+] Performance: applied ${#APPLIED[@]}: ${APPLIED[*]:-none}"
         echo "[!] Performance: skipped ${#SKIPPED[@]}: ${SKIPPED[*]:-none}"
+        # Preserve the main Performance pass for BuildInfo too. Previously it
+        # existed only in the job page while reviewed patches lived in JSON, so
+        # the downloaded report could not reconstruct the complete patch story.
         {
-          echo "### KRILIKD Performance patches (TOP)"
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
           echo "- patch channel: ${CHANNEL}"
@@ -169,6 +171,10 @@ runs:
           echo "- observed/held patches (${#NEW_HELD[@]}): ${NEW_HELD[*]:-none}"
           echo "- inventory: patch-inventory.json (BuildInfo artifact)"
           echo "- ${AFDO_MSG}"
+        } > /tmp/performance-patches-summary.md
+        {
+          echo "### KRILIKD Performance patches (TOP)"
+          cat /tmp/performance-patches-summary.md
         } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Power/perf defaults that do not touch the KMI
