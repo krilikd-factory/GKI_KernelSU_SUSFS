@@ -1,0 +1,119 @@
+name: 'VPN Hide (built-in)'
+description: 'Compile okhsunrog/vpnhide into the kernel (CONFIG_VPNHIDE) through its own exact-anchor integrator'
+
+inputs:
+  version:
+    description: 'Kernel family / vpnhide KMI name (e.g. android16-6.12)'
+    required: true
+  commit:
+    description: 'vpnhide commit to integrate (empty = newest release tag)'
+    required: false
+    default: ''
+  build_name:
+    description: 'Build file name, used to keep the review artifact name unique'
+    required: true
+
+outputs:
+  mode:
+    description: 'full | net-only | skipped'
+    value: ${{ steps.integrate.outputs.mode }}
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch vpnhide
+      id: fetch
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      run: |
+        set -euo pipefail
+        rm -rf vpnhide
+        WANT="${{ inputs.commit }}"
+        if [ -z "$WANT" ]; then
+          TAG="$(git ls-remote --tags --refs https://github.com/okhsunrog/vpnhide 'v*' \
+                 | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+          [ -n "$TAG" ] || { echo "::warning::vpnhide: no release tag found; VPN Hide skipped"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          WANT="$TAG"
+        fi
+        git init -q vpnhide
+        ok=false
+        for i in 1 2 3 4 5; do
+          if git -C vpnhide fetch -q --depth=1 https://github.com/okhsunrog/vpnhide "$WANT"; then ok=true; break; fi
+          sleep 5
+        done
+        if [ "$ok" != true ]; then
+          echo "::warning::vpnhide: could not fetch $WANT; VPN Hide skipped"
+          echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        git -C vpnhide checkout -q --detach FETCH_HEAD
+        SHA="$(git -C vpnhide rev-parse HEAD)"
+        VER="$(cat vpnhide/VERSION 2>/dev/null || echo unknown)"
+        echo "vpnhide $VER at $SHA"
+        echo "VPNHIDE_COMMIT=$SHA" >> "$GITHUB_ENV"
+        echo "VPNHIDE_VERSION=$VER" >> "$GITHUB_ENV"
+        echo "ok=true" >> "$GITHUB_OUTPUT"
+
+    - name: Integrate vpnhide call sites and driver
+      id: integrate
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "${{ steps.fetch.outputs.ok }}" != "true" ]; then
+          echo "mode=skipped" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        # vpnhide's integrator needs Python >= 3.12 (PEP 695 'type' alias).
+        PY=""
+        for c in python3.13 python3.12 python3; do
+          if command -v "$c" >/dev/null && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)'; then PY="$c"; break; fi
+        done
+        if [ -z "$PY" ]; then
+          echo "::warning::vpnhide: Python >= 3.12 not available; VPN Hide skipped"
+          echo "mode=skipped" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        OUT="${RUNNER_TEMP}/vpnhide-review"
+        rm -rf "$OUT"; mkdir -p "$OUT"
+        set +e
+        RES="$("$PY" -I "${{ github.workspace }}/.github/scripts/vpnhide_integrate.py" \
+                --vpnhide "${RUNNER_TEMP}/vpnhide" \
+                --kernel "${{ github.workspace }}/kernel/common" \
+                --kmi "${{ inputs.version }}" \
+                --output "$OUT")"
+        RC=$?
+        set -e
+        echo "$RES"
+        MODE="$(printf '%s\n' "$RES" | sed -n 's/^RESULT=//p' | tail -n1)"
+        if [ "$RC" -ne 0 ] || [ -z "$MODE" ]; then
+          echo "::warning::vpnhide: call sites do not fit this tree; kernel built WITHOUT VPN Hide (review bundle uploaded)"
+          echo "mode=skipped" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        if [ "$MODE" = "net-only" ]; then
+          echo "::warning::vpnhide: fs/ call sites collide with another layer (usually SUSFS); built with network concealment only (CONFIG_VPNHIDE_FS_HIDING=n)"
+        fi
+        echo "VPNHIDE_MODE=$MODE" >> "$GITHUB_ENV"
+        echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+        echo "### VPN Hide: ${VPNHIDE_VERSION:-?} built-in (${MODE})" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload vpnhide review bundle
+      if: always() && steps.fetch.outputs.ok == 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.build_name }}-vpnhide-review
+        path: ${{ runner.temp }}/vpnhide-review
+        if-no-files-found: ignore
+        retention-days: 14
+
+    - name: Enable CONFIG_VPNHIDE (full)
+      if: steps.integrate.outputs.mode == 'full'
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_VPNHIDE=y
+          CONFIG_VPNHIDE_FS_HIDING=y
+
+    - name: Enable CONFIG_VPNHIDE (network only)
+      if: steps.integrate.outputs.mode == 'net-only'
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_VPNHIDE=y
+          CONFIG_VPNHIDE_FS_HIDING=n
