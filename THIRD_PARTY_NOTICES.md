@@ -20,6 +20,7 @@
 | magiskboot | [topjohnwu/Magisk](https://github.com/topjohnwu/Magisk) via AnyKernel3 | GPL-3.0 |
 | DroidSpaces | [ravindu644/Droidspaces-OSS](https://github.com/ravindu644/Droidspaces-OSS) | GPL-3.0 |
 | Re-Kernel | [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel) | GPL-2.0 |
+| oplus_sdp_900ma | [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches) `oneplus/0001-misc-oplus-sdp-900ma.patch` at `a9ccf6e`, vendored unmodified | GPL-2.0-only |
 
 <details>
 <summary> About magiskboot binaries</summary>
