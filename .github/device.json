@@ -1,0 +1,13 @@
+{
+  "name": "OnePlus 15",
+  "model": "CPH2745",
+  "codename": "canoe",
+  "soc": "sm8850",
+  "firmware": "ColorOS 17 / Android 17",
+  "stock_kernel_family": "android16-6.12",
+  "stock_sublevel": 69,
+  "stock_patch_level": "2026-03",
+  "oneplus_kernel_repo": "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850",
+  "oneplus_branch_match": "oneplus/sm8850_*_oneplus_15",
+  "note": "stock_* = the kernel ColorOS on the phone actually runs (uname -r). kernel_source=oneplus refuses OnePlus sources older than this, because the stock vendor modules would then need KMI symbols the older kernel does not have (boot-logo hang). Update these fields after an OTA that moves the stock kernel."
+}
