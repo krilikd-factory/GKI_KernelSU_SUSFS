@@ -116,7 +116,7 @@ CONTROL_CANDIDATES = {
         "readback": "exact 0/1 readback is required",
     },
     "kernel_sched_nr_migrate": {
-        "configs": ["CONFIG_SCHED_DEBUG"],
+        "configs": ["CONFIG_DEBUG_FS", "CONFIG_SCHED_DEBUG"],
         "runtime_path": "/sys/kernel/debug/sched/nr_migrate",
         "value_type": "bounded_integer",
         "requests": {
