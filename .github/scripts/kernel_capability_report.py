@@ -116,8 +116,8 @@ CONTROL_CANDIDATES = {
         "readback": "exact 0/1 readback is required",
     },
     "kernel_sched_nr_migrate": {
-        "configs": [],
-        "runtime_path": "/proc/sys/kernel/sched_nr_migrate",
+        "configs": ["CONFIG_SCHED_DEBUG"],
+        "runtime_path": "/sys/kernel/debug/sched/nr_migrate",
         "value_type": "bounded_integer",
         "requests": {
             "stock": "restore the exact value captured before ASB's first write",
@@ -129,6 +129,41 @@ CONTROL_CANDIDATES = {
         },
         "owner": "ASB kernel-controls helper; profile and reinforce paths do not write directly",
         "readback": "exact integer readback is required",
+    },
+    "kernel_sched_stats": {
+        "configs": ["CONFIG_SCHEDSTATS"],
+        "runtime_path": "/proc/sys/kernel/sched_schedstats",
+        "value_type": "boolean_0_1",
+        "requests": {
+            "stock": "restore the exact value captured before ASB's first write",
+            "off": ["0"],
+        },
+        "owner": "ASB kernel-controls helper; legacy profile and reinforce writes use the same owner",
+        "readback": "exact 0/1 readback is required",
+    },
+    "kernel_sched_autogroup": {
+        "configs": ["CONFIG_SCHED_AUTOGROUP"],
+        "runtime_path": "/proc/sys/kernel/sched_autogroup_enabled",
+        "value_type": "boolean_0_1",
+        "requests": {
+            "stock": "restore the exact value captured before ASB's first write",
+            "off": ["0"],
+            "on": ["1"],
+        },
+        "owner": "ASB kernel-controls helper; profile and reinforce paths do not write directly",
+        "readback": "exact 0/1 readback is required",
+    },
+    "kernel_sched_child_runs_first": {
+        "configs": [],
+        "runtime_path": "/proc/sys/kernel/sched_child_runs_first",
+        "value_type": "boolean_0_1",
+        "requests": {
+            "stock": "restore the exact value captured before ASB's first write",
+            "off": ["0"],
+            "on": ["1"],
+        },
+        "owner": "ASB kernel-controls helper; profile and reinforce paths do not write directly",
+        "readback": "exact 0/1 readback is required",
     },
 }
 
