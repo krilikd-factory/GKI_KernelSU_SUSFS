@@ -572,6 +572,27 @@ jobs:
           kernel_version: ${{ inputs.kernel_version }}
           commit: ${{ env.PIN_USB_ARSENAL_COMMIT }}
 
+      - name: Apply OnePlus 15 integrity and scheduler config
+        # This repository targets CPH2745/SM8850. Apply after DroidSpaces and
+        # every other feature action: DroidSpaces requests POSIX_MQUEUE and
+        # DEVTMPFS, while the explicit OnePlus 15 policy requires them off.
+        if: inputs.version == 'android16-6.12'
+        uses: ./.github/actions/set-kernel-config
+        with:
+          config_list: |
+            CONFIG_POSIX_MQUEUE=n
+            CONFIG_DEVTMPFS=n
+            CONFIG_DEVTMPFS_MOUNT=n
+            CONFIG_DEBUG_FS=y
+            CONFIG_SCHED_DEBUG=y
+
+      - name: Note OnePlus 15 / DroidSpaces config precedence
+        if: inputs.version == 'android16-6.12' && (contains(inputs.feature_set, 'DS') || inputs.feature_set == 'All')
+        shell: bash
+        run: |
+          echo "::warning::OnePlus 15 policy disables POSIX_MQUEUE and DEVTMPFS after DroidSpaces setup; DroidSpaces functionality requiring either symbol is not claimed."
+          echo "OnePlus 15 policy: POSIX_MQUEUE=n, DEVTMPFS=n, DEVTMPFS_MOUNT=n; DroidSpaces features requiring them are unavailable." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Apply Kernel Branding
         uses: ./.github/actions/apply-kernel-branding
         with:
@@ -706,6 +727,7 @@ jobs:
             ${{ github.workspace }}/patch-inventory.json
             ${{ github.workspace }}/kmi-crc-report.txt
             ${{ github.workspace }}/stock-config-report.txt
+            ${{ github.workspace }}/op15-config-report.txt
           if-no-files-found: warn
           compression-level: 9
 
