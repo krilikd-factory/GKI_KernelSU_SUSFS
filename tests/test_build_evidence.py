@@ -43,8 +43,7 @@ def load_embedded(name, relative_path, marker):
 npx = load("new_patches")
 caps = load("kernel_capability_report")
 evidence = load("device_evidence")
-build_summary = load_embedded(
-    "build_summary", ".github/actions/build-summary/action.yml", "KRILIKD_BUILD_SUMMARY")
+build_summary = load("build_summary")
 rebrand = load_embedded(
     "rebrand_anykernel", ".github/actions/setup-build-environment/action.yml", "KRILIKD_REBRAND")
 
@@ -757,26 +756,28 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             self.assertIn("AnyKernel3 presentation: KRILIKD", result.stdout)
             self.assertIn("KRILIKD", (anykernel / "anykernel.sh").read_text())
 
-    def test_embedded_build_summary_runs_without_standalone_helper(self):
+    def test_tracked_build_summary_runs_from_a_clean_checkout(self):
         with tempfile.TemporaryDirectory() as d:
             checkout = Path(d)
             output = checkout / "summary.md"
             result = subprocess.run([
-                sys.executable, "-I", "-", "--workspace", str(checkout),
+                sys.executable, "-I", str(SCRIPTS / "build_summary.py"),
+                "--workspace", str(checkout),
                 "--output", str(output), "--job-status", "failure",
                 "--file-name", "krilikd-test", "--kernel-version", "6.12",
                 "--sublevel", "69", "--android-version", "android16",
                 "--os-patch-level", "2026-03", "--variant", "KernelSU-Next",
                 "--page-size", "4k", "--feature-set", "Perf",
                 "--family", "android16-6.12",
-            ], input=embedded_source(
-                ".github/actions/build-summary/action.yml", "KRILIKD_BUILD_SUMMARY"),
-                cwd=checkout, text=True, capture_output=True, check=False)
+            ], cwd=checkout, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             report = output.read_text()
             self.assertIn("❌ Failed", report)
             self.assertIn("Patch inventory: not generated", report)
+            self.assertIn("Source preflight evidence unavailable: not generated", report)
+            self.assertIn("does not create a second summary failure", report)
             self.assertIn("Build-verified only", report)
+            self.assertIn("Feature behavior, power and performance", report)
 
     def test_build_summary_consolidates_patch_capability_and_safety_evidence(self):
         with tempfile.TemporaryDirectory() as d:
@@ -819,6 +820,76 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             self.assertNotIn("VPNHide-Builtin-Module", sparse)
             self.assertNotIn("KernelSU-Next (legacy path)", sparse)
 
+    def test_build_summary_exposes_oneplus_source_dependency_and_complete_guides(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / ".github").mkdir()
+            (root / ".github/device.json").write_text((ROOT / ".github/device.json").read_text())
+            commit = "a" * 40
+            provenance = {
+                "schema": 1, "stage": "downloaded-source-preflight", "source": "oneplus",
+                "family": "android16-6.12", "commit": commit, "kernel": "6.12.69",
+                "patch_level": "2026-03", "source_digest": "d" * 64,
+                "git_clean_before_features": True,
+                "oem": {"repo": "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850",
+                        "branch": "oneplus/sm8850_test_oneplus_15"},
+                "base_manifest": {"path": "kernel/.repo/manifests/default.xml", "sha256": "m" * 64, "bytes": 123},
+                "files": {"Makefile": {"sha256": "f" * 64, "bytes": 456}},
+                "scope": "source identity and selected build inputs; not boot or runtime validation",
+            }
+            (root / "source-provenance.json").write_text(json.dumps(provenance))
+            args = build_summary.parser().parse_args([
+                "--workspace", str(root), "--output", str(root / "out.md"), "--job-status", "success",
+                "--file-name", "krilikd-test", "--kernel-version", "6.12", "--sublevel", "69",
+                "--android-version", "android16", "--os-patch-level", "2026-03",
+                "--feature-set", "NET+RK+AWL+SDP900+Perf", "--family", "android16-6.12",
+            ])
+            text = build_summary.render(args, {"KERNEL_SOURCE": "oneplus", "KERNEL_SOURCE_COMMIT": commit})
+            for needle in (
+                "### 🌳 Kernel source and OnePlus dependency", "fail-closed actual-tree preflight",
+                "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850",
+                "oneplus/sm8850_test_oneplus_15", commit, "Actual Makefile kernel",
+                "oneplus/sm8850_*_oneplus_15", "Stock minimum sublevel", "Stock minimum firmware patch",
+                "Clean tree before features", "Source identity digest", "Prefeature source file",
+                "stock `/proc/config.gz` compatibility payload", "not boot or runtime validation",
+                "Re-Kernel", "ASB wakeup blocker", "OPLUS SDP 900 mA", "Main Performance pass",
+                "kernel_sched_nr_migrate", "/sys/kernel/debug/sched/nr_migrate",
+                "kernel_sched_stats", "/proc/sys/kernel/sched_schedstats", "Stock is inert before a baseline exists",
+            ):
+                self.assertIn(needle, text)
+            self.assertNotIn("physical boot verified", text.lower())
+            self.assertNotIn("guaranteed battery improvement", text.lower())
+
+            mismatch = build_summary.render(args, {"KERNEL_SOURCE": "oneplus", "KERNEL_SOURCE_COMMIT": "b" * 40})
+            self.assertIn("resolver/actual commit", mismatch)
+            self.assertIn("summary identity mismatch", mismatch)
+
+            provenance["source"] = "aosp"
+            provenance["oem"] = None
+            (root / "source-provenance.json").write_text(json.dumps(provenance))
+            aosp = build_summary.render(args, {"KERNEL_SOURCE": "aosp", "KERNEL_SOURCE_COMMIT": commit})
+            self.assertIn("not applicable (AOSP common)", aosp)
+            self.assertIn("AOSP source gate", aosp)
+
+    def test_build_summary_missing_malformed_and_incomplete_provenance_never_overclaim(self):
+        for payload in (None, "{broken", {}):
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                if payload is not None:
+                    (root / "source-provenance.json").write_text(
+                        payload if isinstance(payload, str) else json.dumps(payload))
+                args = build_summary.parser().parse_args([
+                    "--workspace", str(root), "--output", str(root / "out.md"), "--job-status", "failure",
+                    "--file-name", "krilikd-test", "--kernel-version", "6.12", "--sublevel", "69",
+                    "--android-version", "android16", "--os-patch-level", "2026-03",
+                    "--feature-set", "", "--family", "android16-6.12",
+                ])
+                text = build_summary.render(args, {"KERNEL_SOURCE": "oneplus", "KERNEL_SOURCE_COMMIT": "a" * 40})
+                self.assertIn("Source preflight evidence unavailable", text)
+                self.assertIn("No OnePlus/AOSP identity pass is inferred", text)
+                self.assertNotIn("✅ Recorded before feature patches", text)
+                self.assertNotIn("✅ preflight passed", text)
+
     def test_performance_pass_is_saved_for_buildinfo(self):
         performance = (ROOT / ".github/actions/performance/action.yml").read_text()
         setup = (ROOT / ".github/actions/setup-build-environment/action.yml").read_text()
@@ -826,12 +897,12 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
         summary = (ROOT / ".github/actions/build-summary/action.yml").read_text()
         self.assertIn("> /tmp/performance-patches-summary.md", performance)
         self.assertNotIn(".github/scripts/rebrand_anykernel.py", setup)
-        self.assertNotIn(".github/scripts/build_summary.py", summary)
+        self.assertTrue((SCRIPTS / "build_summary.py").is_file())
         for needle in ("python3 -I -", "KRILIKD_REBRAND_BEGIN", "KRILIKD_REBRAND_END",
                        '--feature-set "${{ inputs.feature_set }}"', '--page-size "${{ inputs.page_size }}"'):
             self.assertIn(needle, setup)
-        for needle in ("python3 -I -", "KRILIKD_BUILD_SUMMARY_BEGIN", "KRILIKD_BUILD_SUMMARY_END"):
-            self.assertIn(needle, summary)
+        self.assertIn('python3 -I "${{ github.workspace }}/.github/scripts/build_summary.py"', summary)
+        self.assertNotIn("KRILIKD_BUILD_SUMMARY_BEGIN", summary)
         for needle in ("family: ${{ inputs.version }}", "droidspaces_commit: ${{ inputs.droidspaces_commit }}",
                        "kernel_patches_commit: ${{ inputs.kernel_patches_commit }}",
                        "anykernel3_commit: ${{ inputs.anykernel3_commit }}"):
@@ -840,7 +911,7 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
         self.assertIn("${{ github.workspace }}/patch-inventory.json", build)
         self.assertIn('--family "${{ inputs.family }}"', summary)
         self.assertIn('ap.add_argument("--performance-report", default="/tmp/performance-patches-summary.md")',
-                      embedded_source(".github/actions/build-summary/action.yml", "KRILIKD_BUILD_SUMMARY"))
+                      (SCRIPTS / "build_summary.py").read_text())
 
 
 class WorkflowContractTest(unittest.TestCase):
