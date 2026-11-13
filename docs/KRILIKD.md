@@ -7,7 +7,7 @@
 - каждый патч `kernel_patches/common` сначала проверяется `--dry-run`; если не подходит — пропускается с предупреждением, сборка не падает;
 - после сборки работают три защиты, и если хоть одна сработала — zip не собирается:
   1. **KMI CRC guard** — CRC символов ядра совпадают со стоком (иначе вендорные модули не загрузятся → висит лого);
-  2. **Stock config guard** — ни одна опция стокового `gki_defconfig` (`=y`/`=m`) не пропала из итогового `.config`, кроме трёх явно заданных исключений политики OnePlus 15 (`POSIX_MQUEUE`, `DEVTMPFS`, `DEVTMPFS_MOUNT`), каждое из которых отдельно проверяется в final `.config`;
+  2. **Stock config guard** — ни одна опция стокового `gki_defconfig` (`=y`/`=m`) не пропала из итогового `.config`;
   3. **проверка VPN Hide** — `CONFIG_VPNHIDE=y` реально в ядре.
 
 **Новые патчи апстрима обнаруживаются автоматически, но не применяются без review.** Каждый новый `kernel_patches/common/*.patch` получает digest и состояние `observed`; `candidate` и `enabled` задаются только через `.github/patch-policy.json`. Точное совпадение контекста и `-F0` остаются обязательными для разрешённых патчей.
@@ -25,12 +25,6 @@
 
 **LTO не используется намеренно.** На android16‑6.12 любой LTO (thin или full) при `DEBUG_INFO_BTF=y` выключает `CONFIG_RUST`, а с ним встроенный Rust‑ashmem и Rust‑binder — такое ядро соберётся, но Android на нём не стартует. Google собирает эту ветку тоже без LTO.
 
-### Фиксированная политика OnePlus 15
-
-Для `android16-6.12` после всех feature-действий запрашиваются `CONFIG_POSIX_MQUEUE=n`, `CONFIG_DEVTMPFS=n`, `CONFIG_DEVTMPFS_MOUNT=n`, `CONFIG_DEBUG_FS=y` и `CONFIG_SCHED_DEBUG=y`. Отдельный `op15_config_guard.py` затем проверяет именно финальный resolved `.config`: отсутствие файла, неявное возвращение отключённого символа или потеря debugfs/scheduler prerequisites останавливает сборку. Результат попадает в `op15-config-report.txt` в BuildInfo.
-
-DroidSpaces по-прежнему может быть выбран, но его собственные запросы `POSIX_MQUEUE=y` и `DEVTMPFS=y` на этом устройстве намеренно проигрывают более поздней политике OnePlus 15; функции DroidSpaces, которым нужны эти символы, не заявляются работающими. `CONFIG_SCHED_AUTOGROUP` принудительно не включается. Уже отключённые в текущем Termux-readout опции не считаются новой экономией энергии.
-
 ## Что в ядре по умолчанию
 
 KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, CAKE, IP sets, NAT, …), DroidSpaces, NTSync, Ptrace‑fix, Unicode‑fix, BTF/eBPF/FUSE‑BPF, Performance (TOP), **VPN Hide**, **USB Arsenal**. Для `android16-6.12` также доступны отключаемые **Re-Kernel (`RK`)** и **ASB wakeup blocker (`AWL`)**; в `All` они включены, а соответствующие inputs основного workflow по умолчанию включены.
@@ -40,7 +34,6 @@ KernelSU‑Next + SUSFS 2.4.0, NoMount, Baseband‑guard, сеть (BBR/BBRv3, C
 Драйвер [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide) вшит в ядро (`CONFIG_VPNHIDE=y`) его собственным интегратором с точными якорями. Без `.ko`, без kprobes, работает с первого запуска.
 
 - Если якоря в `fs/` заняты SUSFS — VPN Hide встраивается **без** скрытия в файловой системе (`CONFIG_VPNHIDE_FS_HIDING=n`); сетевое скрытие (то, по чему приложения видят VPN) остаётся полным. В итоге шага видно: `full` или `net-only`.
-- Запрошенный VPN Hide работает fail-closed: ошибка fetch, недоступный Python ≥ 3.12, несовпадение pinned commit, сбой интегратора или неизвестный mode останавливают сборку. Сборка без запрошенного VPN Hide больше не выдаётся за успешную.
 - Ставить: **VPN Hide app** той же версии + модуль‑компаньон **`VPNHide-Builtin-Module`** из артефактов запуска (собирается из того же коммита vpnhide).
 - **Не ставь** модуль `vpnhide-kmod` на это ядро — драйвер уже внутри.
 
@@ -103,7 +96,7 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 
 После сборки `kernel_capability_report.py` читает **финальный resolved `.config`** и создаёт `kernel-capabilities.json`: PSI, MGLRU, zram/zsmalloc, BBR, CAKE, IP sets, Re-Kernel, wakeup blocker, BPF/BTF, UFS и power-efficient workqueues. Для каждой группы отдельно записаны `build_state` и `runtime_state=unknown`, пути для discovery и назначение для ASB. Наличие CONFIG не выдаётся за работающий runtime interface; BBRv3 не выводится из одного `CONFIG_TCP_CONG_BBR`, а реальные `tc`/`ipset` операции требуют отдельной проверки.
 
-Схема 2 дополнительно публикует шесть **control candidates**, а не доказательство доступности: `mglru_mode`, `kernel_timer_migration`, `kernel_sched_nr_migrate`, `kernel_sched_stats`, `kernel_sched_autogroup` и `kernel_sched_child_runs_first`. Это только закрытый список штатных Linux proc/sysfs/debugfs-интерфейсов и разрешённых значений. Migration batch использует `/sys/kernel/debug/sched/nr_migrate` и требует в config одновременно `CONFIG_DEBUG_FS` и `CONFIG_SCHED_DEBUG`, scheduler stats — `/proc/sys/kernel/sched_schedstats`. Для каждого зафиксированы `runtime_state=unknown`, `writable=unknown`, обязательные baseline/readback и exact restore. ASB обязан повторно проверить путь, права и значение на устройстве; отчёт из BuildInfo не является разрешением писать и не заменяет собственный allowlist ASB. Smart MGLRU и ручной режим используют одного владельца, а profile/reinforce не обходят настройку прямыми записями. `CONFIG_SCHED_AUTOGROUP` специально не включается только ради доступности карточки: итоговый config и фактический runtime interface остаются раздельными доказательствами.
+Схема 2 дополнительно публикует шесть **control candidates**, а не доказательство доступности: `mglru_mode`, `kernel_timer_migration`, `kernel_sched_nr_migrate`, `kernel_sched_stats`, `kernel_sched_autogroup` и `kernel_sched_child_runs_first`. Это только закрытый список штатных Linux proc/sysfs/debugfs-интерфейсов и разрешённых значений. Migration batch использует `/sys/kernel/debug/sched/nr_migrate`, scheduler stats — `/proc/sys/kernel/sched_schedstats`. Для каждого зафиксированы `runtime_state=unknown`, `writable=unknown`, обязательные baseline/readback и exact restore. ASB обязан повторно проверить путь, права и значение на устройстве; отчёт из BuildInfo не является разрешением писать и не заменяет собственный allowlist ASB. Smart MGLRU и ручной режим используют одного владельца, а profile/reinforce не обходят настройку прямыми записями. `CONFIG_SCHED_AUTOGROUP` специально не включается только ради доступности карточки: итоговый config и фактический runtime interface остаются раздельными доказательствами.
 
 Единственный новый custom ABI в этой ревизии — узкий `/sys/kernel/asb_wakeup/*` при выбранном `AWL`, описанный выше. Кастомный `/sys/kernel/krilikd/*` **не создан**. Произвольный path/value channel, другие kernel writers, lease/TTL и vendor QoS не добавляются. VPN Hide управляется только собственными app/companion: ASB не создаёт второй канал и не подменяет их состояние. Существующий network runtime ASB также остаётся единственным владельцем BBR/qdisc/route policy. Camera/audio/modem/thermal остаются у vendor stack; checklist проверяет отсутствие регрессий, а не обещает улучшение. Подтверждённого OPlus SDP-интерфейса для 900 мА с readback не найдено, поэтому writer зарядного тока не добавлен.
 
@@ -124,7 +117,6 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 | `.github/scripts/new_patches.py` | lifecycle classifier и patch inventory |
 | `.github/scripts/source_provenance.py` | preflight фактического AOSP/OnePlus source |
 | `.github/scripts/kernel_capability_report.py` | build-time capability report и fail-closed `--require` для выбранных final-config features |
-| `.github/scripts/op15_config_guard.py` | обязательная проверка пяти символов политики OnePlus 15 в final `.config` |
 | `.github/actions/rekernel/action.yml` | exact-commit интеграция Re-Kernel и provenance |
 | `.github/actions/asb-wakeup-blocker/action.yml` + `.github/patches/android16-6.12/asb-wakeup-blocker.patch` | reviewed blocker integration и пустой по умолчанию sysfs policy |
 | `.github/actions/oplus-sdp-900ma/action.yml` + `.github/patches/android16-6.12/oplus-sdp-900ma.patch` | вендоренный SDP 900 mA и проверка anchors |
@@ -139,7 +131,7 @@ KRILIKD даёт безопасные примитивы ядра, телеме�
 - Никакие значения частот, voltage, thermal limits, IRQ affinity, camera/ISP, audio, modem или UFS QoS не hardcode'ятся.
 - Не заявляются проценты прироста FPS, снижения нагрева или расхода: для этого нужны A/B-замеры на OnePlus 15.
 - Не добавлены непроверенные SoC-specific writers, произвольный sysfs path/value ABI, persistent polling или app-specific политики; единственный новый ABI ограничен exact-name wakeup rules.
-- Для SDP 900 mA реализован только early-boot device-tree patch и read-only `/proc/sdp900ma`; runtime-writer тока/напряжения в ASB не добавлен. Узел сообщает configured result, а не измеренный физический ток.
+- Не реализован `oplus_sdp_900ma`: нет подтверждённого OPlus control/readback ABI, поэтому отсутствие writer не маскируется под успех.
 - Не заданы wakeup-имена по умолчанию и не доказана безопасность блокировки любого конкретного источника. Suspend, modem, Wi‑Fi, alarms, calls и charging требуют полевой проверки.
 - Не утверждается совместимость конкретного freezer с Re-Kernel или фактическое unfreeze-by-event до on-device теста.
 - KMI guard, stock-config guard, `allow_version_mismatch` и вендорный thermal ownership не ослаблены.
