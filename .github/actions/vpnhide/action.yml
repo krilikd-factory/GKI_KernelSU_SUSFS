@@ -15,7 +15,7 @@ inputs:
 
 outputs:
   mode:
-    description: 'full | net-only | skipped'
+    description: 'full | net-only; a requested integration fails instead of returning skipped'
     value: ${{ steps.integrate.outputs.mode }}
 
 runs:
@@ -32,7 +32,7 @@ runs:
         if [ -z "$WANT" ]; then
           TAG="$(git ls-remote --tags --refs https://github.com/okhsunrog/vpnhide 'v*' \
                  | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
-          [ -n "$TAG" ] || { echo "::warning::vpnhide: no release tag found; VPN Hide skipped"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          [ -n "$TAG" ] || { echo "::error::vpnhide: requested, but no release tag was found" >&2; exit 1; }
           WANT="$TAG"
         fi
         git init -q vpnhide
@@ -42,11 +42,15 @@ runs:
           sleep 5
         done
         if [ "$ok" != true ]; then
-          echo "::warning::vpnhide: could not fetch $WANT; VPN Hide skipped"
-          echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          echo "::error::vpnhide: requested, but could not fetch $WANT" >&2
+          exit 1
         fi
         git -C vpnhide checkout -q --detach FETCH_HEAD
         SHA="$(git -C vpnhide rev-parse HEAD)"
+        if [[ "$WANT" =~ ^[0-9a-f]{40}$ ]] && [ "$SHA" != "$WANT" ]; then
+          echo "::error::vpnhide: resolved commit $SHA does not match requested pin $WANT" >&2
+          exit 1
+        fi
         VER="$(cat vpnhide/VERSION 2>/dev/null || echo unknown)"
         echo "vpnhide $VER at $SHA"
         echo "VPNHIDE_COMMIT=$SHA" >> "$GITHUB_ENV"
@@ -59,7 +63,8 @@ runs:
       run: |
         set -euo pipefail
         if [ "${{ steps.fetch.outputs.ok }}" != "true" ]; then
-          echo "mode=skipped" >> "$GITHUB_OUTPUT"; exit 0
+          echo "::error::vpnhide: fetch evidence is missing; refusing to continue without the requested feature" >&2
+          exit 1
         fi
         # vpnhide's integrator needs Python >= 3.12 (PEP 695 'type' alias).
         PY=""
@@ -67,8 +72,8 @@ runs:
           if command -v "$c" >/dev/null && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)'; then PY="$c"; break; fi
         done
         if [ -z "$PY" ]; then
-          echo "::warning::vpnhide: Python >= 3.12 not available; VPN Hide skipped"
-          echo "mode=skipped" >> "$GITHUB_OUTPUT"; exit 0
+          echo "::error::vpnhide: Python >= 3.12 is required for the requested integration" >&2
+          exit 1
         fi
         OUT="${RUNNER_TEMP}/vpnhide-review"
         rm -rf "$OUT"; mkdir -p "$OUT"
@@ -82,10 +87,14 @@ runs:
         set -e
         echo "$RES"
         MODE="$(printf '%s\n' "$RES" | sed -n 's/^RESULT=//p' | tail -n1)"
-        if [ "$RC" -ne 0 ] || [ -z "$MODE" ]; then
-          echo "::warning::vpnhide: call sites do not fit this tree; kernel built WITHOUT VPN Hide (review bundle uploaded)"
-          echo "mode=skipped" >> "$GITHUB_OUTPUT"; exit 0
+        if [ "$RC" -ne 0 ]; then
+          echo "::error::vpnhide: requested integration failed; review bundle will be uploaded" >&2
+          exit 1
         fi
+        case "$MODE" in
+          full|net-only) ;;
+          *) echo "::error::vpnhide: integrator returned missing or unsupported mode '${MODE:-empty}'" >&2; exit 1 ;;
+        esac
         if [ "$MODE" = "net-only" ]; then
           echo "::warning::vpnhide: fs/ call sites collide with another layer (usually SUSFS); built with network concealment only (CONFIG_VPNHIDE_FS_HIDING=n)"
         fi
