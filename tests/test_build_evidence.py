@@ -488,6 +488,38 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
         gate = build.split(step, 1)[1].split("\n", 1)[0]
         self.assertIn("contains(inputs.feature_set, 'SDP900')", gate)
         self.assertIn("inputs.version == 'android16-6.12'", gate)
+        self.assertEqual(hashlib.sha256((ROOT / ".github/patches/android16-6.12/oplus-sdp-900ma.patch").read_bytes()).hexdigest(),
+                         "b73e2b64820342c4bb2063d4e59c7742c7b271d7d92b3521d3125fe112afab97")
+
+    def test_sdp_patch_applies_to_minimal_source_and_rejects_duplicate_driver(self):
+        patch = ROOT / ".github/patches/android16-6.12/oplus-sdp-900ma.patch"
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            (tree / "drivers/misc").mkdir(parents=True)
+            (tree / "drivers/misc/Kconfig").write_text(
+                "\nsource \"drivers/misc/c2port/Kconfig\"\n"
+                "source \"drivers/misc/eeprom/Kconfig\"\n"
+                "source \"drivers/misc/cb710/Kconfig\"\n")
+            (tree / "drivers/misc/Makefile").write_text(
+                "obj-$(CONFIG_VMWARE_VMCI)\t+= vmw_vmci/\n"
+                "obj-$(CONFIG_LATTICE_ECP3_CONFIG)\t+= lattice-ecp3-config.o\n"
+                "obj-$(CONFIG_SRAM)\t\t+= sram.o\n"
+                "obj-$(CONFIG_SRAM_EXEC)\t\t+= sram-exec.o\n")
+            checked = subprocess.run(["git", "apply", "--check", str(patch)], cwd=tree,
+                                     text=True, capture_output=True, check=False)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+            subprocess.run(["git", "apply", str(patch)], cwd=tree, check=True)
+            driver = tree / "drivers/misc/oplus_sdp_900ma.c"
+            self.assertTrue(driver.is_file())
+            self.assertIn("early_initcall(oplus_sdp_900ma_init);", driver.read_text())
+            self.assertIn('__setup("oplus_sdp_900ma=", oplus_sdp_900ma_setup);', driver.read_text())
+            self.assertEqual((tree / "drivers/misc/Kconfig").read_text().count("config OPLUS_SDP_900MA"), 1)
+            duplicate = subprocess.run(["git", "apply", "--check", str(patch)], cwd=tree,
+                                       text=True, capture_output=True, check=False)
+            self.assertNotEqual(duplicate.returncode, 0)
+        action = (ROOT / ".github/actions/oplus-sdp-900ma/action.yml").read_text()
+        self.assertIn("[ ! -e drivers/misc/oplus_sdp_900ma.c ]", action)
+        self.assertIn('[ "${{ inputs.version }}" = "android16-6.12" ]', action)
 
     def test_wakeup_kconfig_anchor_is_fail_closed(self):
         source = embedded_source(
@@ -520,6 +552,180 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             self.assertNotEqual(bad_anchor.returncode, 0)
             self.assertIn("final menu anchor changed", bad_anchor.stderr)
             self.assertEqual(kconfig.read_text(), 'source "drivers/dpll/Kconfig"\nendmenu')
+
+
+class OnePlusPolicyTest(unittest.TestCase):
+    expected = {
+        "CONFIG_POSIX_MQUEUE": "n",
+        "CONFIG_DEVTMPFS": "n",
+        "CONFIG_DEVTMPFS_MOUNT": "n",
+        "CONFIG_DEBUG_FS": "y",
+        "CONFIG_SCHED_DEBUG": "y",
+    }
+
+    @staticmethod
+    def line(key, value):
+        return f"# {key} is not set\n" if value == "n" else f"{key}={value}\n"
+
+    def run_guard(self, values):
+        with tempfile.TemporaryDirectory() as d:
+            config = Path(d) / ".config"
+            report = Path(d) / "report.txt"
+            config.write_text("".join(self.line(k, v) for k, v in values.items()))
+            result = subprocess.run([
+                sys.executable, "-I", str(SCRIPTS / "op15_config_guard.py"),
+                "--config", str(config), "--report", str(report),
+            ], text=True, capture_output=True, check=False)
+            return result, report.read_text()
+
+    def test_all_five_symbols_are_checked_after_final_kconfig_resolution(self):
+        result, report = self.run_guard(self.expected)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("policy verified", result.stdout)
+        self.assertIn("CONFIG_SCHED_AUTOGROUP: not forced", report)
+        for key in self.expected:
+            for wrong in ("y", "m", "missing"):
+                if wrong == self.expected[key]:
+                    continue
+                with self.subTest(key=key, wrong=wrong):
+                    values = dict(self.expected)
+                    if wrong == "missing":
+                        del values[key]
+                    else:
+                        values[key] = wrong
+                    result, _ = self.run_guard(values)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(key, result.stderr)
+
+    def test_policy_is_late_scoped_and_has_no_autogroup_or_missing_config_escape(self):
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        action = (ROOT / ".github/actions/build-kernel/action.yml").read_text()
+        policy = build.split("      - name: Apply OnePlus 15 integrity and scheduler config\n", 1)[1]
+        policy = policy.split("      - name: Apply Kernel Branding\n", 1)[0]
+        for key, value in self.expected.items():
+            self.assertIn(f"{key}={value}", policy)
+        self.assertNotIn("CONFIG_SCHED_AUTOGROUP", policy)
+        self.assertIn("if: inputs.version == 'android16-6.12'", policy)
+        self.assertLess(build.index("name: DroidSpaces-OSS Patches"),
+                        build.index("name: Apply OnePlus 15 integrity and scheduler config"))
+        self.assertLess(build.index("name: Apply OnePlus 15 integrity and scheduler config"),
+                        build.index("name: Build Normal Kernel"))
+        self.assertIn("op15_config_guard.py", action)
+        self.assertIn("op15-config-report.txt", action)
+        self.assertIn('[ "${{ inputs.version }}" != "android16-6.12" ] && [ "$PAGE_SIZE" != "16k" ]', action)
+        self.assertIn("op15-config-report.txt", build)
+
+    def test_stock_guard_allows_only_the_three_explicit_op15_transitions(self):
+        with tempfile.TemporaryDirectory() as d:
+            stock = Path(d) / "stock.config"
+            final = Path(d) / "final.config"
+            report = Path(d) / "stock-report.txt"
+            stock.write_text("".join(f"{key}=y\n" for key in (
+                "CONFIG_POSIX_MQUEUE", "CONFIG_DEVTMPFS", "CONFIG_DEVTMPFS_MOUNT", "CONFIG_OTHER")))
+            final.write_text("".join(self.line(key, "n") for key in (
+                "CONFIG_POSIX_MQUEUE", "CONFIG_DEVTMPFS", "CONFIG_DEVTMPFS_MOUNT")) + "CONFIG_OTHER=y\n")
+            command = [sys.executable, "-I", str(SCRIPTS / "stock_config_guard.py"),
+                       "--stock", str(stock), "--final", str(final), "--report", str(report)]
+            rejected = subprocess.run(command, text=True, capture_output=True, check=False)
+            self.assertEqual(rejected.returncode, 1)
+            allowed = subprocess.run(command + [
+                "--allow-n", "CONFIG_POSIX_MQUEUE", "--allow-n", "CONFIG_DEVTMPFS",
+                "--allow-n", "CONFIG_DEVTMPFS_MOUNT",
+            ], text=True, capture_output=True, check=False)
+            self.assertEqual(allowed.returncode, 0, allowed.stderr)
+            self.assertIn("3 explicit y/m -> n overrides", report.read_text())
+            final.write_text(final.read_text().replace("CONFIG_OTHER=y", "# CONFIG_OTHER is not set"))
+            unrelated = subprocess.run(command + [
+                "--allow-n", "CONFIG_POSIX_MQUEUE", "--allow-n", "CONFIG_DEVTMPFS",
+                "--allow-n", "CONFIG_DEVTMPFS_MOUNT",
+            ], text=True, capture_output=True, check=False)
+            self.assertEqual(unrelated.returncode, 1)
+            self.assertIn("CONFIG_OTHER", unrelated.stdout)
+        action = (ROOT / ".github/actions/build-kernel/action.yml").read_text()
+        self.assertEqual(action.count("--allow-n CONFIG_"), 3)
+        for key in ("CONFIG_POSIX_MQUEUE", "CONFIG_DEVTMPFS", "CONFIG_DEVTMPFS_MOUNT"):
+            self.assertIn(f"--allow-n {key}", action)
+
+    def test_nr_migrate_requires_debugfs_and_scheduler_debug_together(self):
+        with tempfile.TemporaryDirectory() as d:
+            config = Path(d) / ".config"
+            config.write_text("CONFIG_SCHED_DEBUG=y\n")
+            control = caps.make_report(config, "")["asb_contract"]["controls"]["kernel_sched_nr_migrate"]
+            self.assertEqual(control["build_state"], "not_available_in_config")
+            self.assertEqual(control["configs"]["CONFIG_DEBUG_FS"], "not_exposed")
+            config.write_text("CONFIG_DEBUG_FS=y\nCONFIG_SCHED_DEBUG=y\n")
+            control = caps.make_report(config, "")["asb_contract"]["controls"]["kernel_sched_nr_migrate"]
+            self.assertEqual(control["build_state"], "available_in_config")
+            self.assertEqual(control["runtime_path"], "/sys/kernel/debug/sched/nr_migrate")
+            self.assertEqual(control["runtime_state"], "unknown")
+        self.assertFalse((ROOT / ".github/kernel_capability_report.py").exists())
+        stale_path = "/proc/sys/kernel/" + "sched_nr_migrate"
+        for path in ROOT.rglob("*"):
+            if path.is_file() and "__pycache__" not in path.parts and path != Path(__file__):
+                try:
+                    self.assertNotIn(stale_path, path.read_text(encoding="utf-8"))
+                except UnicodeDecodeError:
+                    pass
+
+    def test_default_kernel_identity_is_krilikd_not_wild(self):
+        main = (ROOT / ".github/workflows/main.yml").read_text()
+        build = (ROOT / ".github/workflows/build.yml").read_text()
+        branding = (ROOT / ".github/actions/apply-kernel-branding/action.yml").read_text()
+        self.assertEqual(main.count("brand_name: ${{ inputs.brand_name || 'KRILIKD' }}"), 8)
+        self.assertIn("default: KRILIKD", main)
+        self.assertIn("default: KRILIKD", build)
+        self.assertIn("default: KRILIKD", branding)
+        self.assertNotIn("OP-WILD", main + build + branding)
+        self.assertNotRegex(main + build + branding, r"default:\s*['\"]?WILD")
+        self.assertFalse((ROOT / "configs/a16/OP15.json").exists())
+
+
+class VpnHideFailClosedTest(unittest.TestCase):
+    def test_requested_vpnhide_cannot_silently_skip_or_change_commit(self):
+        action = (ROOT / ".github/actions/vpnhide/action.yml").read_text()
+        for forbidden in ("mode=skipped", 'echo "ok=false"', "WITHOUT VPN Hide", "VPN Hide skipped"):
+            self.assertNotIn(forbidden, action)
+        for required in (
+            '[[ "$WANT" =~ ^[0-9a-f]{40}$ ]] && [ "$SHA" != "$WANT" ]',
+            'echo "::error::vpnhide: requested, but could not fetch $WANT"',
+            'echo "::error::vpnhide: Python >= 3.12 is required for the requested integration"',
+            "full|net-only)",
+            "exit 1",
+        ):
+            self.assertIn(required, action)
+
+    def run_integrator(self, mode):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            scripts = root / "vpnhide/builtin/scripts"
+            scripts.mkdir(parents=True)
+            (root / "kernel").mkdir()
+            (scripts / "integrate.py").write_text(textwrap.dedent(f"""
+                from pathlib import Path
+                EDITS = {{"android16-6.12": {{"fs/namei.c": object(), "net/route.c": object()}}}}
+                def integrate(kernel, kmi, output, apply):
+                    output.mkdir(parents=True, exist_ok=True)
+                    mode = {mode!r}
+                    if mode == "fail" or (mode == "net-only" and output.name == "full"):
+                        raise ValueError("fixture anchor mismatch")
+            """))
+            result = subprocess.run([
+                sys.executable, "-I", str(SCRIPTS / "vpnhide_integrate.py"),
+                "--vpnhide", str(root / "vpnhide"), "--kernel", str(root / "kernel"),
+                "--kmi", "android16-6.12", "--output", str(root / "review"),
+            ], text=True, capture_output=True, check=False)
+            return result
+
+    def test_integrator_full_net_only_and_failure_behaviour(self):
+        full = self.run_integrator("full")
+        self.assertEqual(full.returncode, 0, full.stderr)
+        self.assertIn("RESULT=full", full.stdout)
+        net = self.run_integrator("net-only")
+        self.assertEqual(net.returncode, 0, net.stderr)
+        self.assertIn("RESULT=net-only", net.stdout)
+        failed = self.run_integrator("fail")
+        self.assertEqual(failed.returncode, 1)
+        self.assertNotIn("RESULT=", failed.stdout)
 
 
 class DeviceEvidenceTest(unittest.TestCase):
