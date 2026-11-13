@@ -78,6 +78,18 @@ runs:
         version: ${{ inputs.version }}
         root_flavor: ${{ inputs.root_flavor }}
 
+    - name: Reconcile KernelSU/SUSFS supercall API
+      if: inputs.enabled == 'true' && inputs.root_flavor == 'next'
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Newer susfs4ksu branches removed the legacy SUS_PATH UID-filter
+        # implementation while some KernelSU-Next commits still dispatch it.
+        # The helper removes only that unavailable dispatch arm; it never adds
+        # a fake symbol and leaves all supported SUSFS calls untouched.
+        python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_susfs_api_compat.py" \
+          "$GITHUB_WORKSPACE/kernel/common"
+
     - name: Enable SUSFS for KernelSU (tiann)
       # tiann/KernelSU main does NOT carry SUSFS, so for the kernelsu flavor we
       # apply the enable patch from susfs4ksu onto the KernelSU checkout.
