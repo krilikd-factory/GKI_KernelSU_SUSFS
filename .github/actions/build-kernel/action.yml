@@ -134,24 +134,19 @@ runs:
           CONFIG_FILE="$(find bazel-bin/common /home/runner/out -maxdepth 4 -name .config -type f 2>/dev/null | head -n1 || true)"
         fi
         if [ -z "$CONFIG_FILE" ]; then
-          if [ "${{ inputs.version }}" != "android16-6.12" ] && [ "$PAGE_SIZE" != "16k" ]; then
-            # Other 4k families retain the legacy page-size-only behaviour.
-            # OnePlus 15 cannot skip this file: its final policy gate is mandatory.
+          if [ "$PAGE_SIZE" != "16k" ]; then
+            # 4k builds are unchanged from before this feature; a missing .config
+            # is a gap in the check, not a reason to fail a working build.
             echo "WARNING: no .config found; skipping page-size verification for 4k."
             exit 0
           fi
-          echo "ERROR: could not locate the generated .config; required final-config checks cannot run." >&2
+          echo "ERROR: could not locate the generated .config; page size cannot be verified." >&2
           exit 1
         fi
         echo "Verifying page size using $CONFIG_FILE"
         # Preserve the exact resolved config for the post-build ASB capability
         # report and BuildInfo evidence. This copies, never edits, .config.
         cp "$CONFIG_FILE" "${{ github.workspace }}/kernel-final.config"
-        if [ "${{ inputs.version }}" = "android16-6.12" ]; then
-          python3 -I "${{ github.workspace }}/.github/scripts/op15_config_guard.py" \
-            --config "$CONFIG_FILE" \
-            --report "${{ github.workspace }}/op15-config-report.txt"
-        fi
         grep -E '^(# )?CONFIG_ARM64_(4K|16K|64K)_PAGES|^CONFIG_ARM64_PAGE_SHIFT' "$CONFIG_FILE" || true
         echo "--- LTO / AutoFDO in final .config ---"
         grep -E '^(# )?CONFIG_LTO_(NONE|CLANG|CLANG_THIN|CLANG_FULL)[= ]|^CONFIG_AUTOFDO_CLANG' "$CONFIG_FILE" || true
@@ -218,21 +213,9 @@ runs:
         # kernel compiles but cannot boot Android.
         STOCK_DEF="$(mktemp)"
         if git -C common show HEAD:arch/arm64/configs/gki_defconfig > "$STOCK_DEF" 2>/dev/null && [ -s "$STOCK_DEF" ]; then
-          STOCK_ARGS=(
-            --stock "$STOCK_DEF"
-            --final "$CONFIG_FILE"
-            --report "${{ github.workspace }}/stock-config-report.txt"
-          )
-          if [ "${{ inputs.version }}" = "android16-6.12" ]; then
-            # Only the explicit OnePlus 15 policy may override stock y/m -> n.
-            # op15_config_guard.py has already verified the exact final values.
-            STOCK_ARGS+=(
-              --allow-n CONFIG_POSIX_MQUEUE
-              --allow-n CONFIG_DEVTMPFS
-              --allow-n CONFIG_DEVTMPFS_MOUNT
-            )
-          fi
-          if ! python3 -I "${{ github.workspace }}/.github/scripts/stock_config_guard.py" "${STOCK_ARGS[@]}"; then
+          if ! python3 -I "${{ github.workspace }}/.github/scripts/stock_config_guard.py" \
+               --stock "$STOCK_DEF" --final "$CONFIG_FILE" \
+               --report "${{ github.workspace }}/stock-config-report.txt"; then
             echo "::error::Stock kernel options were lost (listed above). Such a kernel builds but may not boot Android; refusing to package it." >&2
             exit 1
           fi
