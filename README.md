@@ -68,15 +68,18 @@ Full feature notes: **[docs/features.md](docs/features.md)**. OnePlus 15/TOP det
 
 ## 🎛️ KRILIKD × AutoSystemBoost
 
-The kernel project publishes evidence; ASB owns userspace policy. The current contract exposes descriptions of three **standard Linux** controls:
+The kernel project publishes evidence; ASB owns userspace policy. The current contract exposes descriptions of six **standard Linux** controls:
 
-| Control | Closed requests | Required behavior |
-|---|---|---|
-| `mglru_mode` | `stock`, `off`, `on`, `smart` | Numeric MGLRU readback; Smart `5/7` only in Smart mode |
-| `kernel_timer_migration` | `stock`, `off`, `on` | Exact `0/1` readback |
-| `kernel_sched_nr_migrate` | `stock`, `1`, `2`, `4`, `8`, `16` | Bounded integer write and exact readback |
+| Control | Fixed runtime interface | Closed requests | Required behavior |
+|---|---|---|---|
+| `mglru_mode` | `/sys/kernel/mm/lru_gen/enabled` | `stock`, `off`, `on`, `smart` | Numeric MGLRU readback; Smart `5/7` only in Smart mode |
+| `kernel_timer_migration` | `/proc/sys/kernel/timer_migration` | `stock`, `off`, `on` | Exact `0/1` readback |
+| `kernel_sched_nr_migrate` | `/sys/kernel/debug/sched/nr_migrate` | `stock`, `1`, `2`, `4`, `8`, `16` | Bounded integer write and exact readback |
+| `kernel_sched_stats` | `/proc/sys/kernel/sched_schedstats` | `stock`, `off` | Exact `0/1` readback; no unconditional profile writer |
+| `kernel_sched_autogroup` | `/proc/sys/kernel/sched_autogroup_enabled` | `stock`, `off`, `on` | Exact `0/1` readback; config presence is not runtime proof |
+| `kernel_sched_child_runs_first` | `/proc/sys/kernel/sched_child_runs_first` | `stock`, `off`, `on` | Exact `0/1` readback |
 
-For every control: **discover → check access → capture baseline → write allowlisted value → read back → restore exactly on Stock/uninstall**.
+For every control: **discover → check access → capture baseline → write allowlisted value → read back → restore exactly on Stock/uninstall**. The debugfs migration interface can remain unavailable or inaccessible even in a successful kernel build; the report deliberately keeps `runtime_state=unknown` and `writable=unknown`. No autogroup config policy is changed merely to make its ASB card available.
 
 The optional `AWL` feature adds one deliberately narrow ASB ABI: `/sys/kernel/asb_wakeup/blocklist` accepts only root-issued `add NAME`, `del NAME` and `clear` commands for at most 16 exact wakeup-source names. Its policy is empty by default; `/sys/kernel/asb_wakeup/blocked_events` is a read-only counter. There are no patterns, arbitrary path/value writes, automatic block rules or force-release of locks already held. The final-config gate rejects a selected AWL build without this capability. ASB still has to verify the interface and apply only the user's explicit policy on device.
 
