@@ -13,10 +13,12 @@ Rule: every option the *stock* gki_defconfig sets to `y` must still be `y` in
 the final .config; every stock `m` must still be `y` or `m`. Options whose
 value is a string/number are not compared (features legitimately change
 CONFIG_LSM, CONFIG_LOCALVERSION, ...). Page-size options are skipped because
-the page_size input switches them on purpose.
+the page_size input switches them on purpose. A stock y/m -> n transition is
+accepted only when its exact symbol is repeated through --allow-n; the separate
+target-specific final-config gate must justify and verify that policy.
 
 Usage: stock_config_guard.py --stock <stock gki_defconfig> --final <.config>
-Exit 0 = nothing lost, 1 = stock options lost (listed).
+Exit 0 = nothing lost, 1 = unapproved stock options lost (listed).
 """
 import argparse
 import re
@@ -45,22 +47,35 @@ def main():
     ap.add_argument("--stock", required=True)
     ap.add_argument("--final", required=True)
     ap.add_argument("--report", default="")
+    ap.add_argument("--allow-n", action="append", default=[], metavar="CONFIG_SYMBOL",
+                    help="explicitly permit one reviewed stock y/m -> n transition")
     a = ap.parse_args()
+    for key in a.allow_n:
+        if not re.fullmatch(r"CONFIG_[A-Za-z0-9_]+", key):
+            ap.error(f"invalid --allow-n symbol: {key!r}")
+    allowed_n = set(a.allow_n)
 
     stock = parse(a.stock)
     final = parse(a.final)
     lost = []
+    intentional = []
     for key, want in sorted(stock.items()):
         if SKIP.match(key) or want not in ("y", "m"):
             continue
         got = final.get(key, "n")
+        if got == "n" and key in allowed_n:
+            intentional.append((key, want, got))
+            continue
         if want == "y" and got != "y":
             lost.append((key, want, got))
         elif want == "m" and got not in ("y", "m"):
             lost.append((key, want, got))
 
     checked = sum(1 for k, v in stock.items() if v in ("y", "m") and not SKIP.match(k))
-    out = [f"Stock config guard: {checked} stock y/m options checked, {len(lost)} lost"]
+    out = [f"Stock config guard: {checked} stock y/m options checked, {len(lost)} unapproved lost, "
+           f"{len(intentional)} explicit y/m -> n overrides"]
+    for key, want, got in intentional:
+        out.append(f"  INTENTIONAL {key}: stock {want} -> final n (explicit --allow-n)")
     for key, want, got in lost:
         out.append(f"  LOST {key}: stock {want} -> final {'unset' if got == 'n' else got}")
     text = "\n".join(out)
