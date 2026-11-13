@@ -159,7 +159,10 @@ class CapabilityReportTest(unittest.TestCase):
             path = Path(d) / ".config"
             path.write_text("CONFIG_LRU_GEN=y\n")
             controls = caps.make_report(path, "VPN")["asb_contract"]["controls"]
-            self.assertEqual(set(controls), {"mglru_mode", "kernel_timer_migration", "kernel_sched_nr_migrate"})
+            self.assertEqual(set(controls), {
+                "mglru_mode", "kernel_timer_migration", "kernel_sched_nr_migrate",
+                "kernel_sched_stats", "kernel_sched_autogroup", "kernel_sched_child_runs_first",
+            })
             for name, control in controls.items():
                 self.assertEqual(control["interface"], "standard_linux")
                 self.assertEqual(control["runtime_state"], "unknown")
@@ -167,12 +170,21 @@ class CapabilityReportTest(unittest.TestCase):
                 self.assertEqual(control["baseline"], "required_before_first_write")
                 self.assertTrue(control["readback_required"])
                 self.assertEqual(control["restore"], "exact_captured_value")
-                self.assertTrue(control["runtime_path"].startswith(("/proc/sys/kernel/", "/sys/kernel/mm/lru_gen/")))
+                self.assertTrue(control["runtime_path"].startswith((
+                    "/proc/sys/kernel/", "/sys/kernel/mm/lru_gen/", "/sys/kernel/debug/sched/",
+                )))
                 self.assertIn("stock", control["requests"], name)
             self.assertEqual(controls["mglru_mode"]["build_state"], "available_in_config")
             self.assertEqual(controls["mglru_mode"]["requests"]["smart"], ["5", "7"])
+            self.assertEqual(controls["kernel_sched_nr_migrate"]["runtime_path"], "/sys/kernel/debug/sched/nr_migrate")
             self.assertEqual(controls["kernel_sched_nr_migrate"]["requests"]["16"], ["16"])
             self.assertNotIn("32", controls["kernel_sched_nr_migrate"]["requests"])
+            self.assertEqual(controls["kernel_sched_stats"]["runtime_path"], "/proc/sys/kernel/sched_schedstats")
+            self.assertEqual(controls["kernel_sched_stats"]["requests"], {
+                "stock": "restore the exact value captured before ASB's first write", "off": ["0"],
+            })
+            self.assertEqual(controls["kernel_sched_autogroup"]["runtime_path"], "/proc/sys/kernel/sched_autogroup_enabled")
+            self.assertEqual(controls["kernel_sched_child_runs_first"]["runtime_path"], "/proc/sys/kernel/sched_child_runs_first")
 
     def test_missing_mglru_config_does_not_create_a_control_claim(self):
         with tempfile.TemporaryDirectory() as d:
