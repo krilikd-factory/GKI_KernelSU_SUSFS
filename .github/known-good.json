@@ -9,9 +9,9 @@
       "build": "6.12.69-android16-2026-03-KernelSU-Next",
       "run_id": "43620213409",
       "scope": "boot only; vendor modules, display, network, camera, audio, storage, thermal and ASB not attested",
-      "sha256": "08d018705cf8736704bcbcd5a45cb6dec8039698fea34d188ddf20c61973d928",
+      "sha256": "d4e207a6b358d48d2d8fdd6659067def83f08a5a38d05f558f60616f95923f84",
       "status": "boot_attested_only",
-      "tested_at": "2026-11-14T17:54:19Z"
+      "tested_at": "2026-11-14T18:02:39Z"
     },
     "droidspaces_commit": "cdadb9eb5d0f86aacffff60776333e6f6b73a30a",
     "feature_set": "SUSFS+NoMount+BBG+NET+DS+NTSync+Ptrace+Unicode+BPF+Perf+VPN+USB+RK+AWL+SDP900",
@@ -21,7 +21,7 @@
     "kernel_source": "aosp",
     "kernel_source_commit": "03daed9beec23da162218798796b2df1959994be",
     "lto": "NONE",
-    "marked_at": "2026-11-14T17:54:19Z",
+    "marked_at": "2026-11-14T18:02:39Z",
     "mode": "top",
     "nomount_commit": "7914458ca71dfa3a8c162fa97fdb69332db7a690",
     "oem_branch": "",
