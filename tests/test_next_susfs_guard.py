@@ -164,6 +164,48 @@ class NextSusfsGuardTest(unittest.TestCase):
         rc, out, _ = self.run_guard(self.bad, kg, source="oneplus")
         self.assertEqual((rc, out["result"], out["commit"]), (0, "known_good", self.good))
 
+    def test_run_118051915879_kconfig_default_and_previous_key(self):
+        # The booted root a7c7f531 calls the same missing function, but only inside
+        # #ifndef CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED, which is default y: never compiled.
+        kconfig = """
+            config KSU
+            \ttristate "KernelSU"
+            \tdefault y
+            config KSU_CONTAINER_COMPAT
+            \tbool "container"
+            \tdepends on KSU
+            \tdefault n
+            config KSU_THRONE_TRACKER_ALWAYS_THREADED
+            \tbool "threaded"
+            \tdepends on KSU && !KSU_CONTAINER_COMPAT
+            \tdefault y
+        """
+        observer = KSU_GOOD + """
+    #ifndef CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED
+    void inline_tracker(void)
+    {
+    #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+        susfs_parse_sus_path_app_strings();
+    #endif
+    }
+    #endif
+"""
+        booted = commit(self.ksu, {"kernel/Kconfig": kconfig, "kernel/manager/throne.h": observer}, "booted")
+        kg = {
+            "android16-6.12-2026-03/KernelSU-Next": {"root_commit": self.nosusfs, "marked_at": "2026-11-14T01:24:25Z"},
+            "android16-6.12-2026-03/KernelSU-Next@previous": {"root_commit": booted, "marked_at": "2026-11-13T09:00:16Z"},
+        }
+        rc, out, proc = self.run_guard(self.bad, kg)
+        self.assertEqual((rc, out["result"], out["commit"]), (0, "known_good", booted), proc.stdout)
+        self.assertEqual(out["known_good_key"], "android16-6.12-2026-03/KernelSU-Next@previous")
+        rc, out, _ = self.run_guard(booted)
+        self.assertEqual(out["result"], "compatible", "a call compiled out by a Kconfig default was counted")
+        flipped = commit(self.ksu, {"kernel/Kconfig": kconfig.replace("default y\n        \"\"\"", "")
+                                    .replace("\tdefault y\n", "\tdefault n\n", 2)}, "threaded off")
+        rc, out, _ = self.run_guard(flipped)
+        self.assertEqual(out["result"], "incompatible", "a call compiled in with the option off was missed")
+        self.assertIn("tried", out)
+
     def test_the_explicit_known_good_susfs_pin_is_checked(self):
         rc, out, _ = self.run_guard(self.bad, susfs_commit=self.s241)
         self.assertEqual((rc, out["result"], out["susfs"]), (0, "compatible", self.s241))
