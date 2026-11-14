@@ -23,7 +23,7 @@ CAPABILITIES = {
     },
     "memory.mglru": {
         "configs": ["CONFIG_LRU_GEN"],
-        "runtime_paths": ["/sys/kernel/mm/lru_gen/enabled"],
+        "runtime_paths": ["/sys/kernel/mm/lru_gen/enabled", "/sys/kernel/mm/lru_gen/min_ttl_ms"],
         "asb_use": "discover MGLRU; do not assume it is enabled from config alone",
     },
     "memory.zram": {
@@ -102,6 +102,19 @@ CONTROL_CANDIDATES = {
         },
         "owner": "ASB kernel-controls helper; Smart is gated through the same owner",
         "readback": "numeric bitmask equivalence is required; a clamped bitmask is reported as readback_mismatch",
+    },
+    "kernel_mglru_min_ttl": {
+        "configs": ["CONFIG_LRU_GEN"],
+        "runtime_path": "/sys/kernel/mm/lru_gen/min_ttl_ms",
+        "value_type": "bounded_integer",
+        "requests": {
+            "stock": "restore the exact value captured before ASB's first write",
+            "1000": ["1000"],
+            "2000": ["2000"],
+            "5000": ["5000"],
+        },
+        "owner": "ASB kernel-controls helper; the legacy mglru_hold direct writer is retired",
+        "readback": "exact integer readback is required",
     },
     "kernel_timer_migration": {
         "configs": [],

@@ -104,6 +104,7 @@ ASB_CONTROL_GUIDE = (
     ("kernel_sched_stats", "Scheduler statistics", "Controls /proc/sys/kernel/sched_schedstats only through explicit off or exact-baseline restore; ASB has no hidden unconditional disable write.", "Disabling statistics can avoid instrumentation work but removes useful scheduler observability. A universal battery gain is not claimed.", "If the node is unavailable, the control is unavailable rather than silently applied elsewhere."),
     ("kernel_sched_autogroup", "Automatic process grouping", "Controls /proc/sys/kernel/sched_autogroup_enabled with validated 0/1 values.", "Changes interactive session grouping and CPU-share behavior. It can improve fairness for one workload while reducing another workload's share.", "Per-app or per-game superiority is not inferred; readback and exact restore remain mandatory."),
     ("kernel_sched_child_runs_first", "Child-first scheduling after fork", "Controls /proc/sys/kernel/sched_child_runs_first with validated 0/1 values.", "Affects post-fork scheduling order. It is a narrow latency trade-off, not a general performance profile.", "No battery percentage or global responsiveness claim; restore uses the exact captured baseline."),
+    ("kernel_mglru_min_ttl", "MGLRU generation protection", "Writes only 1000, 2000 or 5000 ms to /sys/kernel/mm/lru_gen/min_ttl_ms; Stock restores the exact captured baseline.", "Longer protection can reduce premature reclaim but delay memory recovery; shorter protection can reclaim sooner but increase refault work. No battery or responsiveness win is guaranteed.", "The node must exist, be writable and pass integer readback. An absent or read-only node is reported, never replaced by a fake success."),
     ("wakeup_blocker", "Wakeup-source blocker", "Uses the kernel's bounded exact-name blocklist, empty by default, with at most 16 reviewed user rules.", "Blocking an unnecessary wakeup can reduce avoidable wake work, but blocking a required source can break modem, alarm, call, charging or suspend behavior.", "Static key keeps the empty list low-overhead. ASB observes explicit start/end deltas from standard /sys/class/wakeup counters; no kernel idle detector or polling worker is added. Physical power behavior is not attested by the build."),
 )
 
@@ -359,6 +360,19 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         lines += ["#### 🚀 Main Performance pass", "", performance.read_text(encoding="utf-8").strip(), ""]
     else:
         lines += ["Main Performance pass report: not generated (Perf disabled or the build stopped earlier).", ""]
+    power_audit, power_error = read_json(workspace / "performance-patch-audit.json")
+    if isinstance(power_audit, dict):
+        power_counts = Counter(p.get("decision", "unknown") for p in power_audit.get("patches", []) if isinstance(p, dict))
+        lines += [
+            "#### Main patch power / functional review", "",
+            f"Patch source `{md(power_audit.get('kernel_patches_commit'))}` · policy SHA-256 `{md(power_audit.get('policy_sha256'))}`; decisions: " + ", ".join(f"**{md(k)}={v}**" for k, v in sorted(power_counts.items())) + ".", "",
+            "These are source-review decisions, not measured battery or temperature results. `candidate_only` entries are deliberately withheld from stable rather than silently skipped.", "",
+        ]
+        rows = [(p.get("name"), p.get("channel"), p.get("decision"), p.get("mechanism"), p.get("power_review"))
+                for p in power_audit.get("patches", []) if isinstance(p, dict)]
+        table(lines, ("Patch", "Minimum channel", "Decision", "Mechanism", "Power / functional boundary"), rows)
+    else:
+        lines += [f"Main patch power audit: {md(power_error)} (expected when Perf is disabled or the build stopped before its pass).", ""]
 
     lines += ["### 🛡️ Safety and evidence gates", ""]
     rejects = env.get("REJ_COUNT") or "not recorded"
