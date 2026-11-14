@@ -594,8 +594,24 @@ class OnePlusPolicyTest(unittest.TestCase):
                     else:
                         values[key] = wrong
                     result, _ = self.run_guard(values)
+                    if key == "CONFIG_DEVTMPFS_MOUNT" and wrong == "missing":
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        continue
                     self.assertEqual(result.returncode, 1)
                     self.assertIn(key, result.stderr)
+
+    def test_hidden_devtmpfs_mount_is_effective_n_when_parent_is_disabled(self):
+        values = dict(self.expected)
+        del values["CONFIG_DEVTMPFS_MOUNT"]
+        result, report = self.run_guard(values)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("CONFIG_DEVTMPFS_MOUNT: expected=n final=not_exposed", report)
+        self.assertIn("effective n", report)
+
+        values["CONFIG_DEVTMPFS"] = "y"
+        result, _ = self.run_guard(values)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CONFIG_DEVTMPFS_MOUNT", result.stderr)
 
     def test_policy_is_late_scoped_and_has_no_autogroup_or_missing_config_escape(self):
         build = (ROOT / ".github/workflows/build.yml").read_text()
