@@ -45,7 +45,7 @@ new file mode 100644
 index 0000000..73882f8
 --- /dev/null
 +++ b/drivers/base/power/asb_wakeup_blocker.c
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,262 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Bounded, exact-name wakeup-source blocking for explicit administrator policy.
@@ -76,6 +76,7 @@ index 0000000..73882f8
 +struct asb_wakeup_rule {
 +	struct list_head node;
 +	struct rcu_head rcu;
++	atomic64_t blocked;
 +	char name[ASB_WAKEUP_NAME_MAX + 1];
 +};
 +
