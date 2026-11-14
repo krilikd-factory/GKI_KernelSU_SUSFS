@@ -126,11 +126,11 @@ index 0000000..73882f8
 +			      char *buf)
 +{
 +	struct asb_wakeup_rule *rule;
-+	size_t pos = 0;
++	int pos = 0;
 +
 +	mutex_lock(&asb_wakeup_rules_lock);
 +	list_for_each_entry(rule, &asb_wakeup_rules, node)
-+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%s\n", rule->name);
++		pos += sysfs_emit_at(buf, pos, "%s\n", rule->name);
 +	mutex_unlock(&asb_wakeup_rules_lock);
 +	return pos;
 +}
@@ -265,12 +265,12 @@ index 0000000..73882f8
 +			       struct kobj_attribute *attr, char *buf)
 +{
 +	struct asb_wakeup_rule *rule;
-+	size_t pos = 0;
++	int pos = 0;
 +
 +	mutex_lock(&asb_wakeup_rules_lock);
 +	list_for_each_entry(rule, &asb_wakeup_rules, node)
-+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%s\t%lld\n",
-+				 rule->name, atomic64_read(&rule->blocked));
++		pos += sysfs_emit_at(buf, pos, "%s\t%lld\n",
++				     rule->name, atomic64_read(&rule->blocked));
 +	mutex_unlock(&asb_wakeup_rules_lock);
 +	return pos;
 +}
