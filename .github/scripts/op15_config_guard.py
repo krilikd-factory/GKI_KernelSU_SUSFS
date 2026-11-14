@@ -20,6 +20,13 @@ EXPECTED = {
     "CONFIG_SCHED_DEBUG": "y",
 }
 
+# Kconfig omits DEVTMPFS_MOUNT entirely when its parent DEVTMPFS is disabled.
+# In that case absence is semantically equivalent to n; an actual y/m value is
+# still rejected below.
+HIDDEN_N_WITH_DISABLED_PARENT = {
+    "CONFIG_DEVTMPFS_MOUNT": "CONFIG_DEVTMPFS",
+}
+
 
 def parse_config(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
@@ -46,8 +53,14 @@ def main() -> int:
     failed = []
     for key, expected in EXPECTED.items():
         got = actual.get(key, "not_exposed")
-        lines.append(f"  {key}: expected={expected} final={got}")
-        if got != expected:
+        effective = got
+        note = ""
+        parent = HIDDEN_N_WITH_DISABLED_PARENT.get(key)
+        if got == "not_exposed" and expected == "n" and parent and actual.get(parent) == "n":
+            effective = "n"
+            note = " (hidden by disabled parent; effective n)"
+        lines.append(f"  {key}: expected={expected} final={got}{note}")
+        if effective != expected:
             failed.append(f"{key}: expected {expected}, got {got}")
     lines.append(
         "  CONFIG_SCHED_AUTOGROUP: not forced by this policy; runtime availability remains separate"
