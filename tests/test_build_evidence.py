@@ -231,7 +231,11 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(output.read_text())
             self.assertTrue(report["asb_contract"]["custom_sysfs_abi"])
-            self.assertEqual(report["asb_contract"]["bounded_interfaces"]["wakeup_blocklist"]["max_rules"], 16)
+            wakeup = report["asb_contract"]["bounded_interfaces"]["wakeup_blocklist"]
+            self.assertEqual(wakeup["max_rules"], 16)
+            self.assertEqual(wakeup["abi_version"], 2)
+            self.assertIn("/sys/kernel/asb_wakeup/rule_stats", wakeup["read_only_stats"])
+            self.assertIn("no kernel idle detector or polling worker", wakeup["observation"])
             self.assertEqual(report["capabilities"]["app.rekernel"]["runtime_state"], "unknown")
 
     def test_requested_network_options_cannot_silently_disappear(self):
@@ -1035,6 +1039,9 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
                            "⚠️ Requires separate on-device validation", "Build-verified only"):
                 self.assertIn(needle, text)
             self.assertNotIn("runtime interface writability or device compatibility.\"", text)
+            self.assertLess(text.index("### ⚡ Build at a glance"), text.index("### 🧱 Build identity"))
+            self.assertIn("not used; not required for AOSP GKI mode", text)
+            self.assertIn("apply=0, skip=1, rejects=0", text)
             self.assertNotIn("NoMount-Metamodule", text)
             args.feature_set = "Perf"
             sparse = build_summary.render(args, {"KERNEL_SOURCE": "aosp"})
@@ -1075,6 +1082,7 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
                 "Clean tree before features", "Source identity digest", "Prefeature source file",
                 "stock `/proc/config.gz` compatibility payload", "not boot or runtime validation",
                 "Re-Kernel", "ASB wakeup blocker", "OPLUS SDP 900 mA", "Main Performance pass",
+                "used and required; oneplus/sm8850_test_oneplus_15", "ASB wakeup ABI", "ABI 2",
                 "kernel_sched_nr_migrate", "/sys/kernel/debug/sched/nr_migrate",
                 "kernel_sched_stats", "/proc/sys/kernel/sched_schedstats", "Stock is inert before a baseline exists",
             ):
@@ -1091,6 +1099,7 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             (root / "source-provenance.json").write_text(json.dumps(provenance))
             aosp = build_summary.render(args, {"KERNEL_SOURCE": "aosp", "KERNEL_SOURCE_COMMIT": commit})
             self.assertIn("not applicable (AOSP common)", aosp)
+            self.assertIn("not used; not required for AOSP GKI mode", aosp)
             self.assertIn("AOSP source gate", aosp)
 
     def test_build_summary_missing_malformed_and_incomplete_provenance_never_overclaim(self):
@@ -1124,6 +1133,7 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
                        '--feature-set "${{ inputs.feature_set }}"', '--page-size "${{ inputs.page_size }}"'):
             self.assertIn(needle, setup)
         self.assertIn('python3 -I "${{ github.workspace }}/.github/scripts/build_summary.py"', summary)
+        self.assertIn('awk \'/^### 🧱 Build identity/ { exit } { print }\' "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"', summary)
         self.assertNotIn("KRILIKD_BUILD_SUMMARY_BEGIN", summary)
         for needle in ("family: ${{ inputs.version }}", "droidspaces_commit: ${{ inputs.droidspaces_commit }}",
                        "kernel_patches_commit: ${{ inputs.kernel_patches_commit }}",
