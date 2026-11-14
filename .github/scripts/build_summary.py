@@ -88,7 +88,7 @@ FEATURE_GUIDE = {
         "Its effect depends on Re-Kernel messages and compatible userspace. No universal app-launch, FPS or battery improvement is inferred.",
         "Freezer behavior, process delivery and application compatibility require on-device testing; ASB does not add a second Re-Kernel policy owner."),
     "AWL": (
-        "Adds a bounded 16-rule exact-name wakeup-source blocklist controlled by ASB, with no default rules.",
+        "Adds a bounded 16-rule exact-name wakeup-source blocklist controlled by ASB, with no default rules. ABI 2 exposes read-only aggregate and per-rule blocked-event counters.",
         "A carefully selected rule may avoid unnecessary wake work; an incorrect rule can break critical wakeups. No blanket battery claim is made.",
         "The empty list uses a disabled static key. Modem, alarm, call, charging and suspend behavior must be validated physically."),
     "SDP900": (
@@ -104,7 +104,7 @@ ASB_CONTROL_GUIDE = (
     ("kernel_sched_stats", "Scheduler statistics", "Controls /proc/sys/kernel/sched_schedstats only through explicit off or exact-baseline restore; ASB has no hidden unconditional disable write.", "Disabling statistics can avoid instrumentation work but removes useful scheduler observability. A universal battery gain is not claimed.", "If the node is unavailable, the control is unavailable rather than silently applied elsewhere."),
     ("kernel_sched_autogroup", "Automatic process grouping", "Controls /proc/sys/kernel/sched_autogroup_enabled with validated 0/1 values.", "Changes interactive session grouping and CPU-share behavior. It can improve fairness for one workload while reducing another workload's share.", "Per-app or per-game superiority is not inferred; readback and exact restore remain mandatory."),
     ("kernel_sched_child_runs_first", "Child-first scheduling after fork", "Controls /proc/sys/kernel/sched_child_runs_first with validated 0/1 values.", "Affects post-fork scheduling order. It is a narrow latency trade-off, not a general performance profile.", "No battery percentage or global responsiveness claim; restore uses the exact captured baseline."),
-    ("wakeup_blocker", "Wakeup-source blocker", "Uses the kernel's bounded exact-name blocklist, empty by default, with at most 16 reviewed user rules.", "Blocking an unnecessary wakeup can reduce avoidable wake work, but blocking a required source can break modem, alarm, call, charging or suspend behavior.", "Static key keeps the empty list low-overhead; physical power behavior is not attested by the build."),
+    ("wakeup_blocker", "Wakeup-source blocker", "Uses the kernel's bounded exact-name blocklist, empty by default, with at most 16 reviewed user rules.", "Blocking an unnecessary wakeup can reduce avoidable wake work, but blocking a required source can break modem, alarm, call, charging or suspend behavior.", "Static key keeps the empty list low-overhead. ASB observes explicit start/end deltas from standard /sys/class/wakeup counters; no kernel idle detector or polling worker is added. Physical power behavior is not attested by the build."),
 )
 
 
@@ -161,6 +161,17 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
     lto = env.get("KERNEL_LTO") or "unknown"
     provenance, provenance_error = read_json(workspace / "source-provenance.json")
     device, device_error = read_json(workspace / ".github/device.json")
+    compact_inventory, _ = read_json(workspace / "patch-inventory.json")
+    compact_counts = Counter(p.get("decision", "unknown") for p in compact_inventory.get("patches", []) if isinstance(p, dict)) if isinstance(compact_inventory, dict) else Counter()
+    patch_brief = (f"apply={compact_counts.get('apply', 0)}, skip={compact_counts.get('skip', 0)}, rejects={env.get('REJ_COUNT') or 'not recorded'}"
+                   if isinstance(compact_inventory, dict) else f"inventory unavailable; rejects={env.get('REJ_COUNT') or 'not recorded'}")
+    if source == "aosp":
+        oneplus_brief = "not used; not required for AOSP GKI mode"
+    elif source == "oneplus":
+        oneplus_brief = f"used and required; {env.get('OEM_BRANCH') or ((provenance.get('oem') or {}).get('branch') if isinstance(provenance, dict) else None) or 'branch not recorded'}"
+    else:
+        oneplus_brief = "dependency unknown for this source mode"
+    susfs_brief = (a.susfs_commit or env.get("SUSFS_COMMIT") or "N/A") if "SUSFS" in features else "not requested"
 
     lines = [
         "# ⚡ KRILIKD Build Report",
@@ -168,6 +179,23 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         f"## `{md(a.file_name)}`",
         "",
         "> **Build-verified only.** A successful compile and its static guards do not prove physical boot, runtime interface writability or device compatibility.",
+        "",
+        "### ⚡ Build at a glance",
+        "",
+    ]
+    table(lines, ("Result", "Concise evidence"), [
+        ("Build / artifact", f"{status} · {a.file_name}"),
+        ("Kernel / config", f"{a.kernel_version}.{a.sublevel}-{a.android_version}-{a.os_patch_level} · {a.family} · {a.page_size} · LTO={lto}"),
+        ("Source base", f"{source} · {source_commit}"),
+        ("OnePlus published source", oneplus_brief),
+        ("Patches", patch_brief),
+        ("Root / SUSFS pins", f"{root_impl} {root_commit} · {susfs_brief}"),
+        ("Feature groups", a.feature_set or "none"),
+        ("Safety", f"KMI: {gate_state(a.job_status, workspace / 'kmi-crc-report.txt')}; stock config: {gate_state(a.job_status, workspace / 'stock-config-report.txt')}"),
+        ("ASB wakeup ABI", "2 + read-only per-rule counters" if "AWL" in features else "not requested"),
+    ])
+    lines += [
+        "Full source preflight, component pins, patch decisions and artifact details follow below and in the BuildInfo attachment.",
         "",
         "### 🧱 Build identity",
         "",

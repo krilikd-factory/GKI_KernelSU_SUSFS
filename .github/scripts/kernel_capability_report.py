@@ -61,8 +61,8 @@ CAPABILITIES = {
     },
     "power.wakeup_blocker": {
         "configs": ["CONFIG_ASB_WAKEUP_BLOCKER"],
-        "runtime_paths": ["/sys/kernel/asb_wakeup/blocklist", "/sys/kernel/asb_wakeup/blocked_events"],
-        "asb_use": "bounded exact-name root policy; empty by default, clear must restore the empty policy",
+        "runtime_paths": ["/sys/kernel/asb_wakeup/blocklist", "/sys/kernel/asb_wakeup/blocked_events", "/sys/kernel/asb_wakeup/abi_version", "/sys/kernel/asb_wakeup/rule_stats"],
+        "asb_use": "bounded exact-name root policy; ABI 2 adds read-only per-rule counters; observation uses standard /sys/class/wakeup deltas",
     },
     "charging.sdp_900ma": {
         "configs": ["CONFIG_OPLUS_SDP_900MA"],
@@ -244,6 +244,9 @@ def make_report(config_path: Path, feature_set: str) -> dict:
             "writers_added": ["/sys/kernel/asb_wakeup/blocklist"] if config.get("CONFIG_ASB_WAKEUP_BLOCKER") in ("y", "m") else [],
             "bounded_interfaces": {
                 "wakeup_blocklist": {
+                    "abi_version": 2,
+                    "read_only_stats": ["/sys/kernel/asb_wakeup/blocked_events", "/sys/kernel/asb_wakeup/rule_stats"],
+                    "observation": "ASB on-demand /sys/class/wakeup counter deltas; no kernel idle detector or polling worker",
                     "commands": ["add NAME", "del NAME", "clear"],
                     "default": "empty",
                     "max_rules": 16,
