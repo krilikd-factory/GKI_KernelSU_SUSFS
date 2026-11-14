@@ -20,6 +20,11 @@ EXPECTED = {
     "CONFIG_SCHED_DEBUG": "y",
 }
 
+PERFORMANCE_EXPECTED = {
+    "CONFIG_WQ_POWER_EFFICIENT_DEFAULT": "y",
+    "CONFIG_KFENCE_SAMPLE_INTERVAL": "0",
+}
+
 # Kconfig omits DEVTMPFS_MOUNT entirely when its parent DEVTMPFS is disabled.
 # In that case absence is semantically equivalent to n; an actual y/m value is
 # still rejected below.
@@ -46,12 +51,16 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--require-performance", action="store_true")
     args = parser.parse_args()
 
     actual = parse_config(args.config)
+    expected_values = dict(EXPECTED)
+    if args.require_performance:
+        expected_values.update(PERFORMANCE_EXPECTED)
     lines = ["OnePlus 15 final-config policy (android16-6.12):"]
     failed = []
-    for key, expected in EXPECTED.items():
+    for key, expected in expected_values.items():
         got = actual.get(key, "not_exposed")
         effective = got
         note = ""
@@ -62,6 +71,13 @@ def main() -> int:
         lines.append(f"  {key}: expected={expected} final={got}{note}")
         if effective != expected:
             failed.append(f"{key}: expected {expected}, got {got}")
+    lines.append(
+        "  Power/performance scope: " + (
+            "Perf requested; WQ power-efficient default and zero KFENCE sampling interval verified"
+            if args.require_performance else
+            "Perf not requested; its two optional defaults were not required"
+        )
+    )
     lines.append(
         "  CONFIG_SCHED_AUTOGROUP: not forced by this policy; runtime availability remains separate"
     )

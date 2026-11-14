@@ -271,7 +271,7 @@ def handled_symbols(compat_script: Path | None) -> set[str]:
     if not compat_script or not compat_script.is_file():
         return set()
     text = compat_script.read_text(encoding="utf-8")
-    return set(re.findall(r'^LEGACY_SYMBOL\s*=\s*"(susfs_[a-z0-9_]+)"', text, flags=re.M))
+    return set(re.findall(r'^LEGACY(?:_PARSE)?_SYMBOL\s*=\s*"(susfs_[a-z0-9_]+)"', text, flags=re.M))
 
 
 def known_good_roots(path: Path | None, opl: str, oneplus: bool) -> list[tuple[str, str]]:

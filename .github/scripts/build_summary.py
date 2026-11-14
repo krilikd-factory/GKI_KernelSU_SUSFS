@@ -371,6 +371,13 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         ("Final resolved .config", "✅ Preserved" if (workspace / "kernel-final.config").is_file() else "⚠️ Not available"),
         ("Physical boot / vendor modules / thermal", "⚠️ Requires separate on-device validation"),
     ])
+    config_policy = workspace / "op15-config-report.txt"
+    if config_policy.is_file():
+        lines += [
+            "#### OnePlus 15 final-config decisions", "",
+            config_policy.read_text(encoding="utf-8").strip(), "",
+            "These are resolved build settings, not measured battery, temperature or performance gains. Runtime idle, thermal and scheduler behavior still require on-device validation.", "",
+        ]
 
     lines += ["### 🎛️ ASB capability contract", ""]
     capabilities, caps_error = read_json(workspace / "kernel-capabilities.json")
