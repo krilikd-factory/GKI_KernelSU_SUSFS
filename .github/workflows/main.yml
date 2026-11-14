@@ -69,7 +69,7 @@ on:
           - known-good
           - latest
           - verified
-        default: known-good
+        default: latest
       root_flavor:
         description: "Root Flavor"
         type: choice
@@ -253,10 +253,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Commit resolution mode. 'latest' (default) resolves branch tips at
-          # run time via git ls-remote. 'verified' uses the audited pins below for
-          # NoMount, kernelsu/bakasu roots, and SUSFS; KernelSU-Next stays latest.
-          # Scheduled (nightly) runs use latest by default.
+          # latest: branch tips; verified: audited pins; known-good: rollback.
+          # Never silently substitute known-good for compatible newer upstream.
           if [ "${{ github.event_name }}" = "schedule" ]; then
             COMMIT_MODE="${{ inputs.commit_mode || 'latest' }}"
           else
@@ -293,9 +291,8 @@ jobs:
           # Audited pins. Used only when commit_mode=verified.
           # Refreshed 2026-11-12 from reviewed Wild commit 243bb5a; this is a
           # maintenance/security pin refresh, not a performance or battery patch.
-          # NoMount is deliberately NOT pinned: it is a module-side component
-          # with no kernel contract, so it always tracks the dev tip even in
-          # verified mode (see the nomount_commit emit below).
+          # NoMount master; kernel integration and metamodule share this SHA.
+          PIN_NOMOUNT="7914458ca71dfa3a8c162fa97fdb69332db7a690"
           # KernelSU: official main tip (dbb73665, 2026-11-12), including the
           # profile-name path-traversal fix. KernelSU-Next has its own pin.
           PIN_KERNELSU="dbb73665d103da40c7ecbd21ba3b5ac76eb95784"
@@ -363,9 +360,10 @@ jobs:
             fi
           }
 
-          # NoMount (pinned in verified mode, else dev tip)
-          # NoMount always tracks the dev tip - never pinned, in either mode.
-          emit nomount_commit "${KG_NOMOUNT:-$(resolve_sha https://github.com/maxsteeel/nomount.git refs/heads/dev)}"
+          # NoMount: known-good rollback, audited master pin, or current master.
+          # Never mix the kernel driver and companion module from dev/master.
+          emit nomount_commit "${KG_NOMOUNT:-$(pick "$PIN_NOMOUNT" https://github.com/maxsteeel/nomount.git refs/heads/master)}"
+          echo "nomount_branch=master" >> "$GITHUB_OUTPUT"
 
           # KernelSU-Next manager - always built from the official repo's dev branch.
           # pershoot's fork is used only for the kernel SUSFS integration (root_commit below),

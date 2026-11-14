@@ -644,6 +644,7 @@ jobs:
         with:
           version: ${{ inputs.version }}
           page_size: ${{ inputs.page_size }}
+          feature_set: ${{ inputs.feature_set }}
           allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
 
       - name: Generate ASB kernel capability report
