@@ -84,9 +84,10 @@ runs:
       run: |
         set -euo pipefail
         # Newer susfs4ksu branches removed the legacy SUS_PATH UID-filter
-        # implementation while some KernelSU-Next commits still dispatch it.
-        # The helper removes only that unavailable dispatch arm; it never adds
-        # a fake symbol and leaves all supported SUSFS calls untouched.
+        # implementation while current KernelSU-Next can still dispatch it and
+        # call its refresh helper from the threaded throne tracker. Remove only
+        # those two unavailable call sites; never add a fake symbol or silently
+        # downgrade KSUN. All supported SUSFS calls remain untouched.
         python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_susfs_api_compat.py" \
           "$GITHUB_WORKSPACE/kernel/common"
 
