@@ -58,6 +58,7 @@ SUSFS_H_241 = '''
     void susfs_parse_priority_app_strings(void);
     int susfs_set_priority_uid_filter(void *arg);
     void susfs_parse_sus_path_app_strings(void);
+    void susfs_missing_future_call(void);
 '''
 KSU_GOOD = '''
     #include <linux/susfs.h>
@@ -90,10 +91,13 @@ KSU_GOOD = '''
     #endif
     }
 '''
-KSU_BAD = KSU_GOOD.replace(
+KSU_LEGACY_REFRESH = KSU_GOOD.replace(
     "    #if defined(CONFIG_KSU_SUSFS_SUS_PATH)\n",
     "    #ifdef CONFIG_KSU_SUSFS_SUS_PATH\n        susfs_parse_sus_path_app_strings();\n    #endif\n"
     "    #if defined(CONFIG_KSU_SUSFS_SUS_PATH)\n")
+KSU_BAD = KSU_LEGACY_REFRESH.replace(
+    "        susfs_parse_sus_path_app_strings();\n",
+    "        susfs_parse_sus_path_app_strings();\n        susfs_missing_future_call();\n")
 
 
 class NextSusfsGuardTest(unittest.TestCase):
@@ -139,11 +143,21 @@ class NextSusfsGuardTest(unittest.TestCase):
         self.assertEqual(out["susfs"], self.s240, "the v2.4.1 tip was used instead of the newest v2.4.0 commit")
         self.assertEqual(out["commit"], self.good)
 
+    def test_latest_threaded_legacy_refresh_is_removed_not_a_kernel_downgrade(self):
+        legacy = commit(self.ksu, {"kernel/manager/throne.h": KSU_GOOD,
+                                   "kernel/manager/throne_tracker.h": KSU_LEGACY_REFRESH},
+                        "latest threaded legacy refresh")
+        rc, out, proc = self.run_guard(legacy)
+        self.assertEqual(rc, 0, proc.stderr)
+        self.assertEqual(out["result"], "compatible", proc.stdout)
+        self.assertEqual(out["commit"], legacy)
+        self.assertNotIn("missing", out)
+
     def test_run_118021691889_falls_back_to_the_known_good_root(self):
         kg = {"android16-6.12-2026-03/KernelSU-Next": {"root_commit": self.good, "marked_at": "2026-11-13T09:00:16Z"}}
         rc, out, proc = self.run_guard(self.bad, kg)
         self.assertEqual(rc, 0, proc.stderr)
-        self.assertEqual(out["missing"], "susfs_parse_sus_path_app_strings", proc.stdout)
+        self.assertEqual(out["missing"], "susfs_missing_future_call", proc.stdout)
         self.assertEqual(out["result"], "known_good")
         self.assertEqual(out["commit"], self.good)
         self.assertEqual(out["known_good_key"], "android16-6.12-2026-03/KernelSU-Next")
@@ -186,6 +200,7 @@ class NextSusfsGuardTest(unittest.TestCase):
     {
     #ifdef CONFIG_KSU_SUSFS_SUS_PATH
         susfs_parse_sus_path_app_strings();
+        susfs_missing_future_call();
     #endif
     }
     #endif
@@ -213,6 +228,58 @@ class NextSusfsGuardTest(unittest.TestCase):
     def test_network_failure_never_blocks_a_build(self):
         rc, out, _ = self.run_guard(self.bad, ksu_url="file:///nonexistent/ksu")
         self.assertEqual((rc, out["result"], out["commit"]), (0, "unverified", self.bad))
+
+
+class NextSusfsCompatibilityTest(unittest.TestCase):
+    def test_unavailable_dispatch_and_threaded_refresh_are_removed_together(self):
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            dispatch = tree / "drivers/kernelsu/supercall/dispatch.c"
+            dispatch.parent.mkdir(parents=True)
+            dispatch.write_text(
+                "void dispatch(void *arg) {\n"
+                "#ifdef CONFIG_KSU_SUSFS_SUS_PATH\n"
+                "    case CMD_SUSFS_SET_SUS_PATH_UID_FILTER:\n"
+                "        susfs_set_sus_path_uid_filter(arg);\n"
+                "        return 0;\n"
+                "#endif\n}\n")
+            header = tree / "drivers/kernelsu/manager/throne_tracker.h"
+            header.parent.mkdir(parents=True)
+            header.write_text(
+                "static inline void renew(void) {\n"
+                "#ifdef CONFIG_KSU_SUSFS_SUS_PATH\n"
+                "\tsusfs_parse_sus_path_app_strings();\n"
+                "#endif\n}\n")
+            result = subprocess.run([sys.executable, "-I", str(COMPAT), str(tree)],
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("susfs_set_sus_path_uid_filter", dispatch.read_text())
+            self.assertNotIn("susfs_parse_sus_path_app_strings", header.read_text())
+            self.assertIn("CONFIG_KSU_SUSFS_SUS_PATH", dispatch.read_text())
+            self.assertIn("CONFIG_KSU_SUSFS_SUS_PATH", header.read_text())
+            again = subprocess.run([sys.executable, "-I", str(COMPAT), str(tree)],
+                                   text=True, capture_output=True)
+            self.assertEqual(again.returncode, 0, again.stderr)
+
+    def test_real_upstream_implementation_disables_all_removals(self):
+        with tempfile.TemporaryDirectory() as d:
+            tree = Path(d)
+            dispatch = tree / "drivers/kernelsu/supercall/dispatch.c"
+            dispatch.parent.mkdir(parents=True)
+            original = (
+                "    case CMD_SUSFS_SET_SUS_PATH_UID_FILTER:\n"
+                "        susfs_set_sus_path_uid_filter(arg);\n"
+                "        return 0;\n")
+            dispatch.write_text(original)
+            implementation = tree / "fs/susfs.c"
+            implementation.parent.mkdir(parents=True)
+            implementation.write_text(
+                "void susfs_set_sus_path_uid_filter(void) {}\n"
+                "void susfs_parse_sus_path_app_strings(void) {}\n")
+            result = subprocess.run([sys.executable, "-I", str(COMPAT), str(tree)],
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(dispatch.read_text(), original)
 
 
 class NextSusfsGuardWiringTest(unittest.TestCase):

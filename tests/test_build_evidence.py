@@ -311,6 +311,10 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             self.assertIn("ASB_WAKEUP_MAX_RULES 16", driver)
             self.assertIn("DEFINE_STATIC_KEY_FALSE", driver)
             self.assertNotIn("LIST_WL_DEFAULT", driver)
+            rule = driver.split("struct asb_wakeup_rule {", 1)[1].split("};", 1)[0]
+            self.assertIn("atomic64_t blocked;", rule,
+                          "run 118092223994: rule->blocked was used without a struct member")
+            self.assertEqual(driver.count("rule->blocked"), 3)
 
     def test_rekernel_integrator_rewrites_only_exact_anchors(self):
         action = (ROOT / ".github/actions/rekernel/action.yml").read_text()
@@ -566,20 +570,27 @@ class OnePlusPolicyTest(unittest.TestCase):
         "CONFIG_DEBUG_FS": "y",
         "CONFIG_SCHED_DEBUG": "y",
     }
+    power_expected = {
+        "CONFIG_WQ_POWER_EFFICIENT_DEFAULT": "y",
+        "CONFIG_KFENCE_SAMPLE_INTERVAL": "0",
+    }
 
     @staticmethod
     def line(key, value):
         return f"# {key} is not set\n" if value == "n" else f"{key}={value}\n"
 
-    def run_guard(self, values):
+    def run_guard(self, values, performance=False):
         with tempfile.TemporaryDirectory() as d:
             config = Path(d) / ".config"
             report = Path(d) / "report.txt"
             config.write_text("".join(self.line(k, v) for k, v in values.items()))
-            result = subprocess.run([
+            command = [
                 sys.executable, "-I", str(SCRIPTS / "op15_config_guard.py"),
                 "--config", str(config), "--report", str(report),
-            ], text=True, capture_output=True, check=False)
+            ]
+            if performance:
+                command.append("--require-performance")
+            result = subprocess.run(command, text=True, capture_output=True, check=False)
             return result, report.read_text()
 
     def test_all_five_symbols_are_checked_after_final_kconfig_resolution(self):
@@ -601,6 +612,27 @@ class OnePlusPolicyTest(unittest.TestCase):
                     if key == "CONFIG_DEVTMPFS_MOUNT" and wrong == "missing":
                         self.assertEqual(result.returncode, 0, result.stderr)
                         continue
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(key, result.stderr)
+
+    def test_performance_defaults_are_checked_only_for_the_perf_feature(self):
+        result, report = self.run_guard(self.expected)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Perf not requested", report)
+
+        values = {**self.expected, **self.power_expected}
+        result, report = self.run_guard(values, performance=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Perf requested", report)
+        for key in self.power_expected:
+            for wrong in ("n", "1", "missing"):
+                with self.subTest(key=key, wrong=wrong):
+                    broken = dict(values)
+                    if wrong == "missing":
+                        del broken[key]
+                    else:
+                        broken[key] = wrong
+                    result, _ = self.run_guard(broken, performance=True)
                     self.assertEqual(result.returncode, 1)
                     self.assertIn(key, result.stderr)
 
@@ -632,6 +664,8 @@ class OnePlusPolicyTest(unittest.TestCase):
                         build.index("name: Build Normal Kernel"))
         self.assertIn("op15_config_guard.py", action)
         self.assertIn("op15-config-report.txt", action)
+        self.assertIn('[[ "+${{ inputs.feature_set }}+" == *"+Perf+"* ]] && POLICY_ARGS+=(--require-performance)', action)
+        self.assertIn("feature_set: ${{ inputs.feature_set }}", build)
         self.assertIn('[ "${{ inputs.version }}" != "android16-6.12" ] && [ "$PAGE_SIZE" != "16k" ]', action)
         self.assertIn("op15-config-report.txt", build)
 
@@ -686,6 +720,17 @@ class OnePlusPolicyTest(unittest.TestCase):
                     self.assertNotIn(stale_path, path.read_text(encoding="utf-8"))
                 except UnicodeDecodeError:
                     pass
+
+    def test_latest_is_default_and_nomount_master_is_one_matched_component(self):
+        main = (ROOT / ".github/workflows/main.yml").read_text()
+        self.assertIn("        default: latest", main)
+        self.assertIn('PIN_NOMOUNT="7914458ca71dfa3a8c162fa97fdb69332db7a690"', main)
+        self.assertIn('https://github.com/maxsteeel/nomount.git refs/heads/master', main)
+        self.assertNotIn('https://github.com/maxsteeel/nomount.git refs/heads/dev', main)
+        self.assertIn('echo "nomount_branch=master"', main)
+        module_action = (ROOT / ".github/actions/nomount-metamodule/action.yml").read_text()
+        self.assertIn('expected_commit="${{ inputs.commit }}"', module_action)
+        self.assertIn('git -C "$source_dir" checkout --detach "$expected_commit"', module_action)
 
     def test_default_kernel_identity_is_krilikd_not_wild(self):
         main = (ROOT / ".github/workflows/main.yml").read_text()
@@ -1020,6 +1065,11 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             }))
             (root / "kmi-crc-report.txt").write_text("match\n")
             (root / "stock-config-report.txt").write_text("match\n")
+            (root / "op15-config-report.txt").write_text(
+                "OnePlus 15 final-config policy (android16-6.12):\n"
+                "  CONFIG_WQ_POWER_EFFICIENT_DEFAULT: expected=y final=y\n"
+                "  CONFIG_KFENCE_SAMPLE_INTERVAL: expected=0 final=0\n"
+            )
             perf = root / "performance.md"
             perf.write_text("- applied (2): one two\n- patch channel: stable\n")
             args = build_summary.parser().parse_args([
@@ -1036,6 +1086,8 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             })
             for needle in ("# ⚡ KRILIKD Build Report", "### 🩹 Patch decisions", "reviewed",
                            "Main Performance pass", "applied (2): one two", "mglru_mode",
+                           "OnePlus 15 final-config decisions", "CONFIG_WQ_POWER_EFFICIENT_DEFAULT",
+                           "not measured battery, temperature or performance gains",
                            "⚠️ Requires separate on-device validation", "Build-verified only"):
                 self.assertIn(needle, text)
             self.assertNotIn("runtime interface writability or device compatibility.\"", text)
