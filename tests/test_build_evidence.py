@@ -449,12 +449,15 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
                  "list_del_rcu": "linux/rculist.h", "kfree_rcu": "linux/rcupdate.h",
                  "static_branch_unlikely": "linux/jump_label.h", "atomic64_inc": "linux/atomic.h",
                  "mutex_lock": "linux/mutex.h", "kzalloc": "linux/slab.h", "isprint": "linux/ctype.h",
-                 "sysfs_emit": "linux/sysfs.h", "kobject_create_and_add": "linux/kobject.h",
+                 "sysfs_emit": "linux/sysfs.h", "sysfs_emit_at": "linux/sysfs.h", "kobject_create_and_add": "linux/kobject.h",
                  "strscpy": "linux/string.h"}
         for symbol, header in needs.items():
             self.assertIn(symbol, body)
             self.assertIn(header, includes, f"{symbol} needs <{header}>")
         self.assertIn("linux/asb_wakeup_blocker.h", includes)  # definition sees its own prototype
+        # sysfs show buffers are filled with sysfs_emit_at(), which knows the page bound itself.
+        self.assertNotIn("scnprintf", body)
+        self.assertNotIn("PAGE_SIZE - pos", body)
         header_hunk = [l for l in patch.splitlines() if l.startswith("@@ -0,0 +1,")]
         self.assertEqual(header_hunk[0], f"@@ -0,0 +1,{len(driver)} @@")
 

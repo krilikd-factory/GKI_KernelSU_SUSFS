@@ -87,8 +87,22 @@ KSU_GOOD = '''
         susfs_only_when_feature_off();
     #endif
     #if defined(CONFIG_KSU_SUSFS_SUS_PATH)
-        susfs_set_sus_path_uid_filter(0);
+        susfs_set_priority_uid_filter(1);
     #endif
+    }
+'''
+KSU_DISPATCH = '''
+    #include <linux/susfs.h>
+    int dispatch(int cmd, void *arg)
+    {
+        switch (cmd) {
+    #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+        case CMD_SUSFS_SET_SUS_PATH_UID_FILTER:
+            susfs_set_sus_path_uid_filter(arg);
+            return 0;
+    #endif
+        }
+        return -1;
     }
 '''
 KSU_LEGACY_REFRESH = KSU_GOOD.replace(
@@ -118,9 +132,10 @@ class NextSusfsGuardTest(unittest.TestCase):
         self.ksu = new_repo(t / "ksu", "dev-susfs")
         self.nosusfs = commit(self.ksu, {"kernel/core.c": "int main_loop(void) { return 0; }\n"}, "upstream")
         self.good = commit(self.ksu, {"kernel/manager/throne.h": KSU_GOOD,
+                                      "kernel/supercall/dispatch.c": KSU_DISPATCH,
                                       "kernel/x.c": "#include <linux/susfs.h>\nvoid f(void){ susfs_from_pick(); }\n"},
                            "good")
-        self.bad = commit(self.ksu, {"kernel/manager/throne.h": KSU_BAD}, "bad")
+        self.bad = commit(self.ksu, {"kernel/manager/throne_tracker.h": KSU_BAD}, "bad")
         self.kg = t / "known-good.json"
 
     def tearDown(self):
@@ -205,7 +220,8 @@ class NextSusfsGuardTest(unittest.TestCase):
     }
     #endif
 """
-        booted = commit(self.ksu, {"kernel/Kconfig": kconfig, "kernel/manager/throne.h": observer}, "booted")
+        booted = commit(self.ksu, {"kernel/Kconfig": kconfig, "kernel/manager/throne.h": observer,
+                                   "kernel/manager/throne_tracker.h": KSU_GOOD}, "booted")
         kg = {
             "android16-6.12-2026-03/KernelSU-Next": {"root_commit": self.nosusfs, "marked_at": "2026-11-14T01:24:25Z"},
             "android16-6.12-2026-03/KernelSU-Next@previous": {"root_commit": booted, "marked_at": "2026-11-13T09:00:16Z"},
@@ -220,6 +236,34 @@ class NextSusfsGuardTest(unittest.TestCase):
         rc, out, _ = self.run_guard(flipped)
         self.assertEqual(out["result"], "incompatible", "a call compiled in with the option off was missed")
         self.assertIn("tried", out)
+
+    def test_compat_removals_are_honoured_only_where_the_compat_step_removes_them(self):
+        # ksu_susfs_api_compat.py removes the UID-filter arm from supercall/dispatch.c and exactly
+        # one refresh call from manager/throne_tracker.h. The same call anywhere else, or a second
+        # refresh call, stays in the build and would stop the compile, so it is not "handled".
+        base = {"kernel/manager/throne.h": KSU_GOOD, "kernel/manager/throne_tracker.h": KSU_LEGACY_REFRESH}
+        scoped = commit(self.ksu, base, "scoped legacy calls")
+        rc, out, proc = self.run_guard(scoped)
+        self.assertEqual((rc, out["result"]), (0, "compatible"), proc.stdout)
+        elsewhere = commit(self.ksu, {"kernel/core/extra.c":
+                                      "#include <linux/susfs.h>\nvoid g(void) { susfs_parse_sus_path_app_strings(); }\n"},
+                           "refresh call outside throne_tracker.h")
+        rc, out, proc = self.run_guard(elsewhere)
+        self.assertEqual((rc, out["result"], out.get("missing")), (1, "incompatible", "susfs_parse_sus_path_app_strings"), proc.stdout)
+        sh(self.ksu, "rm", "-q", "kernel/core/extra.c"); sh(self.ksu, "commit", "-q", "-m", "drop")
+        twice = commit(self.ksu, {"kernel/manager/throne_tracker.h": KSU_LEGACY_REFRESH.replace(
+            "        susfs_parse_sus_path_app_strings();\n",
+            "        susfs_parse_sus_path_app_strings();\n        susfs_parse_sus_path_app_strings();\n")}, "two refresh calls")
+        rc, out, proc = self.run_guard(twice)
+        self.assertEqual((rc, out.get("missing")), (1, "susfs_parse_sus_path_app_strings"), proc.stdout)
+        filt = commit(self.ksu, {"kernel/manager/throne_tracker.h": KSU_LEGACY_REFRESH,
+                                 "kernel/feature/uid.c": "#include <linux/susfs.h>\nvoid u(void) { susfs_set_sus_path_uid_filter(0); }\n"},
+                      "uid filter outside dispatch.c")
+        rc, out, proc = self.run_guard(filt)
+        self.assertEqual((rc, out.get("missing")), (1, "susfs_set_sus_path_uid_filter"), proc.stdout)
+        kg = {"android16-6.12-2026-03/KernelSU-Next": {"root_commit": scoped, "marked_at": "2026-11-14T00:00:00Z"}}
+        rc, out, proc = self.run_guard(filt, kg)
+        self.assertEqual((rc, out["result"], out["commit"]), (0, "known_good", scoped), proc.stdout)
 
     def test_the_explicit_known_good_susfs_pin_is_checked(self):
         rc, out, _ = self.run_guard(self.bad, susfs_commit=self.s241)
