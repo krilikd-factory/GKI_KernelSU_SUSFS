@@ -107,4 +107,7 @@ runs:
           --droidspaces-commit "${{ inputs.droidspaces_commit }}" \
           --kernel-patches-commit "${{ inputs.kernel_patches_commit }}" \
           --anykernel3-commit "${{ inputs.anykernel3_commit }}"
+        # The run page gets the compact provenance/result block only. The complete
+        # evidence report remains the BuildInfo artifact and is not truncated there.
+        awk '/^### 🧱 Build identity/ { exit } { print }' "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
         echo "summary_base=${SUMMARY_BASE}" >> "$GITHUB_OUTPUT"
