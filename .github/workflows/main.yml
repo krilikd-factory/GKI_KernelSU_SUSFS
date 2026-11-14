@@ -422,6 +422,8 @@ jobs:
             NEXT_COMMIT="$KG_ROOT"
             echo "[+] KernelSU-Next pinned to known-good ${NEXT_COMMIT:0:12}"
           fi
+          # KernelSU-Next vs SUSFS API check (and known-good fallback): see the script.
+          source "$GITHUB_WORKSPACE/.github/scripts/next_susfs_api_guard.sh"
 
           # The kernel reports 30000 + count(merge-base(KSU HEAD, upstream dev))
           # -- see .github/actions/root-setup. The manager has to be resolved at
