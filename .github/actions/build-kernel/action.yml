@@ -9,6 +9,10 @@ inputs:
     required: false
     type: string
     default: '4k'
+  feature_set:
+    description: 'Requested feature groups; Perf enables its final-config power guard'
+    required: false
+    default: ''
   allow_version_mismatch:
     description: 'Whether to force-load version-mismatched modules'
     required: false
@@ -148,9 +152,11 @@ runs:
         # report and BuildInfo evidence. This copies, never edits, .config.
         cp "$CONFIG_FILE" "${{ github.workspace }}/kernel-final.config"
         if [ "${{ inputs.version }}" = "android16-6.12" ]; then
+          POLICY_ARGS=()
+          [[ "+${{ inputs.feature_set }}+" == *"+Perf+"* ]] && POLICY_ARGS+=(--require-performance)
           python3 -I "${{ github.workspace }}/.github/scripts/op15_config_guard.py" \
             --config "$CONFIG_FILE" \
-            --report "${{ github.workspace }}/op15-config-report.txt"
+            --report "${{ github.workspace }}/op15-config-report.txt" "${POLICY_ARGS[@]}"
         fi
         grep -E '^(# )?CONFIG_ARM64_(4K|16K|64K)_PAGES|^CONFIG_ARM64_PAGE_SHIFT' "$CONFIG_FILE" || true
         echo "--- LTO / AutoFDO in final .config ---"
