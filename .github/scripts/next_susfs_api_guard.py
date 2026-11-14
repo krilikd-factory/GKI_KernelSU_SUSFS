@@ -18,8 +18,12 @@ being wrong.  If no known-good root fits, the run fails here with the list of
 missing functions.
 
 Only build inputs are chosen here.  No SUSFS or KernelSU-Next source is
-patched; the existing dispatch-arm removal in ksu_susfs_api_compat.py is
-honoured as handled.
+patched.  The two call sites ksu_susfs_api_compat.py removes are honoured as
+handled only where it removes them: the legacy UID-filter call in
+supercall/dispatch.c and exactly one filter-refresh call in
+manager/throne_tracker.h.  The same function called anywhere else, or a second
+refresh call, is left in the build by the compat step, so it is reported
+missing here instead of failing the compile later.
 
 Output on stdout, one key=value per line:
   result=compatible|known_good|unverified|incompatible
@@ -223,7 +227,7 @@ def scan(text: str) -> tuple[set[str], set[str]]:
 WORKFLOW_SET: set[str] = set()
 
 
-def ksu_surface(repo: Path, commit: str) -> tuple[set[str], set[str], bool]:
+def ksu_surface(repo: Path, commit: str, handled=()) -> tuple[set[str], set[str], bool, dict[str, list[str]]]:
     tree = git(repo, "ls-tree", "-r", "--name-only", commit, "--", "kernel").splitlines()
     kconfig = "".join(git(repo, "show", f"{commit}:{f}") + "\n" for f in tree if f.split("/")[-1] == "Kconfig")
     KCONFIG.clear()
@@ -231,15 +235,19 @@ def ksu_surface(repo: Path, commit: str) -> tuple[set[str], set[str], bool]:
     files = [f for f in tree if f.endswith((".c", ".h"))]
     calls: set[str] = set()
     defined: set[str] = set()
+    sites: dict[str, list[str]] = {}
     integrated = False
     for name in files:
         text = git(repo, "show", f"{commit}:{name}")
         if "linux/susfs" in text or "CONFIG_KSU_SUSFS" in text:
             integrated = True
-        c, d = scan(active_text(text))
+        active = active_text(text)
+        c, d = scan(active)
         calls |= c
         defined |= d
-    return calls, defined, integrated
+        for sym, n in call_sites(active, set(handled) & c).items():
+            sites.setdefault(sym, []).extend([name] * n)
+    return calls, defined, integrated, sites
 
 
 def susfs_provides(repo: Path, commit: str, picks: list[str]) -> set[str]:
@@ -267,11 +275,29 @@ def susfs_commit(repo: Path, url: str, explicit: str, branch: str, version: str)
     raise FetchError(f"no commit on {branch} declares SUSFS_VERSION {version}")
 
 
-def handled_symbols(compat_script: Path | None) -> set[str]:
+# Where ksu_susfs_api_compat.py removes each call, as a path suffix below kernel/.
+HANDLED_SCOPE = {"LEGACY_SYMBOL": "supercall/dispatch.c", "LEGACY_PARSE_SYMBOL": "manager/throne_tracker.h"}
+
+
+def handled_symbols(compat_script: Path | None) -> dict[str, str]:
+    """susfs_* name -> the one file the compat step removes its single call from."""
     if not compat_script or not compat_script.is_file():
-        return set()
+        return {}
     text = compat_script.read_text(encoding="utf-8")
-    return set(re.findall(r'^LEGACY(?:_PARSE)?_SYMBOL\s*=\s*"(susfs_[a-z0-9_]+)"', text, flags=re.M))
+    out: dict[str, str] = {}
+    for var, name in re.findall(r'^(LEGACY(?:_PARSE)?_SYMBOL)\s*=\s*"(susfs_[a-z0-9_]+)"', text, flags=re.M):
+        out[name] = HANDLED_SCOPE[var]
+    return out
+
+
+def call_sites(text: str, names) -> dict[str, int]:
+    """How many times each of `names` is called in one file's active text."""
+    out: dict[str, int] = {}
+    for m in NAME_PAREN.finditer(text):
+        name, start = m.group(1), m.start(1)
+        if name in names and text[max(0, start - 2):start] != "->":
+            out[name] = out.get(name, 0) + 1
+    return out
 
 
 def known_good_roots(path: Path | None, opl: str, oneplus: bool) -> list[tuple[str, str]]:
@@ -298,8 +324,17 @@ def known_good_roots(path: Path | None, opl: str, oneplus: bool) -> list[tuple[s
     return out
 
 
-def missing_for(calls: set[str], defined: set[str], provided: set[str], handled: set[str]) -> list[str]:
-    return sorted(c for c in calls if c not in defined and c not in provided and c not in handled)
+def is_handled(name: str, handled: dict[str, str], sites: dict[str, list[str]] | None) -> bool:
+    if name not in handled:
+        return False
+    where = (sites or {}).get(name, [])
+    return len(where) <= 1 and all(f.endswith("/" + handled[name]) for f in where)
+
+
+def missing_for(calls: set[str], defined: set[str], provided: set[str], handled: dict[str, str],
+                sites: dict[str, list[str]] | None = None) -> list[str]:
+    return sorted(c for c in calls
+                  if c not in defined and c not in provided and not is_handled(c, handled, sites))
 
 
 def main() -> int:
@@ -344,13 +379,13 @@ def main() -> int:
             picks = [fetch(sfs, args.pick_url, sha, depth=2) for sha in picks_wanted if sha]
             provided = susfs_provides(sfs, base, picks)
             fetch(ksu, args.ksu_url, args.want)
-            calls, defined, _ = ksu_surface(ksu, args.want)
+            calls, defined, _, sites = ksu_surface(ksu, args.want, handled)
         except FetchError as exc:
             print("result=unverified")
             print(f"commit={args.want}")
             print(f"reason={str(exc).splitlines()[0][:200]}")
             return 0
-        missing = missing_for(calls, defined, provided, handled)
+        missing = missing_for(calls, defined, provided, handled, sites)
         print(f"susfs={base}")
         if not missing:
             print("result=compatible")
@@ -363,11 +398,11 @@ def main() -> int:
                 continue
             try:
                 fetch(ksu, args.ksu_url, root)
-                kcalls, kdefined, integrated = ksu_surface(ksu, root)
+                kcalls, kdefined, integrated, ksites = ksu_surface(ksu, root, handled)
             except FetchError:
                 tried.append(f"{key}:{root[:12]}:fetch_failed")
                 continue
-            kmissing = missing_for(kcalls, kdefined, provided, handled)
+            kmissing = missing_for(kcalls, kdefined, provided, handled, ksites)
             if not integrated:
                 tried.append(f"{key}:{root[:12]}:no_susfs_integration")
             elif kmissing:
