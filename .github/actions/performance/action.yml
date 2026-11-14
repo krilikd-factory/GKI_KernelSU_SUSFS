@@ -31,13 +31,24 @@ runs:
         KERNEL_VERSION="${{ inputs.kernel_version }}"
         MIN_VERSION="5.16"
         KP="${{ github.workspace }}/kernel_patches/common"
+        CHANNEL="${{ inputs.patch_channel }}"
+        case "$CHANNEL" in stable|candidate) ;; *) echo "ERROR: invalid patch channel '$CHANNEL'" >&2; exit 1 ;; esac
+        POWER_AUDIT="${{ github.workspace }}/performance-patch-audit.json"
+        KP_COMMIT="$(git -C "${{ github.workspace }}/kernel_patches" rev-parse HEAD)"
+        POWER_POLICY_TSV="$(mktemp)"
+        python3 -I "${{ github.workspace }}/.github/scripts/performance_patch_policy.py" \
+          --policy "${{ github.workspace }}/.github/performance-patch-policy.json" \
+          --channel "$CHANNEL" --source-commit "$KP_COMMIT" --format json --output "$POWER_AUDIT"
+        python3 -I "${{ github.workspace }}/.github/scripts/performance_patch_policy.py" \
+          --policy "${{ github.workspace }}/.github/performance-patch-policy.json" \
+          --channel "$CHANNEL" --source-commit "$KP_COMMIT" --format tsv > "$POWER_POLICY_TSV"
 
         # Every patch is dry-run first and only applied when it fits the tree.
         # A patch that does not apply (already merged upstream, context drift on
         # a newer sublevel) is skipped with a warning instead of killing the
         # build, so Performance can stay on by default. A *partial* apply is
         # impossible: the real run only happens after a clean dry run.
-        APPLIED=(); SKIPPED=()
+        APPLIED=(); SKIPPED=(); POWER_HELD=()
         try_patch() { # <name> [patch args...] < patch-on-stdin
           local name="$1"; shift
           local tmp; tmp="$(mktemp)"; cat > "$tmp"
@@ -55,8 +66,21 @@ runs:
         # dry-run first, and the stock-config + KMI CRC guards after the build
         # stop anything that would change what the vendor modules rely on.
         apply_patch() { try_patch "$@"; }
+        apply_reviewed_patch() { # <policy name> [patch args...] < patch-on-stdin
+          local name="$1"; shift
+          local decision
+          decision="$(awk -F '\t' -v patch="$name" '$1 == patch { print $2 }' "$POWER_POLICY_TSV")"
+          case "$decision" in
+            apply) apply_patch "$name" "$@" ;;
+            candidate_only)
+              POWER_HELD+=("$name")
+              echo "::notice::Performance: $name held back in stable; candidate-only functional/power trade-off"
+              ;;
+            *) echo "ERROR: $name has no valid reviewed power policy decision" >&2; exit 1 ;;
+          esac
+        }
 
-        apply_patch optimized_mem_operations < "$KP/optimized_mem_operations.patch"
+        apply_reviewed_patch optimized_mem_operations < "$KP/optimized_mem_operations.patch"
         # file_struct_8bytes_align is deliberately NOT applied on GKI (>= 5.10
         # trees with ANDROID_KABI in struct file): on arm64 struct file already
         # has 8-byte alignment from its pointer/u64 members, so the patch buys
@@ -68,15 +92,15 @@ runs:
         else
           echo "file_struct_8bytes_align: skipped on GKI (KMI-sensitive, no-op on arm64)"
         fi
-        apply_patch reduce_cache_pressure < "$KP/reduce_cache_pressure.patch"
-        apply_patch mem_opt_prefetch < "$KP/mem_opt_prefetch.patch"
+        apply_reviewed_patch reduce_cache_pressure < "$KP/reduce_cache_pressure.patch"
+        apply_reviewed_patch mem_opt_prefetch < "$KP/mem_opt_prefetch.patch"
 
         if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | tail -n1)" = "$KERNEL_VERSION" ]; then
-          apply_patch optimise_memcmp < "$KP/optimise_memcmp.patch"
+          apply_reviewed_patch optimise_memcmp < "$KP/optimise_memcmp.patch"
         elif [ "$(printf '%s\n' "$KERNEL_VERSION" "5.11" | sort -V | tail -n1)" = "$KERNEL_VERSION" ]; then
           # process substitution, not a pipe: try_patch must run in this shell
           # so its APPLIED/SKIPPED bookkeeping survives.
-          apply_patch optimise_memcmp < <(sed \
+          apply_reviewed_patch optimise_memcmp < <(sed \
               -e 's/SYM_FUNC_START(__pi_memcmp)/SYM_FUNC_START_WEAK_PI(memcmp)/' \
               -e 's/SYM_FUNC_END(__pi_memcmp)/SYM_FUNC_END_PI(memcmp)/' \
               -e 's/SYM_FUNC_ALIAS_WEAK(memcmp, __pi_memcmp)/EXPORT_SYMBOL_NOKASAN(memcmp)/' \
@@ -84,17 +108,17 @@ runs:
         else
           echo "Optimised memcmp patch not found!"
         fi
-        apply_patch minimise_wakeup_time < "$KP/minimise_wakeup_time.patch"
-        apply_patch int_sqrt < "$KP/int_sqrt.patch"
-        apply_patch reduce_gc_thread_sleep_time < "$KP/reduce_gc_thread_sleep_time.patch"
-        apply_patch add_timeout_wakelocks_globally < "$KP/add_timeout_wakelocks_globally.patch"
-        apply_patch f2fs_reduce_congestion < "$KP/f2fs_reduce_congestion.patch"
-        apply_patch reduce_freeze_timeout < "$KP/reduce_freeze_timeout.patch"
+        apply_reviewed_patch minimise_wakeup_time < "$KP/minimise_wakeup_time.patch"
+        apply_reviewed_patch int_sqrt < "$KP/int_sqrt.patch"
+        apply_reviewed_patch reduce_gc_thread_sleep_time < "$KP/reduce_gc_thread_sleep_time.patch"
+        apply_reviewed_patch add_timeout_wakelocks_globally < "$KP/add_timeout_wakelocks_globally.patch"
+        apply_reviewed_patch f2fs_reduce_congestion < "$KP/f2fs_reduce_congestion.patch"
+        apply_reviewed_patch reduce_freeze_timeout < "$KP/reduce_freeze_timeout.patch"
 
         if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
-          apply_patch clear_page_16bytes_align < "$KP/clear_page_16bytes_align.patch"
+          apply_reviewed_patch clear_page_16bytes_align < "$KP/clear_page_16bytes_align.patch"
         else
-          apply_patch clear_page_16bytes_align -F3 < <(sed \
+          apply_reviewed_patch clear_page_16bytes_align -F3 < <(sed \
             -e 's/SYM_FUNC_START_PI(clear_page)/SYM_FUNC_START_PI(__pi_clear_page)/' \
             "$KP/clear_page_16bytes_align.patch")
         fi
@@ -112,7 +136,7 @@ runs:
                  f2fs_enlarge_min_fsync_blocks increase_ext4_default_commit_age \
                  increase_sk_mem_packets reduce_pci_pme_wakeups \
                  silence_irq_cpu_logspam silence_system_logspam; do
-          apply_patch "$p" -F3 < "$KP/$p.patch"
+          apply_reviewed_patch "$p" -F3 < "$KP/$p.patch"
         done
 
         # New upstream patches are observed by default. Stable builds apply only
@@ -120,8 +144,6 @@ runs:
         # apply reviewed "candidate" entries for the exact family/device/SoC.
         # The JSON inventory is uploaded with BuildInfo and records content IDs,
         # policy state, target scope and every apply/hold decision.
-        CHANNEL="${{ inputs.patch_channel }}"
-        case "$CHANNEL" in stable|candidate) ;; *) echo "ERROR: invalid patch channel '$CHANNEL'" >&2; exit 1 ;; esac
         INVENTORY="${{ github.workspace }}/patch-inventory.json"
         TSV="$(mktemp)"
         python3 -I "${{ github.workspace }}/.github/scripts/new_patches.py" \
@@ -146,7 +168,7 @@ runs:
             echo "new-patch held back: $name [$state] ($why) sha256=$digest"
           fi
         done < "$TSV"
-        rm -f "$TSV"
+        rm -f "$TSV" "$POWER_POLICY_TSV"
         [ "${#NEW_APPLIED[@]}" -eq 0 ] || echo "::notice::Reviewed $CHANNEL patches applied: ${NEW_APPLIED[*]}"
 
         # Google's GKI AutoFDO profile (Kleaf trees only): build the
@@ -167,6 +189,8 @@ runs:
           echo "- applied (${#APPLIED[@]}): ${APPLIED[*]:-none}"
           echo "- skipped (${#SKIPPED[@]}): ${SKIPPED[*]:-none}"
           echo "- patch channel: ${CHANNEL}"
+          echo "- stable channel held for functional/power review (${#POWER_HELD[@]}): ${POWER_HELD[*]:-none}"
+          echo "- main patch power audit: performance-patch-audit.json (BuildInfo artifact; all 19 mechanisms and trade-offs)"
           echo "- reviewed new patches applied (${#NEW_APPLIED[@]}): ${NEW_APPLIED[*]:-none}"
           echo "- observed/held patches (${#NEW_HELD[@]}): ${NEW_HELD[*]:-none}"
           echo "- inventory: patch-inventory.json (BuildInfo artifact)"
