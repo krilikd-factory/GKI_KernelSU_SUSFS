@@ -726,6 +726,7 @@ jobs:
             ${{ github.workspace }}/kernel-capabilities.json
             ${{ github.workspace }}/rekernel-provenance.json
             ${{ github.workspace }}/patch-inventory.json
+            ${{ github.workspace }}/performance-patch-audit.json
             ${{ github.workspace }}/kmi-crc-report.txt
             ${{ github.workspace }}/stock-config-report.txt
             ${{ github.workspace }}/op15-config-report.txt
