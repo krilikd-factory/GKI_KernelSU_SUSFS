@@ -78,16 +78,92 @@ def strip_comments(text: str) -> str:
     return re.sub(r"//[^\n]*", "", text)
 
 
+def kconfig_defaults(text: str, workflow_set: set[str]) -> dict[str, bool | None]:
+    """Values of KernelSU's own bool options with nothing set but their Kconfig defaults.
+
+    Run 118051915879 showed why: the booted known-good root calls the same missing
+    function inside #ifndef CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED, which is
+    default y, so that call is never compiled. Options the workflow sets itself,
+    options with a conditional default and anything this small evaluator cannot
+    decide stay None (treated as compiled: stricter, never more lenient).
+    """
+    blocks: dict[str, dict] = {}
+    cur = None
+    for raw in strip_comments(text).splitlines():
+        line = raw.strip()
+        m = re.match(r"^(?:menu)?config\s+([A-Z0-9_]+)$", line)
+        if m:
+            cur = blocks.setdefault(m.group(1), {"defaults": [], "depends": []})
+            continue
+        if cur is None or not line:
+            continue
+        if line.startswith("depends on "):
+            cur["depends"].append(line[len("depends on "):].strip())
+        elif line.startswith("default "):
+            cur["defaults"].append(line[len("default "):].strip())
+        elif re.match(r"^(endmenu|menu |choice|endchoice|if |endif|source )", line):
+            cur = None
+    values: dict[str, bool | None] = {}
+
+    def value(name: str, seen: frozenset = frozenset()) -> bool | None:
+        if name.startswith("KSU_SUSFS") or name == "KSU":
+            return True
+        if name in values:
+            return values[name]
+        if name in seen or name not in blocks or f"CONFIG_{name}" in workflow_set:
+            return None
+        spec = blocks[name]
+        result: bool | None
+        if len(spec["defaults"]) > 1 or any(" if " in d for d in spec["defaults"]):
+            result = None
+        elif not spec["defaults"] or spec["defaults"][0] == "n":
+            result = False
+        elif spec["defaults"][0] in ("y", "m"):
+            result = True
+        else:
+            result = None
+        for dep in spec["depends"]:
+            if "||" in dep or "(" in dep or "=" in dep:
+                result = None if result is not False else False
+                continue
+            for term in (t.strip() for t in dep.split("&&")):
+                neg = term.startswith("!")
+                v = value(term.lstrip("!").strip(), seen | {name})
+                if v is None:
+                    result = None if result is not False else False
+                elif v == neg:
+                    result = False
+        values[name] = result
+        return result
+
+    for name in blocks:
+        value(name)
+    return {f"CONFIG_{k}": v for k, v in values.items()}
+
+
+KCONFIG: dict[str, bool | None] = {}
+
+
+def _config_value(name: str) -> bool | None:
+    if name.startswith("CONFIG_KSU_SUSFS"):
+        return True
+    return KCONFIG.get(name)
+
+
 def _condition_state(directive: str, expr: str):
-    """True/False when the condition only names SUSFS configs, else None."""
+    """True/False when the condition names one decidable config, else None."""
     expr = expr.strip()
-    if directive == "ifdef":
-        return True if expr.startswith("CONFIG_KSU_SUSFS") else None
-    if directive == "ifndef":
-        return False if expr.startswith("CONFIG_KSU_SUSFS") else None
+    if directive in ("ifdef", "ifndef"):
+        m = re.match(r"^(CONFIG_[A-Z0-9_]+)\b", expr)
+        v = _config_value(m.group(1)) if m else None
+        if v is None:
+            return None
+        return v if directive == "ifdef" else not v
     m = re.fullmatch(r"(!?)\s*defined\s*\(?\s*(CONFIG_[A-Z0-9_]+)\s*\)?", expr)
-    if m and m.group(2).startswith("CONFIG_KSU_SUSFS"):
-        return not m.group(1)
+    if m:
+        v = _config_value(m.group(2))
+        if v is not None:
+            return v != bool(m.group(1))
     return None
 
 
@@ -144,9 +220,15 @@ def scan(text: str) -> tuple[set[str], set[str]]:
     return called, defined
 
 
+WORKFLOW_SET: set[str] = set()
+
+
 def ksu_surface(repo: Path, commit: str) -> tuple[set[str], set[str], bool]:
-    files = [f for f in git(repo, "ls-tree", "-r", "--name-only", commit, "--", "kernel").splitlines()
-             if f.endswith((".c", ".h"))]
+    tree = git(repo, "ls-tree", "-r", "--name-only", commit, "--", "kernel").splitlines()
+    kconfig = "".join(git(repo, "show", f"{commit}:{f}") + "\n" for f in tree if f.split("/")[-1] == "Kconfig")
+    KCONFIG.clear()
+    KCONFIG.update(kconfig_defaults(kconfig, WORKFLOW_SET))
+    files = [f for f in tree if f.endswith((".c", ".h"))]
     calls: set[str] = set()
     defined: set[str] = set()
     integrated = False
@@ -199,12 +281,13 @@ def known_good_roots(path: Path | None, opl: str, oneplus: bool) -> list[tuple[s
     suffix = "/KernelSU-Next+oneplus" if oneplus else "/KernelSU-Next"
     rows = []
     for key, entry in data.items():
-        if not (key.startswith("android16-6.12-") and key.endswith(suffix)):
+        base_key = key.split("@", 1)[0]
+        if not (base_key.startswith("android16-6.12-") and base_key.endswith(suffix)):
             continue
         root = str(entry.get("root_commit") or "")
         if not SHA.match(root):
             continue
-        exact = bool(opl) and key == f"android16-6.12-{opl}{suffix}"
+        exact = bool(opl) and base_key == f"android16-6.12-{opl}{suffix}"
         rows.append((not exact, str(entry.get("marked_at") or ""), key, root))
     rows.sort(key=lambda r: (r[0], [-ord(c) for c in r[1]]))
     seen, out = set(), []
@@ -233,6 +316,8 @@ def main() -> int:
     ap.add_argument("--susfs-version", default=SUSFS_VERSION)
     ap.add_argument("--pick-url", default=PERSHOOT_SUSFS_URL)
     ap.add_argument("--pick", action="append", help="SUSFS commit cherry-picked for next (default: the two susfs-setup picks)")
+    ap.add_argument("--workflow-dir", type=Path, default=Path(__file__).resolve().parents[1],
+                    help="the .github tree; KernelSU options it sets are not assumed at their defaults")
     args = ap.parse_args()
     picks_wanted = args.pick if args.pick is not None else list(PERSHOOT_PICKS)
 
@@ -242,6 +327,13 @@ def main() -> int:
         print("reason=want is not a commit sha")
         return 0
     handled = handled_symbols(args.compat_script)
+    if args.workflow_dir and args.workflow_dir.is_dir():
+        for path in args.workflow_dir.rglob("*"):
+            if path.is_file() and path.suffix in (".yml", ".yaml", ".sh", ".py", ".json") and path.resolve() != Path(__file__).resolve():
+                try:
+                    WORKFLOW_SET.update(re.findall(r"CONFIG_KSU_[A-Z0-9_]+", path.read_text(encoding="utf-8", errors="replace")))
+                except OSError:
+                    pass
     with tempfile.TemporaryDirectory() as tmp:
         ksu = Path(tmp) / "ksu"
         sfs = Path(tmp) / "susfs"
@@ -265,6 +357,7 @@ def main() -> int:
             print(f"commit={args.want}")
             return 0
         print(f"missing={','.join(missing)}")
+        tried = []
         for key, root in known_good_roots(args.known_good_file, args.opl, args.kernel_source == "oneplus"):
             if root == args.want:
                 continue
@@ -272,12 +365,19 @@ def main() -> int:
                 fetch(ksu, args.ksu_url, root)
                 kcalls, kdefined, integrated = ksu_surface(ksu, root)
             except FetchError:
+                tried.append(f"{key}:{root[:12]}:fetch_failed")
                 continue
-            if integrated and not missing_for(kcalls, kdefined, provided, handled):
+            kmissing = missing_for(kcalls, kdefined, provided, handled)
+            if not integrated:
+                tried.append(f"{key}:{root[:12]}:no_susfs_integration")
+            elif kmissing:
+                tried.append(f"{key}:{root[:12]}:missing_{'+'.join(kmissing)}")
+            if integrated and not kmissing:
                 print("result=known_good")
                 print(f"commit={root}")
                 print(f"known_good_key={key}")
                 return 0
+        print(f"tried={' '.join(tried) or 'none'}")
         print("result=incompatible")
         print(f"commit={args.want}")
         return 1

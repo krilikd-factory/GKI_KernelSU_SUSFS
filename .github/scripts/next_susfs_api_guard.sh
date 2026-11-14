@@ -48,7 +48,7 @@ if [ "$NG_APPLIES" = 1 ]; then
       echo "::warning::KernelSU-Next/SUSFS API check could not run (${NG_RESULT:+$(ng_get reason)}${NG_RESULT:-no result}); building ${NEXT_COMMIT:0:12} unchecked."
       ;;
     *)
-      echo "::error::KernelSU-Next ${NEXT_COMMIT:0:12} calls SUSFS functions that SUSFS ${NG_SUSFS:0:12} does not provide: ${NG_MISSING:-unknown}. No known-good KernelSU-Next root passes the same check. Wait for pershoot/KernelSU-Next dev-susfs to match SUSFS ${NG_SUSFS:0:12}, or build with commit_mode=known-good."
+      echo "::error::KernelSU-Next ${NEXT_COMMIT:0:12} calls SUSFS functions that SUSFS ${NG_SUSFS:0:12} does not provide: ${NG_MISSING:-unknown}. No known-good KernelSU-Next root passes the same check (tried: $(ng_get tried)). Wait for pershoot/KernelSU-Next dev-susfs to match SUSFS ${NG_SUSFS:0:12}, or build with commit_mode=known-good."
       exit 1
       ;;
   esac
