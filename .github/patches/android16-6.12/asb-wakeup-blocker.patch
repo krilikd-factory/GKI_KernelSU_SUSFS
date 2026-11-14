@@ -45,7 +45,7 @@ new file mode 100644
 index 0000000..73882f8
 --- /dev/null
 +++ b/drivers/base/power/asb_wakeup_blocker.c
-@@ -0,0 +1,230 @@
+@@ -0,0 +1,261 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Bounded, exact-name wakeup-source blocking for explicit administrator policy.
@@ -71,6 +71,7 @@ index 0000000..73882f8
 +
 +#define ASB_WAKEUP_MAX_RULES 16
 +#define ASB_WAKEUP_NAME_MAX 63
++#define ASB_WAKEUP_ABI_VERSION 2
 +
 +struct asb_wakeup_rule {
 +	struct list_head node;
@@ -96,6 +97,7 @@ index 0000000..73882f8
 +	list_for_each_entry_rcu(rule, &asb_wakeup_rules, node) {
 +		if (strcmp(rule->name, name) == 0) {
 +			atomic64_inc(&asb_wakeup_blocked_events);
++			atomic64_inc(&rule->blocked);
 +			blocked = true;
 +			break;
 +		}
@@ -159,6 +161,7 @@ index 0000000..73882f8
 +		return -ENOMEM;
 +	}
 +	strscpy(rule->name, name, sizeof(rule->name));
++	atomic64_set(&rule->blocked, 0);
 +	if (list_empty(&asb_wakeup_rules))
 +		static_branch_inc(&asb_wakeup_rules_active);
 +	list_add_rcu(&rule->node, &asb_wakeup_rules);
@@ -249,14 +252,42 @@ index 0000000..73882f8
 +	return sysfs_emit(buf, "%lld\n", atomic64_read(&asb_wakeup_blocked_events));
 +}
 +
++static ssize_t abi_version_show(struct kobject *kobj,
++				 struct kobj_attribute *attr, char *buf)
++{
++	return sysfs_emit(buf, "%d\n", ASB_WAKEUP_ABI_VERSION);
++}
++
++/* Names cannot contain whitespace; the tab-separated form is unambiguous.  A rule's
++ * count disappears when that rule is removed, while the aggregate counter remains. */
++static ssize_t rule_stats_show(struct kobject *kobj,
++			       struct kobj_attribute *attr, char *buf)
++{
++	struct asb_wakeup_rule *rule;
++	size_t pos = 0;
++
++	mutex_lock(&asb_wakeup_rules_lock);
++	list_for_each_entry(rule, &asb_wakeup_rules, node)
++		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%s\t%lld\n",
++				 rule->name, atomic64_read(&rule->blocked));
++	mutex_unlock(&asb_wakeup_rules_lock);
++	return pos;
++}
++
 +static struct kobj_attribute asb_wakeup_blocklist_attr =
 +	__ATTR(blocklist, 0600, blocklist_show, blocklist_store);
 +static struct kobj_attribute asb_wakeup_events_attr =
 +	__ATTR(blocked_events, 0444, blocked_events_show, NULL);
++static struct kobj_attribute asb_wakeup_abi_attr =
++	__ATTR(abi_version, 0444, abi_version_show, NULL);
++static struct kobj_attribute asb_wakeup_stats_attr =
++	__ATTR(rule_stats, 0444, rule_stats_show, NULL);
 +
 +static struct attribute *asb_wakeup_attrs[] = {
 +	&asb_wakeup_blocklist_attr.attr,
 +	&asb_wakeup_events_attr.attr,
++	&asb_wakeup_abi_attr.attr,
++	&asb_wakeup_stats_attr.attr,
 +	NULL,
 +};
 +ATTRIBUTE_GROUPS(asb_wakeup);
