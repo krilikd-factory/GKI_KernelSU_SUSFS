@@ -118,6 +118,10 @@ CONTROL_CANDIDATES = {
     "kernel_sched_nr_migrate": {
         "configs": ["CONFIG_DEBUG_FS", "CONFIG_SCHED_DEBUG"],
         "runtime_path": "/sys/kernel/debug/sched/nr_migrate",
+        # Android does not mount debugfs on user builds. ASB (dev49+) mounts it on a
+        # private root-only directory for the one read or write and unmounts it again;
+        # the value stays in the kernel. Nothing is left mounted.
+        "runtime_access": "asb_private_debugfs_mount_per_access",
         "value_type": "bounded_integer",
         "requests": {
             "stock": "restore the exact value captured before ASB's first write",
@@ -144,6 +148,9 @@ CONTROL_CANDIDATES = {
     "kernel_sched_autogroup": {
         "configs": ["CONFIG_SCHED_AUTOGROUP"],
         "runtime_path": "/proc/sys/kernel/sched_autogroup_enabled",
+        # Deliberately not enabled by the OnePlus 15 policy: CONFIG_SCHED_AUTOGROUP adds a
+        # member to struct signal_struct, which vendor modules are compiled against (KMI).
+        "build_policy": "not_enabled_kmi_signal_struct",
         "value_type": "boolean_0_1",
         "requests": {
             "stock": "restore the exact value captured before ASB's first write",
@@ -208,6 +215,7 @@ def make_report(config_path: Path, feature_set: str) -> dict:
             "build_state": state,
             "configs": states,
             "runtime_path": spec["runtime_path"],
+            "runtime_access": spec.get("runtime_access", "direct"),
             "runtime_state": "unknown",
             "writable": "unknown",
             "value_type": spec["value_type"],
@@ -218,6 +226,8 @@ def make_report(config_path: Path, feature_set: str) -> dict:
             "owner": spec["owner"],
             "readback": spec["readback"],
         }
+        if "build_policy" in spec:
+            controls[name]["build_policy"] = spec["build_policy"]
     return {
         "schema": 2,
         "scope": "final build config only; runtime and physical-device validation are separate",
