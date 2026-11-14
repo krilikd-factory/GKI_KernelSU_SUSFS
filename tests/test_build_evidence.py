@@ -159,7 +159,7 @@ class CapabilityReportTest(unittest.TestCase):
             path.write_text("CONFIG_LRU_GEN=y\n")
             controls = caps.make_report(path, "VPN")["asb_contract"]["controls"]
             self.assertEqual(set(controls), {
-                "mglru_mode", "kernel_timer_migration", "kernel_sched_nr_migrate",
+                "mglru_mode", "kernel_mglru_min_ttl", "kernel_timer_migration", "kernel_sched_nr_migrate",
                 "kernel_sched_stats", "kernel_sched_autogroup", "kernel_sched_child_runs_first",
             })
             for name, control in controls.items():
@@ -1302,6 +1302,52 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("patch_channel: ${{ inputs.patch_channel }}", build)
         self.assertIn("--channel \"$CHANNEL\"", performance)
         self.assertNotIn("New upstream patches applied automatically", performance)
+
+    def test_main_performance_power_policy_covers_all_19_and_gates_candidates(self):
+        script = SCRIPTS / "performance_patch_policy.py"
+        policy = ROOT / ".github/performance-patch-policy.json"
+        expected_candidates = {
+            "add_timeout_wakelocks_globally", "reduce_freeze_timeout", "silence_system_logspam",
+        }
+        reports = {}
+        for channel in ("stable", "candidate"):
+            result = subprocess.run(
+                [sys.executable, "-I", str(script), "--policy", str(policy), "--channel", channel, "--source-commit", "a" * 40],
+                text=True, capture_output=True, check=True,
+            )
+            report = json.loads(result.stdout)
+            reports[channel] = report
+            self.assertEqual(len(report["patches"]), 19)
+            self.assertEqual(len({p["name"] for p in report["patches"]}), 19)
+            self.assertTrue(all(p["mechanism"] and p["power_review"] for p in report["patches"]))
+            self.assertEqual(len(report["policy_sha256"]), 64)
+            self.assertEqual(report["kernel_patches_commit"], "a" * 40)
+            self.assertIn("not physical boot, power or thermal validation", report["evidence_boundary"])
+        held = {p["name"] for p in reports["stable"]["patches"] if p["decision"] == "candidate_only"}
+        self.assertEqual(held, expected_candidates)
+        self.assertTrue(all(p["decision"] == "apply" for p in reports["candidate"]["patches"]))
+        self.assertEqual(sum(p["decision"] == "apply" for p in reports["stable"]["patches"]), 16)
+
+    def test_main_performance_policy_is_fail_closed_and_visible_in_buildinfo(self):
+        action = (ROOT / ".github/actions/performance/action.yml").read_text()
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        summary = (ROOT / ".github/scripts/build_summary.py").read_text()
+        self.assertIn('case "$decision" in', action)
+        self.assertIn('candidate_only)', action)
+        self.assertIn('has no valid reviewed power policy decision', action)
+        self.assertIn('apply_reviewed_patch add_timeout_wakelocks_globally', action)
+        self.assertIn('apply_reviewed_patch reduce_freeze_timeout', action)
+        self.assertIn('apply_reviewed_patch "$p"', action)
+        self.assertIn('${POWER_HELD[*]:-none}', action)
+        self.assertIn('performance-patch-audit.json', action)
+        self.assertIn('performance-patch-audit.json', workflow)
+        self.assertIn('Main patch power / functional review', summary)
+        self.assertIn('not measured battery or temperature results', summary)
+        capabilities = load("kernel_capability_report")
+        self.assertIn("kernel_mglru_min_ttl", capabilities.CONTROL_CANDIDATES)
+        ttl = capabilities.CONTROL_CANDIDATES["kernel_mglru_min_ttl"]
+        self.assertEqual(ttl["runtime_path"], "/sys/kernel/mm/lru_gen/min_ttl_ms")
+        self.assertEqual(set(ttl["requests"]), {"stock", "1000", "2000", "5000"})
 
     def test_known_good_supports_url_only_boot_and_optional_full_evidence(self):
         text = (ROOT / ".github/workflows/mark-known-good.yml").read_text()
