@@ -745,6 +745,59 @@ class OnePlusPolicyTest(unittest.TestCase):
         self.assertFalse((ROOT / "configs/a16/OP15.json").exists())
 
 
+class NoMountMetadataTest(unittest.TestCase):
+    def run_metadata(self, count=720, update_code=720, update_version="v2.3.0"):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            prop = root / "module.prop"
+            update = root / "update.json"
+            prop.write_text(
+                "id=nomount\nname=NoMount\nversion=v2.3.0\nversionCode=\n"
+                "author=maxsteeel\n"
+            )
+            update.write_text(json.dumps({
+                "version": update_version, "versionCode": update_code,
+            }))
+            result = subprocess.run([
+                sys.executable, "-I", str(SCRIPTS / "nomount_metadata.py"),
+                "--module-prop", str(prop), "--update-json", str(update),
+                "--commit-count", str(count),
+            ], text=True, capture_output=True, check=False)
+            return result, prop.read_text()
+
+    def test_current_release_and_newer_master_use_the_real_commit_count(self):
+        result, prop = self.run_metadata()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("version=v2.3.0 (720)\n", prop)
+        self.assertIn("versionCode=720\n", prop)
+        result, prop = self.run_metadata(count=721)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("version=v2.3.0 (721)\n", prop)
+        self.assertIn("versionCode=721\n", prop)
+        self.assertIn("newer than published update metadata", result.stdout)
+
+    def test_stale_or_inconsistent_metadata_fails_without_rewriting_prop(self):
+        original = (
+            "id=nomount\nname=NoMount\nversion=v2.3.0\nversionCode=\n"
+            "author=maxsteeel\n"
+        )
+        for kwargs in ({"count": 719}, {"update_version": "v2.2.0"}):
+            with self.subTest(**kwargs):
+                result, prop = self.run_metadata(**kwargs)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("metadata validation failed", result.stderr)
+                self.assertEqual(prop, original)
+
+    def test_packaging_uses_full_history_and_never_forces_version_code_one(self):
+        action = (ROOT / ".github/actions/nomount-metamodule/action.yml").read_text()
+        self.assertNotIn("fetch --depth=1", action)
+        self.assertNotIn("versionCode=1", action)
+        self.assertIn('git -C "$source_dir" rev-list --count HEAD', action)
+        self.assertIn('.github/scripts/nomount_metadata.py', action)
+        self.assertIn('--update-json "$source_dir/update.json"', action)
+        self.assertIn("grep -E '^(version|versionCode)='", action)
+
+
 class VpnHideFailClosedTest(unittest.TestCase):
     def test_requested_vpnhide_cannot_silently_skip_or_change_commit(self):
         action = (ROOT / ".github/actions/vpnhide/action.yml").read_text()
