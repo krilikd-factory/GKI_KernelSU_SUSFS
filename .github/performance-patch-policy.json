@@ -1,0 +1,120 @@
+{
+  "schema": 1,
+  "scope": "Reviewed main Performance patches; patch application and runtime power effects remain separate evidence",
+  "patches": [
+    {
+      "name": "optimized_mem_operations",
+      "channel": "stable",
+      "mechanism": "Uses word-sized generic memset/memcpy/memmove loops only where the architecture has no override.",
+      "power_review": "No clock, idle or thermal policy change. ARM64 architecture routines can make the generic edits unused."
+    },
+    {
+      "name": "reduce_cache_pressure",
+      "channel": "stable",
+      "mechanism": "Changes the default vfs_cache_pressure from 100 to 50, retaining dentry/inode cache longer.",
+      "power_review": "May avoid repeated lookup work while retaining more reclaimable cache; no guaranteed battery effect."
+    },
+    {
+      "name": "mem_opt_prefetch",
+      "channel": "stable",
+      "mechanism": "Adds ARM64 L1 streaming prefetch hints to the copy template.",
+      "power_review": "Can reduce copy latency but prefetching unused data can add memory traffic; workload-dependent."
+    },
+    {
+      "name": "optimise_memcmp",
+      "channel": "stable",
+      "mechanism": "Replaces the ARM64 memcmp implementation with a reviewed scalar/SIMD implementation.",
+      "power_review": "Changes instruction efficiency only; it does not raise frequencies or disable thermal limits."
+    },
+    {
+      "name": "minimise_wakeup_time",
+      "channel": "stable",
+      "mechanism": "Bounds the alarmtimer suspend-failure wakeup event near the nearest timer instead of two seconds.",
+      "power_review": "Intended to avoid excess awake time after this narrow failure path; runtime benefit is unmeasured."
+    },
+    {
+      "name": "int_sqrt",
+      "channel": "stable",
+      "mechanism": "Changes the generic integer square-root algorithm.",
+      "power_review": "No scheduler, frequency, idle or thermal policy change."
+    },
+    {
+      "name": "reduce_gc_thread_sleep_time",
+      "channel": "stable",
+      "mechanism": "Reduces only urgent F2FS GC sleep from 500 ms to 50 ms; normal and no-GC sleeps are unchanged.",
+      "power_review": "Urgent GC can start sooner and do work earlier; it does not schedule GC every 50 ms. Power effect is workload-dependent."
+    },
+    {
+      "name": "add_timeout_wakelocks_globally",
+      "channel": "candidate",
+      "mechanism": "Turns legacy indefinite pm_wake_lock calls into 500 ms wakeup events.",
+      "power_review": "Can cut required work short and cause retries or functional failures; not a clean stable power optimization."
+    },
+    {
+      "name": "f2fs_reduce_congestion",
+      "channel": "stable",
+      "mechanism": "Reduces the F2FS congestion wait timeout from 20 ms to 6 ms.",
+      "power_review": "Can retry I/O sooner under congestion; neither reduced energy nor increased drain is guaranteed."
+    },
+    {
+      "name": "reduce_freeze_timeout",
+      "channel": "candidate",
+      "mechanism": "Reduces the userspace freeze timeout from 20 s to 1 s and makes its sysfs writer a no-op.",
+      "power_review": "Slow freezes can fail and be retried; the no-op writer also creates false-success risk. Candidate only."
+    },
+    {
+      "name": "clear_page_16bytes_align",
+      "channel": "stable",
+      "mechanism": "Aligns the ARM64 clear_page entry to 16 bytes.",
+      "power_review": "Code-layout change only; no direct clock, idle or thermal policy effect."
+    },
+    {
+      "name": "avoid_extra_s2idle_wake_attempts",
+      "channel": "stable",
+      "mechanism": "Calls s2idle_wake only for the first suspend-abort event instead of every event.",
+      "power_review": "Avoids duplicate wake attempts in this path; suspend correctness still needs physical testing."
+    },
+    {
+      "name": "disable_cache_hot_buddy",
+      "channel": "stable",
+      "mechanism": "Disables the scheduler CACHE_HOT_BUDDY feature default.",
+      "power_review": "Changes migration/locality decisions and can help or hurt cache behavior; no universal power win."
+    },
+    {
+      "name": "f2fs_enlarge_min_fsync_blocks",
+      "channel": "stable",
+      "mechanism": "Raises the F2FS minimum fsync block threshold from 8 to 20.",
+      "power_review": "Changes I/O batching and sync latency trade-offs; energy effect depends on storage workload."
+    },
+    {
+      "name": "increase_ext4_default_commit_age",
+      "channel": "stable",
+      "mechanism": "Raises the ext4 journal commit interval from 5 s to 30 s.",
+      "power_review": "Can batch journal writes but enlarges the potential uncommitted-data window after a crash."
+    },
+    {
+      "name": "increase_sk_mem_packets",
+      "channel": "stable",
+      "mechanism": "Raises the default socket packet-memory scale from 256 to 1024.",
+      "power_review": "Changes buffering and queueing, primarily a memory/network trade-off rather than a direct power control."
+    },
+    {
+      "name": "reduce_pci_pme_wakeups",
+      "channel": "stable",
+      "mechanism": "Raises the PCI PME polling workaround interval from 1 s to 4 s.",
+      "power_review": "Polls less often but can detect relevant PME events later; actual relevance depends on the platform."
+    },
+    {
+      "name": "silence_irq_cpu_logspam",
+      "channel": "stable",
+      "mechanism": "Downgrades rate-limited IRQ affinity warnings to debug messages.",
+      "power_review": "Only logging verbosity changes; diagnostics become less visible without a measured power claim."
+    },
+    {
+      "name": "silence_system_logspam",
+      "channel": "candidate",
+      "mechanism": "Scans /dev/kmsg reads and suppresses lines containing healthd, logd or dashd.",
+      "power_review": "Adds substring work and hides diagnostics; not a clean power optimization. Candidate only."
+    }
+  ]
+}
