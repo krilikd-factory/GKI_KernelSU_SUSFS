@@ -777,6 +777,30 @@ jobs:
         with:
           commit: ${{ steps.clone.outputs.commit }}
 
+      # The packaged module must carry NoMount's own version scheme (versionCode = commit count
+      # of the pinned history, the number upstream publishes in update.json). A stale copy of the
+      # action forced versionCode=1, so after the first reboot the root manager offered the
+      # upstream release (720) as an update over the kernel-matched build.
+      - name: Verify NoMount metamodule version
+        if: env.NOMOUNT_WANTED == 'true'
+        shell: bash
+        env:
+          NOMOUNT_MODULE_DIR: ${{ steps.buildmod.outputs.module_dir }}
+        run: |
+          set -euo pipefail
+          prop="$NOMOUNT_MODULE_DIR/module.prop"
+          code="$(sed -n 's/^versionCode=//p' "$prop" | head -n 1 | tr -d '\r')"
+          ver="$(sed -n 's/^version=//p' "$prop" | head -n 1 | tr -d '\r')"
+          echo "NoMount metamodule: version=${ver} versionCode=${code}"
+          if ! [[ "$code" =~ ^[1-9][0-9]*$ ]] || [ "$code" -le 1 ] || [[ "$ver" != *"(${code})" ]]; then
+            echo "::error::NoMount module.prop has version='${ver}' versionCode='${code}'. The nomount-metamodule action in this repository is out of date: upload .github/actions/nomount-metamodule/action.yml and .github/scripts/nomount_metadata.py." >&2
+            exit 1
+          fi
+          {
+            echo "### NoMount metamodule"
+            echo "\`${ver}\` · versionCode ${code}"
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+
       - name: Upload NoMount metamodule
         if: env.NOMOUNT_WANTED == 'true'
         uses: actions/upload-artifact@v7
