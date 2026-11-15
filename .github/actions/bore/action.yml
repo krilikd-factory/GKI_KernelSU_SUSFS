@@ -1,0 +1,28 @@
+name: 'Apply BORE Scheduler'
+description: 'Apply the vendored BORE 7.0.0 patch to an android16-6.12 tree and keep the task_struct layout'
+
+inputs:
+  kernel_version:
+    description: 'Kernel version; only 6.12 is wired'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Apply BORE and relocate its state
+      shell: bash
+      env:
+        KERNEL_VERSION: ${{ inputs.kernel_version }}
+      run: |
+        set -euo pipefail
+        [ "$KERNEL_VERSION" = "6.12" ] || { echo "BORE is wired for 6.12 only (got $KERNEL_VERSION)" >&2; exit 1; }
+        PATCH="${{ github.action_path }}/patches/0001-linux6.12.37-bore-7.0.0.patch"
+        echo "BORE patch sha256: $(sha256sum "$PATCH" | cut -d' ' -f1)"
+        bash "${{ github.workspace }}/.github/scripts/bore_apply.sh" "${{ github.workspace }}/kernel/common" "$PATCH"
+
+    - name: Enable CONFIG_SCHED_BORE
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_SCHED_BORE=y
+          CONFIG_MIN_BASE_SLICE_NS=2000000
