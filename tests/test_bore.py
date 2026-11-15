@@ -58,7 +58,7 @@ class BoreWiring(unittest.TestCase):
         self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), PATCH_SHA256)
         self.assertIn("From: Masahito S <firelzrd@gmail.com>", PATCH.read_text(encoding="utf-8")[:300])
 
-    def test_dispatch_stays_within_the_input_limit_and_bore_is_opt_in(self):
+    def test_dispatch_is_opt_in_and_schedule_scopes_bore_to_612(self):
         main = (ROOT / ".github/workflows/main.yml").read_text()
         i = main.index("workflow_dispatch:")
         j = main.index("\njobs:", i)
@@ -75,7 +75,17 @@ class BoreWiring(unittest.TestCase):
                       '!= "6.12.x-android16"'):
             self.assertIn(token, main)
         sched = main[main.index('if [ "${{ github.event_name }}" = "schedule" ]; then'):main.index("          else\n            F_SUSFS")]
-        self.assertIn("F_BORE=false", sched, "the nightly build must never carry BORE")
+        self.assertIn("F_BORE=true", sched, "scheduled new-commit builds request BORE")
+        self.assertNotIn("F_BORE=false", sched)
+        self.assertIn('FEATURES_NO_BORE="${FEATURES//BORE+/}"', main)
+        self.assertIn("feature_set_no_bore=${FEATURES_NO_BORE%+}", main)
+        non_612 = main.count("feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}")
+        self.assertEqual(non_612, 7, "every non-6.12 family must strip BORE")
+        block_612 = main[main.index("config_file: .github/config/android16-6.12.json"):]
+        self.assertIn("feature_set: ${{ needs.resolve-sources.outputs.feature_set }}", block_612[:500])
+        self.assertIn("USE_BORE: ${{ contains(needs.resolve-sources.outputs.feature_set, 'BORE') }}", main)
+        digest = (SCRIPTS / "telegram_digest.py").read_text()
+        self.assertIn('if fam != "build-android16-6-12":\n            feats_on.discard("bore")', digest)
 
     def test_build_applies_bore_only_when_asked_and_only_on_612(self):
         build = (ROOT / ".github/workflows/build.yml").read_text()
@@ -88,6 +98,16 @@ class BoreWiring(unittest.TestCase):
         self.assertIn("CONFIG_SCHED_BORE=y", action)
         self.assertIn("sha256sum", action)
         self.assertIn("bore_apply.sh", action)
+        script = (SCRIPTS / "bore_apply.sh").read_text()
+        self.assertNotIn('patch -p1 -F3 --forward --no-backup-if-mismatch < "$PATCH" || true', script)
+        self.assertIn('patch_rc=$?', script)
+        self.assertIn('*) die "patch exited with serious error $patch_rc; no fixup was attempted"', script)
+        upload = build[build.index("- name: Upload Build Summary + Metadata"):]
+        upload = upload[:upload.index("- name: Record component pins")]
+        self.assertIn("if: always()", upload)
+        self.assertIn("asb-wakeup-blocker-provenance.json", upload)
+        self.assertIn("asb-wakeup-blocker-preflight.log", upload)
+        self.assertIn("build-delta.json", upload)
 
     def test_release_notes_and_summary_know_the_feature(self):
         summary = (SCRIPTS / "build_summary.py").read_text()
@@ -97,7 +117,7 @@ class BoreWiring(unittest.TestCase):
             for path in (ROOT / ".github" / name, SCRIPTS / name):
                 text = path.read_text()
                 self.assertIn('in ("true","bore")', text)
-                self.assertIn("BORE scheduler (experimental)", text)
+                self.assertIn("BORE scheduler (experimental; android16-6.12 only)", text)
 
     def test_scripts_parse(self):
         for name in ("bore_gki612_fixups.py", "bore_kabi_612.py", "bore12_state.py", "bore12_flat.py"):
@@ -147,6 +167,28 @@ class BoreFixups(unittest.TestCase):
         first, _, after, _ = self.run_fixups(fixed)
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertEqual(after.count("update_curr_bore("), 1)
+
+
+class BorePatchFailureTest(unittest.TestCase):
+    def test_patch_exit_codes_are_not_silently_accepted(self):
+        for returncode, diagnostic in ((1, "without reject diagnostics"),
+                                       (2, "serious error 2")):
+            with self.subTest(returncode=returncode), tempfile.TemporaryDirectory() as d:
+                root = Path(d); tree = root / "common"; tools = root / "tools"
+                (tree / "include/linux").mkdir(parents=True)
+                (tree / "kernel/sched").mkdir(parents=True)
+                tools.mkdir()
+                (tree / "Makefile").write_text("VERSION = 6\nPATCHLEVEL = 12\nSUBLEVEL = 92\n")
+                (tree / "include/linux/sched.h").write_text("struct task_struct {};\n")
+                (tree / "kernel/sched/fair.c").write_text("/* pristine fixture */\n")
+                fake_patch = tools / "patch"
+                fake_patch.write_text(f"#!/bin/sh\nexit {returncode}\n")
+                fake_patch.chmod(0o755)
+                env = dict(os.environ, PATH=f"{tools}{os.pathsep}{os.environ['PATH']}")
+                result = run(["bash", str(SCRIPTS / "bore_apply.sh"), str(tree), str(PATCH)], env=env)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertEqual((tree / "kernel/sched/fair.c").read_text(), "/* pristine fixture */\n")
 
 
 @unittest.skipUnless(os.environ.get("BORE_KERNEL_TREE"), "set BORE_KERNEL_TREE to an android16-6.12 common tree to run the full apply")

@@ -45,6 +45,8 @@ npx = load("new_patches")
 caps = load("kernel_capability_report")
 evidence = load("device_evidence")
 build_summary = load("build_summary")
+build_delta = load("build_delta")
+wakeup = load("asb_wakeup_blocker_apply")
 rebrand = load_embedded(
     "rebrand_anykernel", ".github/actions/setup-build-environment/action.yml", "KRILIKD_REBRAND")
 
@@ -300,51 +302,91 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
         self.assertNotIn("Re-Kernel skipped", action)
 
     def test_wakeup_patch_applies_to_reviewed_source_anchors(self):
-        patch = ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker.patch"
-        kconfig_source = embedded_source(
-            ".github/actions/asb-wakeup-blocker/action.yml", "ASB_WAKEUP_KCONFIG")
-        with tempfile.TemporaryDirectory() as d:
-            tree = Path(d)
-            (tree / "drivers/base/power").mkdir(parents=True)
-            (tree / "drivers/Kconfig").write_text(
-                'source "drivers/cdx/Kconfig"\n\nsource "drivers/dpll/Kconfig"\n\nendmenu\n')
-            (tree / "drivers/base/power/Makefile").write_text(
-                "# SPDX-License-Identifier: GPL-2.0\n"
-                "obj-$(CONFIG_PM)\t+= sysfs.o generic_ops.o common.o qos.o runtime.o wakeirq.o\n"
-                "obj-$(CONFIG_PM_SLEEP)\t+= main.o wakeup.o wakeup_stats.o\n"
-                "obj-$(CONFIG_PM_TRACE_RTC)\t+= trace.o\n"
-                "obj-$(CONFIG_HAVE_CLK)\t+= clock_ops.o\n"
-                "obj-$(CONFIG_PM_QOS_KUNIT_TEST) += qos-test.o\n")
-            wakeup_source = "\n".join([
-                "#include <linux/irq.h>", "#include <linux/irqdesc.h>",
-                "#include <linux/wakeup_reason.h>", "#include <trace/events/power.h>", "",
-                "#include \"power.h\"", "", "void __pm_stay_awake(struct wakeup_source *ws)", "{",
-                "\tunsigned long flags;", "", "\tif (!ws)", "\t\treturn;", "",
-                "\tspin_lock_irqsave(&ws->lock, flags);", "}",
-                "void pm_wakeup_ws_event(struct wakeup_source *ws, unsigned int msec, bool hard)", "{",
-                "\tunsigned long flags;", "\tunsigned long expires;", "",
-                "\tif (!ws)", "\t\treturn;", "", "\tspin_lock_irqsave(&ws->lock, flags);", "}", "",
-            ])
-            (tree / "drivers/base/power/wakeup.c").write_text(wakeup_source)
-            result = subprocess.run(["git", "apply", "--check", str(patch)], cwd=tree,
-                                    text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            subprocess.run(["git", "apply", str(patch)], cwd=tree, check=True)
-            result = subprocess.run([sys.executable, "-c", kconfig_source], cwd=tree,
-                                    text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((tree / "drivers/Kconfig").read_text().count(
-                "config ASB_WAKEUP_BLOCKER"), 1)
-            wakeup = (tree / "drivers/base/power/wakeup.c").read_text()
-            self.assertEqual(wakeup.count("asb_wakeup_source_blocked(ws->name)"), 2)
-            driver = (tree / "drivers/base/power/asb_wakeup_blocker.c").read_text()
-            self.assertIn("ASB_WAKEUP_MAX_RULES 16", driver)
-            self.assertIn("DEFINE_STATIC_KEY_FALSE", driver)
-            self.assertNotIn("LIST_WL_DEFAULT", driver)
-            rule = driver.split("struct asb_wakeup_rule {", 1)[1].split("};", 1)[0]
-            self.assertIn("atomic64_t blocked;", rule,
-                          "run 118092223994: rule->blocked was used without a struct member")
-            self.assertEqual(driver.count("rule->blocked"), 3)
+        patch_root = ROOT / ".github/patches/android16-6.12"
+        for sublevel in (69, 92):
+            with self.subTest(sublevel=sublevel), tempfile.TemporaryDirectory() as d:
+                root = Path(d); tree = root / "kernel/common"
+                (tree / "drivers/base/power").mkdir(parents=True)
+                (tree / "drivers/Kconfig").write_text(
+                    'source "drivers/cdx/Kconfig"\n\nsource "drivers/dpll/Kconfig"\n\nendmenu\n')
+                (tree / "Makefile").write_text(f"VERSION = 6\nPATCHLEVEL = 12\nSUBLEVEL = {sublevel}\n")
+                (tree / "drivers/base/power/Makefile").write_text(
+                    "# SPDX-License-Identifier: GPL-2.0\n"
+                    "obj-$(CONFIG_PM)\t+= sysfs.o generic_ops.o common.o qos.o runtime.o wakeirq.o\n"
+                    "obj-$(CONFIG_PM_SLEEP)\t+= main.o wakeup.o wakeup_stats.o\n"
+                    "obj-$(CONFIG_PM_TRACE_RTC)\t+= trace.o\n"
+                    "obj-$(CONFIG_HAVE_CLK)\t+= clock_ops.o\n"
+                    "obj-$(CONFIG_PM_QOS_KUNIT_TEST) += qos-test.o\n")
+                includes = ["#include <linux/irq.h>", "#include <linux/irqdesc.h>",
+                            "#include <linux/wakeup_reason.h>"]
+                if sublevel == 92:
+                    includes.append("#include <linux/string.h>")
+                wakeup_source = "\n".join(includes + [
+                    "#include <trace/events/power.h>", "", "#include \"power.h\"", "",
+                    "void __pm_stay_awake(struct wakeup_source *ws)", "{",
+                    "\tunsigned long flags;", "", "\tif (!ws)", "\t\treturn;", "",
+                    "\tspin_lock_irqsave(&ws->lock, flags);", "}",
+                    "void pm_wakeup_ws_event(struct wakeup_source *ws, unsigned int msec, bool hard)", "{",
+                    "\tunsigned long flags;", "\tunsigned long expires;", "",
+                    "\tif (!ws)", "\t\treturn;", "", "\tspin_lock_irqsave(&ws->lock, flags);", "}", "",
+                ])
+                (tree / "drivers/base/power/wakeup.c").write_text(wakeup_source)
+                output = root / "provenance.json"; log = root / "preflight.log"
+                result = subprocess.run([
+                    sys.executable, "-I", str(SCRIPTS / "asb_wakeup_blocker_apply.py"),
+                    "--workspace", str(root), "--tree", str(tree), "--family", "android16-6.12",
+                    "--patch-root", str(patch_root), "--output", str(output), "--log", str(log),
+                ], cwd=tree, text=True, capture_output=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                provenance = json.loads(output.read_text())
+                self.assertEqual(provenance["status"], "applied")
+                self.assertEqual(provenance["kernel"], f"6.12.{sublevel}")
+                self.assertEqual(provenance["call_sites"], 2)
+                self.assertEqual(provenance["patch_sha256"], hashlib.sha256(
+                    (patch_root / f"asb-wakeup-blocker-6.12.{sublevel}.patch").read_bytes()).hexdigest())
+                self.assertEqual((tree / "drivers/Kconfig").read_text().count(
+                    "config ASB_WAKEUP_BLOCKER"), 1)
+                integrated = (tree / "drivers/base/power/wakeup.c").read_text()
+                self.assertEqual(integrated.count("asb_wakeup_source_blocked(ws->name)"), 2)
+                driver = (tree / "drivers/base/power/asb_wakeup_blocker.c").read_text()
+                self.assertIn("ASB_WAKEUP_MAX_RULES 16", driver)
+                self.assertIn("DEFINE_STATIC_KEY_FALSE", driver)
+                self.assertNotIn("LIST_WL_DEFAULT", driver)
+                rule = driver.split("struct asb_wakeup_rule {", 1)[1].split("};", 1)[0]
+                self.assertIn("atomic64_t blocked;", rule,
+                              "run 118092223994: rule->blocked was used without a struct member")
+                self.assertEqual(driver.count("rule->blocked"), 3)
+
+    def test_wakeup_unknown_sublevel_and_source_drift_fail_before_changes(self):
+        patch_root = ROOT / ".github/patches/android16-6.12"
+        for sublevel, drift in ((93, False), (92, True)):
+            with self.subTest(sublevel=sublevel, drift=drift), tempfile.TemporaryDirectory() as d:
+                root = Path(d); tree = root / "kernel/common"
+                (tree / "drivers/base/power").mkdir(parents=True)
+                (tree / "drivers/Kconfig").write_text('source "drivers/dpll/Kconfig"\nendmenu\n')
+                (tree / "Makefile").write_text(f"VERSION = 6\nPATCHLEVEL = 12\nSUBLEVEL = {sublevel}\n")
+                makefile = tree / "drivers/base/power/Makefile"
+                makefile.write_text("obj-$(CONFIG_PM_SLEEP)\t+= main.o wakeup.o wakeup_stats.o\n")
+                wakeup_path = tree / "drivers/base/power/wakeup.c"
+                original = "\n".join([
+                    "#include <linux/irq.h>", "#include <linux/irqdesc.h>",
+                    "#include <linux/wakeup_reason.h>", "#include <linux/string.h>",
+                    "#include <trace/events/power.h>", "", "void __pm_stay_awake(struct wakeup_source *ws)", "{",
+                    "\tif (!ws)", "\t\treturn;", "}",
+                    "void pm_wakeup_ws_event(struct wakeup_source *ws, unsigned int msec, bool hard)", "{",
+                    "\tif (!ws)", "\t\treturn;", "}", "",
+                ])
+                wakeup_path.write_text(original.replace("#include <linux/string.h>\n", "") if drift else original)
+                output = root / "provenance.json"
+                result = subprocess.run([
+                    sys.executable, "-I", str(SCRIPTS / "asb_wakeup_blocker_apply.py"),
+                    "--workspace", str(root), "--tree", str(tree), "--family", "android16-6.12",
+                    "--patch-root", str(patch_root), "--output", str(output), "--log", str(root / "preflight.log"),
+                ], text=True, capture_output=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(wakeup_path.read_text(), original.replace("#include <linux/string.h>\n", "") if drift else original)
+                self.assertNotIn("ASB_WAKEUP_BLOCKER", makefile.read_text())
+                self.assertEqual(json.loads(output.read_text())["status"], "preflight_failed")
 
     def test_rekernel_integrator_rewrites_only_exact_anchors(self):
         action = (ROOT / ".github/actions/rekernel/action.yml").read_text()
@@ -377,9 +419,7 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
         self.assertEqual(build.count(rekernel_step), 1)
         self.assertLess(build.index(wakeup_step), build.index(rekernel_step))
 
-        patch = ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker.patch"
-        wakeup_source = embedded_source(
-            ".github/actions/asb-wakeup-blocker/action.yml", "ASB_WAKEUP_KCONFIG")
+        patch_root = ROOT / ".github/patches/android16-6.12"
         action = (ROOT / ".github/actions/rekernel/action.yml").read_text()
         marker = "python3 - \"$TREE\" \"$DST\" <<'PY'\n"
         rekernel_source = textwrap.dedent(
@@ -387,6 +427,7 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
 
         def prepare(tree):
             (tree / "drivers/base/power").mkdir(parents=True)
+            (tree / "Makefile").write_text("VERSION = 6\nPATCHLEVEL = 12\nSUBLEVEL = 69\n")
             # KernelSU-Next inserts its source immediately before endmenu.
             (tree / "drivers/Kconfig").write_text(
                 'source "drivers/cdx/Kconfig"\n\nsource "drivers/dpll/Kconfig"\n\n'
@@ -410,11 +451,12 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             ]))
 
         def apply_wakeup(tree):
-            result = subprocess.run(["git", "apply", str(patch)], cwd=tree,
-                                    text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            result = subprocess.run([sys.executable, "-c", wakeup_source], cwd=tree,
-                                    text=True, capture_output=True, check=False)
+            result = subprocess.run([
+                sys.executable, "-I", str(SCRIPTS / "asb_wakeup_blocker_apply.py"),
+                "--workspace", str(tree), "--tree", str(tree), "--family", "android16-6.12",
+                "--patch-root", str(patch_root), "--output", str(tree / "wakeup-provenance.json"),
+                "--log", str(tree / "wakeup-preflight.log"),
+            ], cwd=tree, text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
 
         def integrate_rekernel(tree):
@@ -470,7 +512,7 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
     def test_wakeup_driver_includes_what_it_uses(self):
         # Run 117316696254 failed to compile: list_for_each_entry_rcu and
         # list_add_rcu/list_del_rcu live in <linux/rculist.h>, not <linux/list.h>.
-        patch = (ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker.patch").read_text()
+        patch = (ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.69.patch").read_text()
         driver = [l[1:] for l in patch.split("b/drivers/base/power/asb_wakeup_blocker.c", 2)[2]
                   .split("diff --git", 1)[0].splitlines() if l.startswith("+") and not l.startswith("+++")]
         includes = {l.split("<", 1)[1].rstrip(">") for l in driver if l.startswith("#include <")}
@@ -563,8 +605,6 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
         self.assertIn('[ "${{ inputs.version }}" = "android16-6.12" ]', action)
 
     def test_wakeup_kconfig_anchor_is_fail_closed(self):
-        source = embedded_source(
-            ".github/actions/asb-wakeup-blocker/action.yml", "ASB_WAKEUP_KCONFIG")
         with tempfile.TemporaryDirectory() as d:
             tree = Path(d)
             (tree / "drivers").mkdir()
@@ -572,26 +612,20 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             kconfig.write_text(
                 'source "drivers/kernelsu/Kconfig"\n'
                 'source "drivers/rekernel/Kconfig"\nendmenu\n')
-            result = subprocess.run([sys.executable, "-c", source], cwd=tree,
-                                    text=True, capture_output=True, check=False)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            wakeup.kconfig(tree)
             integrated = kconfig.read_text()
             self.assertLess(integrated.index('source "drivers/kernelsu/Kconfig"'),
                             integrated.index("config ASB_WAKEUP_BLOCKER"))
             self.assertLess(integrated.index('source "drivers/rekernel/Kconfig"'),
                             integrated.index("config ASB_WAKEUP_BLOCKER"))
 
-            duplicate = subprocess.run([sys.executable, "-c", source], cwd=tree,
-                                       text=True, capture_output=True, check=False)
-            self.assertNotEqual(duplicate.returncode, 0)
-            self.assertIn("duplicate ASB wakeup Kconfig entry", duplicate.stderr)
+            with self.assertRaisesRegex(ValueError, "duplicate ASB wakeup Kconfig entry"):
+                wakeup.kconfig(tree)
             self.assertEqual(kconfig.read_text(), integrated)
 
             kconfig.write_text('source "drivers/dpll/Kconfig"\nendmenu')
-            bad_anchor = subprocess.run([sys.executable, "-c", source], cwd=tree,
-                                        text=True, capture_output=True, check=False)
-            self.assertNotEqual(bad_anchor.returncode, 0)
-            self.assertIn("final menu anchor changed", bad_anchor.stderr)
+            with self.assertRaisesRegex(ValueError, "final menu anchor changed"):
+                wakeup.kconfig(tree)
             self.assertEqual(kconfig.read_text(), 'source "drivers/dpll/Kconfig"\nendmenu')
 
 
