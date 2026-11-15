@@ -48,9 +48,11 @@ question does not need to be re-researched.
 - **Already in the GKI 6.12 defconfig:** `RCU_LAZY`, `RCU_NOCB_CPU_DEFAULT_ALL`,
   `SCHED_CLASS_EXT`, the TEO cpuidle governor and `LRU_GEN`. Patches that only enable these
   add nothing.
-- **BORE scheduler branch:** relocates scheduler fields with KABI workarounds, and the branch's
-  own notes report boot loops on 6.12. It targets interactivity, not energy, and the phone's
-  vendor scheduler (WALT) makes most task placement decisions anyway.
+- **BORE scheduler:** added as an opt-in experiment (see the next section), off by default.
+  The upstream branch's own notes report boot loops on 6.12 when its per-task state is left
+  inside `task_struct`; the port here keeps that structure's layout. BORE targets
+  responsiveness, not energy, and the phone's vendor scheduler (WALT) still makes most
+  placement decisions, so no power gain is claimed.
 - **HZ=1000 branch:** more timer ticks (more wakeups), and vendor modules are compiled against
   the stock HZ, so jiffies conversions inside them would be wrong.
 - **sched_ext ports for other phones** (a OnePlus sched_ext scheduler for 6.6 kernels): written
@@ -65,3 +67,31 @@ question does not need to be re-researched.
 
 Newer GKI bases are already selectable in the build matrix (android16-6.12 2026-06 and
 2026-09); 2026-03 stays the known-good base until a newer build has boot-tested on the phone.
+
+## BORE scheduler, opt-in (kernel dev62)
+
+Selected with the dispatch input `use_perf = bore` (Performance plus BORE); `true` and `false`
+behave as before and the nightly build never carries it. It is wired for android16-6.12 only,
+and a dispatch that names another Kernel Version, or All, is refused. The workflow dispatch
+form is at GitHub's limit of 25 inputs, so this is a third value of `use_perf` instead of a new
+switch.
+
+- **Patch:** BORE 7.0.0 for 6.12 from the upstream author, vendored with its SHA-256 pinned in
+  `tests/test_bore.py`, applied after the other performance patches.
+- **Fit on 6.12.69:** the patch was cut against 6.12.37. Dry-run on the 2026-03 tree (6.12.69):
+  two hunks of `fair.c` are rejected and one lands inside a comment. `bore_gki612_fixups.py`
+  ports the base-slice sysctl block (the export of `sysctl_sched_base_slice` stays outside the
+  `#ifdef`), moves the `update_curr_bore()` call to its real place and applies BORE's condition
+  to the slice protection in `__pick_eevdf`. Every anchor is checked; a tree that drifted stops
+  the build. Another sublevel can need new ports.
+- **KMI:** BORE's per-task state is not left in `task_struct`. It is a `struct bore_ctx *` in the
+  last reserved slot (`ANDROID_KABI_USE(8, ...)`, which `__GENKSYMS__` still sees as the stock
+  reserved u64), allocated in `copy_process`, freed in `free_task`. The KMI CRC guard still runs
+  against `abi.stg`.
+- **Verified here:** the patch plus the scripts apply to a 6.12.69 tree without rejects, the
+  inline `bore_ctx` is gone, the accessors are rewritten and a second run refuses the patched
+  tree. **Not verified:** a compile, the CRC guard and a boot; the host has no kernel build.
+  The first CI run is therefore the real test, and the result needs a boot on the phone before
+  it is marked known-good. Keep the previous image to flash back.
+- **Switching it off at runtime:** BORE exposes `/proc/sys/kernel/sched_bore` (0 = plain EEVDF),
+  so a boot that works can be compared against stock behaviour without reflashing.
