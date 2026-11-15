@@ -215,6 +215,25 @@ class CapabilityReportTest(unittest.TestCase):
             self.assertNotIn("vpn_hide", contract["controls"])
 
 
+    def test_usb_webcam_capability_is_build_evidence_with_external_owners(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".config"
+            path.write_text("CONFIG_USB_CONFIGFS_F_UVC=y\nCONFIG_USB_F_UVC=y\n")
+            report = caps.make_report(path, "")
+            webcam = report["capabilities"]["media.usb_webcam"]
+            self.assertEqual(webcam["build_state"], "available_in_config")
+            self.assertEqual(webcam["runtime_state"], "unknown")
+            self.assertIn("opts in", webcam["asb_use"])
+            owner = report["asb_contract"]["external_owners"]["usb_webcam"]
+            self.assertIn("DeviceAsWebcam", owner)
+            self.assertIn("gadget HAL", owner)
+            self.assertNotIn("usb_webcam", report["asb_contract"]["controls"])
+            self.assertEqual(report["asb_contract"]["writers_added"], [])
+            path.write_text("CONFIG_USB_CONFIGFS_F_UVC=y\n# CONFIG_USB_F_UVC is not set\n")
+            self.assertEqual(caps.make_report(path, "")["capabilities"]["media.usb_webcam"]["build_state"],
+                             "not_available_in_config")
+
+
 class KernelFeatureIntegrationTest(unittest.TestCase):
     def write_config(self, directory, disabled=()):
         path = Path(directory) / ".config"
@@ -1261,6 +1280,12 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
             self.assertIn("not used; not required for AOSP GKI mode", text)
             self.assertIn("apply=0, skip=1, rejects=0", text)
             self.assertNotIn("NoMount-Metamodule", text)
+            self.assertIn("### 📷 ASB Camera Tools", text)
+            self.assertIn("⚠️ not in the final config", text)
+            self.assertIn("vendor modules built against the KMI", text)
+            config.write_text("CONFIG_PSI=y\nCONFIG_USB_CONFIGFS_F_UVC=y\nCONFIG_USB_F_UVC=y\n")
+            (root / "kernel-capabilities.json").write_text(json.dumps(caps.make_report(config, "SUSFS+Perf+VPN")))
+            self.assertIn("✅ built in", build_summary.render(args, {"KERNEL_SOURCE": "aosp"}))
             args.feature_set = "Perf"
             sparse = build_summary.render(args, {"KERNEL_SOURCE": "aosp"})
             self.assertIn("| SUSFS | not requested | N/A | N/A |", sparse)
