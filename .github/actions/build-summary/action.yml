@@ -84,6 +84,22 @@ runs:
           SUSFS_VER="${SUSFS_VER:-N/A}"
         fi
 
+        # Compare exact current inputs with the latest recorded known-good set.
+        # This is deliberately offline: unavailable local history stays explicit.
+        python3 -I "${{ github.workspace }}/.github/scripts/build_delta.py" \
+          --workspace "${{ github.workspace }}" \
+          --output "${{ github.workspace }}/build-delta.json" \
+          --file-name "${SUMMARY_BASE}" \
+          --family "${{ inputs.family }}" \
+          --os-patch-level "${{ inputs.os_patch_level }}" \
+          --variant "${{ inputs.variant }}" \
+          --feature-set "${{ inputs.feature_set }}" \
+          --susfs-commit "${{ inputs.susfs_commit }}" \
+          --nomount-commit "${{ inputs.nomount_commit }}" \
+          --droidspaces-commit "${{ inputs.droidspaces_commit }}" \
+          --kernel-patches-commit "${{ inputs.kernel_patches_commit }}" \
+          --anykernel3-commit "${{ inputs.anykernel3_commit }}"
+
         # The tracked renderer is executed from this checkout. Keeping it as a real
         # source file leaves room for the full evidence report below GitHub's per-run
         # expression limit and makes clean-unpack execution directly testable.
