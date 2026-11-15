@@ -860,7 +860,7 @@ class NoMountMetadataTest(unittest.TestCase):
                 self.assertTrue(prop.startswith("id=nomount\nname=NoMount\n") and "author=x" in prop)
                 inside = subprocess.run(["unzip", "-p", str(zipf), "module.prop"], capture_output=True, text=True).stdout
                 self.assertEqual(inside, prop)
-                self.assertIn("`v2.3.0 (5)` · versionCode 5", Path(d, "summary").read_text())
+                self.assertIn("`v2.3.0 (5)` · versionCode 5 · commit `", Path(d, "summary").read_text())
                 self.assertEqual("::notice::" in res.stdout, packaged != "version=v2.3.0 (5)\nversionCode=5\n")
         for kw, why in (({"meta": {"version": "v2.3.0", "versionCode": 9}}, "older than its update metadata"),
                         ({"meta": {"version": "v2.2.0", "versionCode": 5}}, "base versions differ"),
@@ -871,6 +871,35 @@ class NoMountMetadataTest(unittest.TestCase):
                 self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
                 self.assertIn(why, res.stderr)
                 self.assertIn("versionCode=1", prop)
+
+    def test_run_summary_names_the_vpnhide_module_version_without_gating_it(self):
+        main = (ROOT / ".github/workflows/main.yml").read_text()
+        job = main[main.index("  build-vpnhide-module:"):main.index("  build-android12-5-10:")]
+        self.assertLess(job.index("- name: Build vpnhide-builtin companion module"), job.index("- name: Report VPN Hide module version"))
+        self.assertLess(job.index("- name: Report VPN Hide module version"), job.index("- name: Upload VPN Hide built-in companion module"))
+        step = job[job.index("- name: Report VPN Hide module version"):job.index("- name: Upload VPN Hide built-in companion module")]
+        self.assertNotIn("exit 1", step)
+        body = step[step.index("run: |") + len("run: |"):]
+        script = textwrap.dedent("\n".join(l for l in body.splitlines() if l.strip() or l == ""))
+        sha = "de336b652104abb96e65a0bb6bbb53ad14ea0a6d"
+        for version, code, warn in (("v1.3.1", "10301", ""), ("v1.3.0", "10301", "the fetched source says 'v1.3.1'"),
+                                    ("v1.3.1", "", "no positive versionCode")):
+            with self.subTest(version=version, code=code), tempfile.TemporaryDirectory() as d:
+                mod = Path(d, "mod"); mod.mkdir(); Path(d, "vpnhide").mkdir()
+                Path(d, "vpnhide/VERSION").write_text("1.3.1\n")
+                Path(mod, "module.prop").write_text(f"id=vpnhide_builtin\nname=VPN Hide (Built-in kernel)\nversion={version}\nversionCode={code}\n")
+                res = subprocess.run(["bash", "-c", script], text=True, capture_output=True, cwd=d,
+                                     env=dict(os.environ, VPNHIDE_MODULE_DIR=str(mod), VPNHIDE_COMMIT=sha,
+                                              GITHUB_STEP_SUMMARY=str(Path(d, "summary"))))
+                self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+                summary = Path(d, "summary").read_text()
+                self.assertIn("### VPN Hide built-in module", summary)
+                self.assertIn(f"`{version}` · versionCode {code or 'none'} · commit `de336b652104` · id `vpnhide_builtin`", summary)
+                if warn:
+                    self.assertIn("::warning::", res.stdout)
+                    self.assertIn(warn, res.stdout)
+                else:
+                    self.assertNotIn("::warning::", res.stdout)
 
     def test_packaging_uses_full_history_and_never_forces_version_code_one(self):
         action = (ROOT / ".github/actions/nomount-metamodule/action.yml").read_text()
