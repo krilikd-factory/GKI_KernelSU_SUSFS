@@ -722,6 +722,9 @@ jobs:
           page_size: ${{ inputs.page_size }}
 
       - name: Upload Build Summary + Metadata
+        # Stable-patch preflight can fail before compilation. Preserve its JSON/log
+        # and the failure summary instead of skipping BuildInfo on job failure.
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.extract.outputs.file_name }}-BuildInfo
@@ -731,6 +734,9 @@ jobs:
             ${{ github.workspace }}/kernel-final.config
             ${{ github.workspace }}/kernel-capabilities.json
             ${{ github.workspace }}/rekernel-provenance.json
+            ${{ github.workspace }}/asb-wakeup-blocker-provenance.json
+            ${{ github.workspace }}/asb-wakeup-blocker-preflight.log
+            ${{ github.workspace }}/build-delta.json
             ${{ github.workspace }}/patch-inventory.json
             ${{ github.workspace }}/performance-patch-audit.json
             ${{ github.workspace }}/kmi-crc-report.txt

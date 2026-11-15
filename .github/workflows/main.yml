@@ -215,7 +215,10 @@ jobs:
       usb_arsenal_commit: ${{ steps.resolve.outputs.usb_arsenal_commit }}
       extra_pins: ${{ steps.resolve.outputs.extra_pins }}
       effective_os_patch_level: ${{ steps.resolve.outputs.effective_os_patch_level }}
+      # BORE is supported only by the android16-6.12 integration. Scheduled
+      # builds use feature_set for that family and feature_set_no_bore elsewhere.
       feature_set: ${{ steps.features.outputs.feature_set }}
+      feature_set_no_bore: ${{ steps.features.outputs.feature_set_no_bore }}
       pin_susfs_commit: ${{ steps.resolve.outputs.pin_susfs_commit }}
       pin_kernel_common: ${{ steps.resolve.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ steps.resolve.outputs.pin_bbg_commit }}
@@ -624,13 +627,15 @@ jobs:
           # ships no manager).
 
           # Scheduled (nightly) runs carry NO inputs - the use_* booleans are
-          # empty strings, not true - so read them with schedule defaults:
-          # every feature ON, matching the dispatch defaults (Perf included).
+          # empty strings, not true - so read them with schedule defaults.
+          # BORE is requested for the scheduled android16-6.12 family only:
+          # feature_set_no_bore below prevents its propagation to other families.
+          # This is a build-policy choice, not a battery/performance guarantee.
           if [ "${{ github.event_name }}" = "schedule" ]; then
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
             F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true; F_RK=true; F_AWL=true; F_SDP=true
-            F_BORE=false
+            F_BORE=true
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
@@ -682,7 +687,9 @@ jobs:
           [ "$F_RK" = "true" ] && FEATURES="${FEATURES}RK+"
           [ "$F_AWL" = "true" ] && FEATURES="${FEATURES}AWL+"
           [ "$F_SDP" = "true" ] && FEATURES="${FEATURES}SDP900+"
+          FEATURES_NO_BORE="${FEATURES//BORE+/}"
           echo "feature_set=${FEATURES%+}" >> "$GITHUB_OUTPUT"
+          echo "feature_set_no_bore=${FEATURES_NO_BORE%+}" >> "$GITHUB_OUTPUT"
 
           # known-good pins commits, not features: say so when this dispatch
           # turns on something the booted build did not have. Note the old
@@ -956,7 +963,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android12-5.10.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android12_5_10_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android12_5_10_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android12_5_10) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
       kernel_patches_commit: ${{ needs.resolve-sources.outputs.kernel_patches_commit }}
@@ -991,7 +998,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android13-5.10.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android13_5_10_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android13_5_10_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android13_5_10) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
       kernel_patches_commit: ${{ needs.resolve-sources.outputs.kernel_patches_commit }}
@@ -1026,7 +1033,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android13-5.15.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android13_5_15_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android13_5_15_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android13_5_15) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
       kernel_patches_commit: ${{ needs.resolve-sources.outputs.kernel_patches_commit }}
@@ -1061,7 +1068,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android14-5.15.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android14_5_15_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android14_5_15_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android14_5_15) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
       kernel_patches_commit: ${{ needs.resolve-sources.outputs.kernel_patches_commit }}
@@ -1096,7 +1103,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android14-6.1.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android14_6_1_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android14_6_1_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android14_6_1) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
       kernel_patches_commit: ${{ needs.resolve-sources.outputs.kernel_patches_commit }}
@@ -1131,7 +1138,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android15-6.6.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android15_6_6_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android15_6_6_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android15_6_6) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
       kernel_patches_commit: ${{ needs.resolve-sources.outputs.kernel_patches_commit }}
@@ -1166,6 +1173,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android16-6.12.json
+      # The only family with a reviewed BORE integration.
       feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
       susfs_commit: ${{ matrix.root.root_flavor == 'bakasu' && needs.resolve-sources.outputs.susfs_commit_android16_6_12_bakasu || (matrix.root.root_flavor == 'sukisu-ultra' && needs.resolve-sources.outputs.susfs_commit_android16_6_12_sukisu_ultra || needs.resolve-sources.outputs.susfs_commit_android16_6_12) }}
       nomount_commit: ${{ needs.resolve-sources.outputs.nomount_commit }}
@@ -1201,7 +1209,7 @@ jobs:
     uses: ./.github/workflows/prepare.yml
     with:
       config_file: .github/config/android17-6.18.json
-      feature_set: ${{ needs.resolve-sources.outputs.feature_set }}
+      feature_set: ${{ needs.resolve-sources.outputs.feature_set_no_bore }}
       # simonpunk/susfs4ksu has no gki-android17-6.18 branch (19 branches, newest
       # is gki-android16-6.12), so no SUSFS pin is emitted for this family. A
       # SUSFS-enabled 6.18 dispatch therefore fails loudly in the SUSFS resolve
@@ -2166,8 +2174,10 @@ jobs:
           USE_PTRACE: ${{ github.event_name == 'schedule' || inputs.compatibility_patches == 'both' || inputs.compatibility_patches == 'ptrace' }}
           USE_UNICODE: ${{ github.event_name == 'schedule' || inputs.compatibility_patches == 'both' || inputs.compatibility_patches == 'unicode' }}
           USE_BPF: ${{ inputs.use_bpf || (github.event_name == 'schedule' && true) || false }}
-          USE_PERF: ${{ inputs.use_perf || false }}
-          USE_BORE: ${{ inputs.use_perf == 'bore' }}
+          # Resolve the preview from the same composed feature set as the builds;
+          # scheduled runs have no inputs.use_perf value.
+          USE_PERF: ${{ contains(needs.resolve-sources.outputs.feature_set, 'Perf') }}
+          USE_BORE: ${{ contains(needs.resolve-sources.outputs.feature_set, 'BORE') }}
           PAGE_SIZE: ${{ inputs.page_size || '4k' }}
           KERNEL_BUILD_VERSION: ${{ inputs.kernel_build_version || 'All' }}
           NOMOUNT_COMMIT: ${{ needs.resolve-sources.outputs.nomount_commit }}
