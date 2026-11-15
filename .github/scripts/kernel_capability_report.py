@@ -111,8 +111,8 @@ CONTROL_CANDIDATES = {
             "stock": "restore the exact value captured before ASB's first write",
             "1000": ["1000"],
             "2000": ["2000"],
-            "5000": ["5000"],
         },
+        # ASB reads a stored legacy 5000 as 2000 and never writes 5000 any more.
         "owner": "ASB kernel-controls helper; the legacy mglru_hold direct writer is retired",
         "readback": "exact integer readback is required",
     },
@@ -124,6 +124,7 @@ CONTROL_CANDIDATES = {
             "stock": "restore the exact value captured before ASB's first write",
             "off": ["0"],
             "on": ["1"],
+            "auto": {"performance": ["0"], "other_profiles": "restore the exact value captured before ASB's first write"},
         },
         "owner": "ASB kernel-controls helper; profile and reinforce paths do not write directly",
         "readback": "exact 0/1 readback is required",
@@ -143,6 +144,7 @@ CONTROL_CANDIDATES = {
             "4": ["4"],
             "8": ["8"],
             "16": ["16"],
+            "auto": {"battery": ["2"], "balanced": ["4"], "smart": ["4"], "performance": ["8"]},
         },
         "owner": "ASB kernel-controls helper; profile and reinforce paths do not write directly",
         "readback": "exact integer readback is required",
@@ -184,6 +186,24 @@ CONTROL_CANDIDATES = {
         },
         "owner": "ASB kernel-controls helper; profile and reinforce paths do not write directly",
         "readback": "exact 0/1 readback is required",
+    },
+    "kernel_rt_boost": {
+        "configs": ["CONFIG_UCLAMP_TASK"],
+        "runtime_path": "/proc/sys/kernel/sched_util_clamp_min_rt_default",
+        "value_type": "bounded_integer_0_1024",
+        "requests": {
+            "stock": "restore the exact value captured before ASB's first write",
+            "auto": {"battery": ["0"], "performance": ["256"], "other_profiles": "restore the exact value captured before ASB's first write"},
+            "0": ["0"],
+            "128": ["128"],
+            "256": ["256"],
+            "512": ["512"],
+        },
+        # The kernel boots with 1024 and Snapdragon post-boot scripts usually lower it to 0, so a
+        # baseline captured during boot would be the wrong value to restore later.
+        "runtime_guard": "baseline captured only after sys.boot_completed, the vendor post-boot service and 60 s uptime",
+        "owner": "ASB kernel-controls helper; profile switches re-apply it through the same owner",
+        "readback": "exact integer readback is required",
     },
 }
 
@@ -239,8 +259,9 @@ def make_report(config_path: Path, feature_set: str) -> dict:
             "owner": spec["owner"],
             "readback": spec["readback"],
         }
-        if "build_policy" in spec:
-            controls[name]["build_policy"] = spec["build_policy"]
+        for extra in ("build_policy", "runtime_guard"):
+            if extra in spec:
+                controls[name][extra] = spec[extra]
     return {
         "schema": 2,
         "scope": "final build config only; runtime and physical-device validation are separate",
