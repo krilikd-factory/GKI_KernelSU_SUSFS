@@ -13,7 +13,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
-FEATURE_ORDER = ("SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode", "BPF", "Perf", "VPN", "USB", "RK", "AWL", "SDP900")
+FEATURE_ORDER = ("SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode", "BPF", "Perf", "BORE", "VPN", "USB", "RK", "AWL", "SDP900")
 FEATURES = {
     "SUSFS": ("🛡️ SUSFS", "Kernel-side SUSFS integration; matching userspace remains required"),
     "NoMount": ("🧩 NoMount", "Mount metamodule integration; companion artifact is built separately"),
@@ -25,6 +25,7 @@ FEATURES = {
     "Unicode": ("🔤 Unicode fix", "Version-gated non-printable Unicode path fix"),
     "BPF": ("📊 BPF stack", "BTF, eBPF and FUSE-BPF build options"),
     "Perf": ("🚀 Performance pass", "Dry-run-checked patches plus stock-config and KMI guards"),
+    "BORE": ("⏱️ BORE scheduler (experimental)", "Burst-oriented EEVDF variant with its state kept out of task_struct's layout"),
     "VPN": ("🕵️ VPN Hide", "Built-in driver; managed only by its own app and matching companion"),
     "USB": ("🔌 USB Arsenal", "USB gadget integration, including ISO/DVD mode where the patch fits"),
     "RK": ("🧊 Re-Kernel", "Pinned built-in Re-Kernel driver and its netlink transport"),
@@ -75,6 +76,10 @@ FEATURE_GUIDE = {
         "Applies only the reviewed performance patches whose family/device/SoC policy and dry-run checks pass; the inventory records every apply/skip decision.",
         "Effects are patch-specific. This pass must not be read as a measured battery, responsiveness or FPS improvement, and it does not override vendor thermal ownership.",
         "Stock-config and KMI guards limit integration risk. Patch success and zero rejects still do not prove device boot or runtime superiority."),
+    "BORE": (
+        "Applies the BORE 7.0.0 scheduler patch to the 6.12 common tree. Its per-task state is moved out of task_struct into a pointer in the last reserved slot, so the structure keeps its stock layout and the KMI guard still compares against the stock ABI.",
+        "Changes how EEVDF picks the next task, mostly for interactive responsiveness. No battery or frame-rate gain is claimed here, and the phone's vendor scheduler still makes most placement decisions.",
+        "Compilation proves nothing about boot. The patch needed three hand ports on 6.12.69, and the same patch on another sublevel can stop the build. Boot-test and measure before relying on it."),
     "VPN": (
         "Builds the in-kernel VPN Hide driver at the pinned revision for use by its own app and matching companion.",
         "No ASB network policy or always-on worker is added. Runtime cost depends on the external owner's active configuration.",
