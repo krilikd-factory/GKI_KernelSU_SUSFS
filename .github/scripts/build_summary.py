@@ -169,6 +169,18 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
     provenance, provenance_error = read_json(workspace / "source-provenance.json")
     device, device_error = read_json(workspace / ".github/device.json")
     compact_inventory, _ = read_json(workspace / "patch-inventory.json")
+    delta, delta_error = read_json(workspace / "build-delta.json")
+    if isinstance(delta, dict) and delta.get("status") == "available":
+        delta_components = [item for item in delta.get("components", []) if isinstance(item, dict)]
+        delta_changed = sum(item.get("state") == "changed" for item in delta_components)
+        delta_added = sum(item.get("state") == "added" for item in delta_components)
+        delta_removed = sum(item.get("state") == "removed" for item in delta_components)
+        delta_incomplete = sum(item.get("state") in {"baseline_pin_unavailable", "current_pin_unavailable"} for item in delta_components)
+        delta_brief = f"{delta_changed} changed, {delta_added} added, {delta_removed} removed, {delta_incomplete} incomplete source/component pin comparisons vs {delta.get('previous', {}).get('file', 'recorded known-good')}"
+    elif isinstance(delta, dict):
+        delta_brief = "No recorded known-good baseline for this exact build key; no chronological diff claimed"
+    else:
+        delta_brief = f"Delta evidence unavailable: {delta_error}"
     compact_counts = Counter(p.get("decision", "unknown") for p in compact_inventory.get("patches", []) if isinstance(p, dict)) if isinstance(compact_inventory, dict) else Counter()
     patch_brief = (f"apply={compact_counts.get('apply', 0)}, skip={compact_counts.get('skip', 0)}, rejects={env.get('REJ_COUNT') or 'not recorded'}"
                    if isinstance(compact_inventory, dict) else f"inventory unavailable; rejects={env.get('REJ_COUNT') or 'not recorded'}")
@@ -198,6 +210,7 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         ("Patches", patch_brief),
         ("Root / SUSFS pins", f"{root_impl} {root_commit} · {susfs_brief}"),
         ("Feature groups", a.feature_set or "none"),
+        ("Previous known-good delta", delta_brief),
         ("Safety", f"KMI: {gate_state(a.job_status, workspace / 'kmi-crc-report.txt')}; stock config: {gate_state(a.job_status, workspace / 'stock-config-report.txt')}"),
         ("ASB wakeup ABI", "2 + read-only per-rule counters" if "AWL" in features else "not requested"),
     ])
@@ -217,6 +230,69 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         ("Variant / mode", f"{a.variant} / TOP"), ("ARM64 page size", a.page_size),
         ("LTO in final config", lto), ("Patch channel", patch_channel), ("Run", run_url),
     ])
+
+    lines += ["### 🔁 Changes vs previous recorded known-good", ""]
+    if isinstance(delta, dict):
+        previous_delta = delta.get("previous") if isinstance(delta.get("previous"), dict) else {}
+        lines += [
+            f"**Baseline:** `{md(delta.get('key', 'not recorded'))}` · **status:** `{md(delta.get('status', 'unknown'))}`.",
+            "",
+            f"**Scope:** {md(delta.get('comparison_scope', 'recorded known-good comparison'))}",
+            "",
+        ]
+        if delta.get("status") == "available":
+            table(lines, ("Baseline field", "Recorded value"), [
+                ("Previous artifact", previous_delta.get("file", "not_recorded")),
+                ("Previous run", previous_delta.get("from_run", "not_recorded")),
+                ("Previous device evidence", previous_delta.get("validation_scope", "not_recorded")),
+                ("Current artifact", delta.get("current_file", a.file_name)),
+            ])
+            delta_features = delta.get("features") if isinstance(delta.get("features"), dict) else {}
+            table(lines, ("Feature-set delta", "Values"), [
+                ("Evidence", delta_features.get("status", "unknown")),
+                ("Added", ", ".join(delta_features.get("added", [])) or "none"),
+                ("Removed", ", ".join(delta_features.get("removed", [])) or "none"),
+                ("Previous", ", ".join(delta_features.get("previous", [])) or "not recorded"),
+                ("Current", ", ".join(delta_features.get("current", [])) or "none"),
+            ])
+            component_rows = []
+            for item in delta.get("components", []):
+                if not isinstance(item, dict):
+                    continue
+                old = str(item.get("previous", "not_recorded"))
+                new = str(item.get("current", "not_recorded"))
+                old_short = old[:12] if len(old) == 40 else old
+                new_short = new[:12] if len(new) == 40 else new
+                component_rows.append((item.get("kind", "component"), item.get("name", "unnamed"),
+                                       item.get("state", "unknown"), old_short, new_short,
+                                       item.get("history", "not_applicable")))
+            if component_rows:
+                table(lines, ("Kind", "Kernel / bundled component", "State", "Previous", "Current", "Local history"), component_rows)
+            else:
+                lines += ["No source/component pins were recorded for comparison.", ""]
+            for item in delta.get("components", []):
+                if not isinstance(item, dict) or item.get("state") != "changed":
+                    continue
+                lines += [f"#### {md(item.get('name', 'Component'))}", ""]
+                if item.get("compare_url"):
+                    lines += [f"Upstream commit-range: {md(item.get('compare_url'))}", ""]
+                commits = item.get("commits") if isinstance(item.get("commits"), list) else []
+                if commits:
+                    for commit in commits:
+                        if isinstance(commit, dict):
+                            lines.append(f"- `{md(commit.get('commit', '')[:12])}` {md(commit.get('subject', ''))}")
+                    if item.get("history") == "available_truncated_to_40":
+                        lines.append("- … local log truncated to 40 commits; use the upstream range for the remainder.")
+                    lines.append("")
+                else:
+                    lines += ["Exact pins changed, but commit subjects are not available in the local checkout. Use the upstream range; no change list is inferred from version strings.", ""]
+            for limitation in delta.get("limitations", []):
+                lines += [f"- {md(limitation)}"]
+            lines.append("")
+        else:
+            lines += ["No previous known-good entry exists for this exact family/patch/variant/source key. The report therefore does not claim a diff against an unrelated or merely chronological build.", ""]
+    else:
+        lines += [f"Delta report unavailable: **{md(delta_error)}**. This optional reporting failure is not converted into source-change claims.", ""]
 
     lines += ["### 🌳 Kernel source and OnePlus dependency", ""]
     required_provenance = {

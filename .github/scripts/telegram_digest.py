@@ -430,6 +430,10 @@ def main() -> int:
         feats_on = {s.strip().lower()
                     for s in re.split(r"[+,]", os.environ.get("DIGEST_FEATURES", ""))
                     if s.strip()}
+        # The scheduled resolve set is shared, but BORE has a reviewed build
+        # integration only for android16-6.12. Never advertise it on other cards.
+        if fam != "build-android16-6-12":
+            feats_on.discard("bore")
         variant = VARIANT_OF_FAM.get(fam, "")
         susfs_sha = os.environ.get(
             "SUSFS_" + variant.replace(".", "_").replace("-", "_").upper(), "")
@@ -474,6 +478,9 @@ def main() -> int:
         if "perf" in feats_on:
             flines2.append("- Performance patches")
             rlines2.append("- **Performance patches**")
+        if "bore" in feats_on:
+            flines2.append("- BORE scheduler (experimental; build config, runtime state not attested)")
+            rlines2.append("- **BORE scheduler** (experimental; build config, runtime state not attested)")
         feat_text = "\n".join(flines2)
         feat_rich = "\n".join(rlines2)
 

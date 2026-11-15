@@ -15,9 +15,19 @@ cd "$COMMON"
 grep -q '^VERSION = 6$' Makefile && grep -q '^PATCHLEVEL = 12$' Makefile || die "BORE is wired for 6.12 only"
 [ ! -e kernel/sched/bore.c ] || die "tree already carries BORE"
 
-patch -p1 -F3 --forward --no-backup-if-mismatch < "$PATCH" || true
+set +e
+patch -p1 -F3 --forward --no-backup-if-mismatch < "$PATCH"
+patch_rc=$?
+set -e
+case "$patch_rc" in
+  0|1) ;; # 1 is inspected below; only the two reviewed fair.c rejects may be ported.
+  *) die "patch exited with serious error $patch_rc; no fixup was attempted" ;;
+esac
 
 REJ="$(find . -name '*.rej' | sort)"
+if [ "$patch_rc" -eq 1 ] && [ -z "$REJ" ]; then
+  die "patch exited 1 without reject diagnostics"
+fi
 if [ -n "$REJ" ]; then
   [ "$REJ" = "./kernel/sched/fair.c.rej" ] || die "unexpected rejects: $REJ"
   HUNKS="$(grep -c '^@@' kernel/sched/fair.c.rej)"
