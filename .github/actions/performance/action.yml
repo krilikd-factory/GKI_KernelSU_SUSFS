@@ -132,8 +132,10 @@ runs:
               /suspend_abort_fs_sync();/d
           }' "$FILE"
         fi
+        # ext4 commit-age enlargement is deliberately blocked in policy: a larger
+        # uncommitted-data window is not an acceptable power/integrity trade-off.
         for p in avoid_extra_s2idle_wake_attempts disable_cache_hot_buddy \
-                 f2fs_enlarge_min_fsync_blocks increase_ext4_default_commit_age \
+                 f2fs_enlarge_min_fsync_blocks \
                  increase_sk_mem_packets reduce_pci_pme_wakeups \
                  silence_irq_cpu_logspam silence_system_logspam; do
           apply_reviewed_patch "$p" -F3 < "$KP/$p.patch"
