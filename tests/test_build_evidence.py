@@ -1497,8 +1497,10 @@ class WorkflowContractTest(unittest.TestCase):
             self.assertIn("not physical boot, power or thermal validation", report["evidence_boundary"])
         held = {p["name"] for p in reports["stable"]["patches"] if p["decision"] == "candidate_only"}
         self.assertEqual(held, expected_candidates)
-        self.assertTrue(all(p["decision"] == "apply" for p in reports["candidate"]["patches"]))
-        self.assertEqual(sum(p["decision"] == "apply" for p in reports["stable"]["patches"]), 16)
+        self.assertEqual(sum(p["decision"] == "apply" for p in reports["candidate"]["patches"]), 18)
+        self.assertEqual(sum(p["decision"] == "blocked" for p in reports["candidate"]["patches"]), 1)
+        self.assertEqual(sum(p["decision"] == "apply" for p in reports["stable"]["patches"]), 15)
+        self.assertEqual(sum(p["decision"] == "blocked" for p in reports["stable"]["patches"]), 1)
 
     def test_main_performance_policy_is_fail_closed_and_visible_in_buildinfo(self):
         action = (ROOT / ".github/actions/performance/action.yml").read_text()
