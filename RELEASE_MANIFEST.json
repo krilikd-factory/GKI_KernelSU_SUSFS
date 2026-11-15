@@ -1,0 +1,1313 @@
+{
+  "schema": 1,
+  "release": "GKI_KernelSU_SUSFS-BORE-6.12.92-source",
+  "base": "GKI_KernelSU_SUSFS-dev62-source.zip",
+  "hash_algorithm": "SHA-256",
+  "manifest_coverage": "Every regular file except RELEASE_MANIFEST.json itself; no symlinks or other non-regular entries are present.",
+  "file_count_excluding_manifest": 211,
+  "inventory_vs_base": {
+    "changed": [
+      ".github/actions/asb-wakeup-blocker/action.yml",
+      ".github/actions/build-summary/action.yml",
+      ".github/render_kernel_notes.py",
+      ".github/scripts/bore_apply.sh",
+      ".github/scripts/build_summary.py",
+      ".github/scripts/render_kernel_notes.py",
+      ".github/scripts/telegram_digest.py",
+      ".github/workflows/build.yml",
+      ".github/workflows/main.yml",
+      "tests/test_bore.py",
+      "tests/test_build_evidence.py"
+    ],
+    "added": [
+      ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.69.patch",
+      ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.92.patch",
+      ".github/scripts/asb_wakeup_blocker_apply.py",
+      ".github/scripts/build_delta.py",
+      "RELEASE_MANIFEST.json",
+      "tests/test_build_delta.py"
+    ],
+    "deleted": [
+      ".github/patches/android16-6.12/asb-wakeup-blocker.patch"
+    ],
+    "mode_changes": [],
+    "counts": {
+      "changed": 11,
+      "added": 6,
+      "deleted": 1,
+      "mode_changes": 0
+    }
+  },
+  "executable_files": [
+    ".github/scripts/bore_apply.sh"
+  ],
+  "files": [
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "bytes": 3114,
+      "mode": "0644",
+      "sha256": "161966d0b45c06baa9a5cd86faeb32ecae50c499b8837d90cccdaf7cf73dd8d8"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "bytes": 27,
+      "mode": "0644",
+      "sha256": "05905c8f244d51298bbd1778c286c8a6c9f7adf0d0e5a5f72f764d71ec82cc64"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/dev_use_only.yml",
+      "bytes": 959,
+      "mode": "0644",
+      "sha256": "906fe5112290ec1e54ec96fcbf252eb32fe57263230c5ad5ad7cc66505154ebd"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "bytes": 568,
+      "mode": "0644",
+      "sha256": "644723d02a8b2ff8907129ac124684307b6e4e05f6a98bcea010f896a02924b4"
+    },
+    {
+      "path": ".github/actions/apply-device-patches/action.yml",
+      "bytes": 8074,
+      "mode": "0644",
+      "sha256": "32eb4dc76c22d46b18aa3a5777df8293572b7c41a5166d5a1f595e65a49d38ef"
+    },
+    {
+      "path": ".github/actions/apply-kernel-branding/action.yml",
+      "bytes": 2758,
+      "mode": "0644",
+      "sha256": "2f62c82800f56daa3d92efa39241ff97f9b2ede60c0ea8dd6814010ca39040ac"
+    },
+    {
+      "path": ".github/actions/asb-wakeup-blocker/action.yml",
+      "bytes": 2535,
+      "mode": "0644",
+      "sha256": "1d508dd083cb5d9a9e9ec84b7f5f4ad22146f386ae573a24d4f6d8e42f0139fb"
+    },
+    {
+      "path": ".github/actions/bbg/action.yml",
+      "bytes": 3069,
+      "mode": "0644",
+      "sha256": "0a0a51bbc60644a8bc30ff07b140f0188fadf30a09c0dab2dc90d6aa0e141844"
+    },
+    {
+      "path": ".github/actions/bbrv3/action.yml",
+      "bytes": 4989,
+      "mode": "0644",
+      "sha256": "6ba0879afb4307a18f2587d2351f75a1c1c5188879fd0009b3dbcac153e0f9f6"
+    },
+    {
+      "path": ".github/actions/bbrv3/patches/0001-net-tcp-backport-BBRv3-to-android14-5.15-lts.patch",
+      "bytes": 123809,
+      "mode": "0644",
+      "sha256": "b29e43d0d83704c652d6b44882c4a6a66cdae2cf165e668ccf2571437ab4ee9f"
+    },
+    {
+      "path": ".github/actions/bbrv3/patches/0001-net-tcp-backport-BBRv3-to-android14-5.15.patch",
+      "bytes": 124096,
+      "mode": "0644",
+      "sha256": "e013ae90cdcfdc5cbeac8ac5f5ed8a40d79445304a0e59c27a18838b733a65d8"
+    },
+    {
+      "path": ".github/actions/bbrv3/patches/0002-net-tcp-add-tcp_snd_cwnd-and-tcp_snd_cwnd_set-helper-functions.patch",
+      "bytes": 1208,
+      "mode": "0644",
+      "sha256": "b3dfeec06287dc32372d88f141f5e377d40f019ddc59a9d2bf6395ff4b5ad308"
+    },
+    {
+      "path": ".github/actions/bore/action.yml",
+      "bytes": 1025,
+      "mode": "0644",
+      "sha256": "8c1f54656c0edc9d668ff06983127a5d8c90e291c081133694ed2c27081aab2d"
+    },
+    {
+      "path": ".github/actions/bore/patches/0001-linux6.12.37-bore-7.0.0.patch",
+      "bytes": 42594,
+      "mode": "0644",
+      "sha256": "4362579319376f47d0c38e2aa30347082d73e6f122d32442def194462243e2c6"
+    },
+    {
+      "path": ".github/actions/btf/action.yml",
+      "bytes": 10630,
+      "mode": "0644",
+      "sha256": "b48132b09d3ab2edcd7f17725716f75973e4a1d66352ce3f6e89664d2bdddc97"
+    },
+    {
+      "path": ".github/actions/btf/patches/0001-ANDROID-GKI-rework-the-ANDROID_KABI_USE-macro-to-not.patch",
+      "bytes": 1458,
+      "mode": "0644",
+      "sha256": "f07f7b0c3656d70fb82ac1c548d7ac37a2f641b3afc4e2e28713d946fa740776"
+    },
+    {
+      "path": ".github/actions/btf/patches/0001-libbpf-remove-feature-detection-BTF.patch",
+      "bytes": 2682,
+      "mode": "0644",
+      "sha256": "9d080fb2b95f66650372c761c70dc4986963bf9b773a5cc21388754ad0c5eb26"
+    },
+    {
+      "path": ".github/actions/btf/patches/0002-resolve_btfids-inherit-host-linker-flags.patch",
+      "bytes": 924,
+      "mode": "0644",
+      "sha256": "80e33a7497361e36d03426410b98b6f59b2733aaea503aae41d7e8ec06d579c1"
+    },
+    {
+      "path": ".github/actions/btf/patches/0003-btf-emit-xdp-buff.patch",
+      "bytes": 797,
+      "mode": "0644",
+      "sha256": "a10713384bfb3068713b69ac1cd45074bbcbb73cd3cbd117c88116247dcc9fe3"
+    },
+    {
+      "path": ".github/actions/btf/patches/0004-resolve_btfids-elf-word.patch",
+      "bytes": 2439,
+      "mode": "0644",
+      "sha256": "dd0006e9f4663fd1e23cea08fc62532fb66b054bba26088e3d435736bfd56d31"
+    },
+    {
+      "path": ".github/actions/build-kernel/action.yml",
+      "bytes": 16472,
+      "mode": "0644",
+      "sha256": "d354abdca44aea17d15a39686bdde90055d52afe1698921dd89298a3549d7125"
+    },
+    {
+      "path": ".github/actions/build-metadata/action.yml",
+      "bytes": 9017,
+      "mode": "0644",
+      "sha256": "4a68a2cd61a8109251f8a4b15f05f01d31926cb14b65a3a480574e73b573b8a3"
+    },
+    {
+      "path": ".github/actions/build-summary/action.yml",
+      "bytes": 5182,
+      "mode": "0644",
+      "sha256": "c13d3630b92ba8963aba367f40c6b17903d558029c007c13e5062d80b8fcbf98"
+    },
+    {
+      "path": ".github/actions/bypass-kernel/action.yml",
+      "bytes": 1533,
+      "mode": "0644",
+      "sha256": "ec35c03a36394f38384f6c5194e7255b4fa53b909a662c400fbc18290c15d251"
+    },
+    {
+      "path": ".github/actions/cifs/action.yml",
+      "bytes": 1839,
+      "mode": "0644",
+      "sha256": "86a92e0aa6febbfa8daceb43a7a636127234d4b13c4355c6f477b27de64e890e"
+    },
+    {
+      "path": ".github/actions/clean-kernel-flags/action.yml",
+      "bytes": 851,
+      "mode": "0644",
+      "sha256": "7eb12acab9475576586d86ec8381e3a95b6f4bdeddf31be8ed8633153973d172"
+    },
+    {
+      "path": ".github/actions/download-kernel/action.yml",
+      "bytes": 14520,
+      "mode": "0644",
+      "sha256": "508ce04d6b3932cb97fef7f04f111eadb0765febaa355a021552f7da62ab3607"
+    },
+    {
+      "path": ".github/actions/droidspaces/action.yml",
+      "bytes": 7328,
+      "mode": "0644",
+      "sha256": "8b3be0b8d6929382e55c548839f3a5f782f0f0db9585fc7b8a1b9f06d6df424e"
+    },
+    {
+      "path": ".github/actions/extract-sublevel-file-name/action.yml",
+      "bytes": 2460,
+      "mode": "0644",
+      "sha256": "1ac21eb6fe0f3d019192fb760e3d71069fbfaee88f22940e0f115372b1ccfa86"
+    },
+    {
+      "path": ".github/actions/fetch-root-managers/action.yml",
+      "bytes": 3819,
+      "mode": "0644",
+      "sha256": "013d820a3161e700d421d0ef7a1f8f477aa3bb0f927562381e1be46b892f38c0"
+    },
+    {
+      "path": ".github/actions/fuse-bpf/action.yml",
+      "bytes": 14228,
+      "mode": "0644",
+      "sha256": "db518562bc25b7a6792875a74a8e382d59c3f3d213c3604acbc8d4dc54fd8ce0"
+    },
+    {
+      "path": ".github/actions/kernel-fixes/action.yml",
+      "bytes": 7391,
+      "mode": "0644",
+      "sha256": "2a895bbe1af66fda4605ffddfe18687c410f01109482991bd3793d309b3393b6"
+    },
+    {
+      "path": ".github/actions/list-manager-apks/action.yml",
+      "bytes": 6310,
+      "mode": "0644",
+      "sha256": "d92ab0204248d132455ec8660f5e5843990b128f1c6285ec39d9b074bf8946c5"
+    },
+    {
+      "path": ".github/actions/misc/action.yml",
+      "bytes": 1354,
+      "mode": "0644",
+      "sha256": "a0eb51a7772b7b7eb51a9cca06bab31931dbc267a7962a5918266c92726a91d7"
+    },
+    {
+      "path": ".github/actions/networking/action.yml",
+      "bytes": 1107,
+      "mode": "0644",
+      "sha256": "576da230d65cb54f6446284d0e3ff100ad98db33c93921e31d6bfea4e8829bf1"
+    },
+    {
+      "path": ".github/actions/networking/patches/0001-net-tcp-backport-BBRv3-to-android14-5.15.patch",
+      "bytes": 124096,
+      "mode": "0644",
+      "sha256": "e013ae90cdcfdc5cbeac8ac5f5ed8a40d79445304a0e59c27a18838b733a65d8"
+    },
+    {
+      "path": ".github/actions/networking/patches/0001-net-tcp-backport-BBRv3-to-android16-6.12.patch",
+      "bytes": 111091,
+      "mode": "0644",
+      "sha256": "33e70aaa68f541ec859b6274e034310acf2020cfc52c15b520691377949e056f"
+    },
+    {
+      "path": ".github/actions/networking/patches/0002-net-tcp-add-tcp_snd_cwnd-and-tcp_snd_cwnd_set-helper-functions.patch",
+      "bytes": 1208,
+      "mode": "0644",
+      "sha256": "b3dfeec06287dc32372d88f141f5e377d40f019ddc59a9d2bf6395ff4b5ad308"
+    },
+    {
+      "path": ".github/actions/networking-config/action.yml",
+      "bytes": 2741,
+      "mode": "0644",
+      "sha256": "2216362bd92dcc451204de009c62ffa2b19e8f7089a911354e61866d8621df5c"
+    },
+    {
+      "path": ".github/actions/nomount/action.yml",
+      "bytes": 3680,
+      "mode": "0644",
+      "sha256": "5b0acb5cce942c705d398d45aa33a5dec6e6f3d18a6670288107879c35056fec"
+    },
+    {
+      "path": ".github/actions/nomount-metamodule/action.yml",
+      "bytes": 3362,
+      "mode": "0644",
+      "sha256": "4a9bff30d421835b264358628d06ae5f9e13865e20aa4f09a9cd2f650c0f83f5"
+    },
+    {
+      "path": ".github/actions/ntsync/action.yml",
+      "bytes": 2829,
+      "mode": "0644",
+      "sha256": "8c6dfe0b3e6a24c2c0e59ae0ffd77570bc006d3edee8a696019f0ba725e28c98"
+    },
+    {
+      "path": ".github/actions/ntsync/patches/0001-lockdep-detect-recursive-read.patch",
+      "bytes": 1608,
+      "mode": "0644",
+      "sha256": "0fd75ce04d08036968e016fa99f3f56f431e7fa373163f7c4eca8125216a52a0"
+    },
+    {
+      "path": ".github/actions/ntsync/patches/0002-lockdep-assert-none-held.patch",
+      "bytes": 2127,
+      "mode": "0644",
+      "sha256": "cb98a696674527ef8b52422f63772fb1c17c99bbac252df00b3874470d552822"
+    },
+    {
+      "path": ".github/actions/oplus-sdp-900ma/action.yml",
+      "bytes": 2252,
+      "mode": "0644",
+      "sha256": "eea393d5e46264adb731df155066b43cc7f50d648a419a15266b26e563ea457a"
+    },
+    {
+      "path": ".github/actions/performance/action.yml",
+      "bytes": 11652,
+      "mode": "0644",
+      "sha256": "24f9e6802841177703842ac519535f8004731e0ec9a94f8cf1f77154f557334c"
+    },
+    {
+      "path": ".github/actions/ptrace/action.yml",
+      "bytes": 778,
+      "mode": "0644",
+      "sha256": "59f6eec575c34f86a348c81b2ece43ad90aedbcd56a775f160fc4318b12dae49"
+    },
+    {
+      "path": ".github/actions/rekernel/action.yml",
+      "bytes": 5959,
+      "mode": "0644",
+      "sha256": "177f8e901834464678e6beba269cf6c250b5deb5a7aac16730eb20052a931efb"
+    },
+    {
+      "path": ".github/actions/release-from-run/action.yml",
+      "bytes": 12686,
+      "mode": "0644",
+      "sha256": "c72e4e61a2b30857cbc4df252e16edabee70a3aa98e5637ab52243af74d82b8e"
+    },
+    {
+      "path": ".github/actions/release-notes-preview/action.yml",
+      "bytes": 944,
+      "mode": "0644",
+      "sha256": "2b161fdf7aa5d3acbd7968e381c8df0f38b40ba3ae117a93155cef5d5ed23bf2"
+    },
+    {
+      "path": ".github/actions/remove-protected-exports/action.yml",
+      "bytes": 3626,
+      "mode": "0644",
+      "sha256": "7e20cf9d68001c9f17509ba1f1520b156aae824af898f6dacc634f169c522119"
+    },
+    {
+      "path": ".github/actions/resolve-managers/action.yml",
+      "bytes": 13753,
+      "mode": "0644",
+      "sha256": "bb3a6ca0f6cbf22a9c67beb7e586823ce9f3aa682ae825f2b2114174841e8d8e"
+    },
+    {
+      "path": ".github/actions/retry/action.yml",
+      "bytes": 1893,
+      "mode": "0644",
+      "sha256": "ad430d4e2cbe36d87905a9b61acf4ed27c388bf5bb7a643b7d73e41048c765ad"
+    },
+    {
+      "path": ".github/actions/root-setup/action.yml",
+      "bytes": 10346,
+      "mode": "0644",
+      "sha256": "1695b87448bffa34dbfff4dd27a462c9e903fcfdd32f26c42c8f78f977db17a1"
+    },
+    {
+      "path": ".github/actions/scan-patch-rejects/action.yml",
+      "bytes": 1507,
+      "mode": "0644",
+      "sha256": "28bd4876befb1aa264d1e1d2e58f1b85c271b72c0c4b62d093759083f62c4f0e"
+    },
+    {
+      "path": ".github/actions/set-kernel-config/action.yml",
+      "bytes": 3151,
+      "mode": "0644",
+      "sha256": "c60238bae8abdee8a11b840bc3bee432549b737b38ce0421af9a9a95f4ce419e"
+    },
+    {
+      "path": ".github/actions/setup-build-environment/action.yml",
+      "bytes": 8509,
+      "mode": "0644",
+      "sha256": "fa7d4b7bf63074b2a47530254856b35362d2dc24f65d08eaafa5174e183a68bf"
+    },
+    {
+      "path": ".github/actions/stock-config/action.yml",
+      "bytes": 5910,
+      "mode": "0644",
+      "sha256": "68534395286df731f8e59cef16c86b24a17755c43791322b8ec58d70c5484a8e"
+    },
+    {
+      "path": ".github/actions/susfs/action.yml",
+      "bytes": 14719,
+      "mode": "0644",
+      "sha256": "953b0f64ee471b29572437ece593e6586af6685bc544dee87d0c29d2690dbe02"
+    },
+    {
+      "path": ".github/actions/susfs/finasu_compat/extract_manager_cert.py",
+      "bytes": 3077,
+      "mode": "0644",
+      "sha256": "d15ae98fe2db4e7a3de3fb5ea4ace6d3703aab40122d173c574dc0048b1d66f5"
+    },
+    {
+      "path": ".github/actions/susfs/susfs618/kernel_patches/50_add_susfs_in_gki-android17-6.18.patch",
+      "bytes": 101249,
+      "mode": "0644",
+      "sha256": "856340550d2da1d38aa158cae3323f58632986778bfbf1d7f2fe7f7afdb5a74c"
+    },
+    {
+      "path": ".github/actions/susfs/susfs618/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch",
+      "bytes": 111711,
+      "mode": "0644",
+      "sha256": "2f37a2d97532822338d26f2c8d54f3b0f5db81b98c7e489c3ae74832f363a42a"
+    },
+    {
+      "path": ".github/actions/susfs/susfs618/kernel_patches/fs/susfs.c",
+      "bytes": 75672,
+      "mode": "0644",
+      "sha256": "239ae171b7accad1116977ad7cb01b2391c5879118e1700cdd94997635eb76c7"
+    },
+    {
+      "path": ".github/actions/susfs/susfs618/kernel_patches/include/linux/susfs.h",
+      "bytes": 8662,
+      "mode": "0644",
+      "sha256": "e0cf92e9974fe4d962829be3f40ae81639eae8ff000027cced4558ab438a10fc"
+    },
+    {
+      "path": ".github/actions/susfs/susfs618/kernel_patches/include/linux/susfs_def.h",
+      "bytes": 5623,
+      "mode": "0644",
+      "sha256": "cb441cb566d009bce20c1f4ce43fa10ce3472daafd0f37e144cdf1be87b3f88e"
+    },
+    {
+      "path": ".github/actions/susfs-config/action.yml",
+      "bytes": 911,
+      "mode": "0644",
+      "sha256": "8f4b8e4ac3227e100956054ef1bdc143eadccc4443bf0e5fac95d5be73822fe1"
+    },
+    {
+      "path": ".github/actions/susfs-patches/action.yml",
+      "bytes": 15548,
+      "mode": "0644",
+      "sha256": "563a43d3c6024bbe8d51bc4a7016a11490639b0f60cd3ba38888e923118c4de7"
+    },
+    {
+      "path": ".github/actions/susfs-setup/action.yml",
+      "bytes": 6668,
+      "mode": "0644",
+      "sha256": "b5405f897dcb6af91b09a47e67f7c77911e63c06c024fcc7805ce18a89cf698a"
+    },
+    {
+      "path": ".github/actions/unicode-fix/action.yml",
+      "bytes": 877,
+      "mode": "0644",
+      "sha256": "0e2fd69a3b13e9030cfffa325d873549ee1603d778a6cb22f7a1205646b73932"
+    },
+    {
+      "path": ".github/actions/usb-arsenal/action.yml",
+      "bytes": 3993,
+      "mode": "0644",
+      "sha256": "d07f40847a622842fc51ad700134daf577edda435cac2b1b2258e838b62c9f7e"
+    },
+    {
+      "path": ".github/actions/vpnhide/action.yml",
+      "bytes": 5013,
+      "mode": "0644",
+      "sha256": "be978e7d181b8343982fdd954a3057c829770bad5c690d10f03a2131e3f6b7a3"
+    },
+    {
+      "path": ".github/apply_susfs_compat.py",
+      "bytes": 4125,
+      "mode": "0644",
+      "sha256": "90d47f33127fcaf2617ed796c69b48a8a29d4898d1d90e693a78577ec692ec88"
+    },
+    {
+      "path": ".github/assemble_digest_input.py",
+      "bytes": 5910,
+      "mode": "0644",
+      "sha256": "3bc6db3cdd923947d71354e1518e595c0e3f027cf45763e15886364107f721b1"
+    },
+    {
+      "path": ".github/bbg_618_compat.py",
+      "bytes": 4630,
+      "mode": "0644",
+      "sha256": "4b9763980b1fb9bc024e4bcdcdbc47bcc7e8913ccaff190272e51177934fc1fe"
+    },
+    {
+      "path": ".github/bbrv3_kabi_hide.py",
+      "bytes": 4229,
+      "mode": "0644",
+      "sha256": "7ee2911279fc6e1043c294610a9cbabd6b24c72adf7026be182168f7f5ce8d00"
+    },
+    {
+      "path": ".github/binder_ipc_ns_exports.py",
+      "bytes": 3224,
+      "mode": "0644",
+      "sha256": "cce185649886fcec37cf031863a471060de96589f07e3b5a8048097ee4ed3a79"
+    },
+    {
+      "path": ".github/build_summary.py",
+      "bytes": 12450,
+      "mode": "0644",
+      "sha256": "14f40241ae1b002ddda10343430397b82ce7fc6e2b159637f28f10196530c56b"
+    },
+    {
+      "path": ".github/cifs_modules_fix.py",
+      "bytes": 2219,
+      "mode": "0644",
+      "sha256": "cf939fda96f96b3662f0cc0242a2f9b3f3945ec2c8138a6e72cabd8314bdbd4e"
+    },
+    {
+      "path": ".github/close_fd_compat.sh",
+      "bytes": 1026,
+      "mode": "0644",
+      "sha256": "aaebe62a249661b623be21717798aead46d4312865781af300359066860ed34d"
+    },
+    {
+      "path": ".github/config/android12-5.10.json",
+      "bytes": 2855,
+      "mode": "0644",
+      "sha256": "206b978a3bf2615f743c80aef2859609c6360fea41a405fd11091e9f21d4ae63"
+    },
+    {
+      "path": ".github/config/android13-5.10.json",
+      "bytes": 2997,
+      "mode": "0644",
+      "sha256": "9801282153cd878fe47ae16f0867f601236ea3c30a116f0f040fdbf986b6f519"
+    },
+    {
+      "path": ".github/config/android13-5.15.json",
+      "bytes": 2813,
+      "mode": "0644",
+      "sha256": "15f7d4b3227f19a297331b744cd9cc4490ae6ab508d6436f4d4eb5a56fd0ff8f"
+    },
+    {
+      "path": ".github/config/android14-5.15.json",
+      "bytes": 1631,
+      "mode": "0644",
+      "sha256": "041be2fa9cdd0dcac992a41228b04e2ef33d7e2510bcff3207abbc185570849d"
+    },
+    {
+      "path": ".github/config/android14-6.1.json",
+      "bytes": 2300,
+      "mode": "0644",
+      "sha256": "4b80a9b3c65d1a80fa9626d8b1cae3cc4f97330453b4bb77ad4b949415547719"
+    },
+    {
+      "path": ".github/config/android15-6.6.json",
+      "bytes": 1381,
+      "mode": "0644",
+      "sha256": "21ffc543931b60ddaab5a4c4aa8412e4ac66e632aed0b4bcef1134d7635a5cfc"
+    },
+    {
+      "path": ".github/config/android16-6.12.json",
+      "bytes": 621,
+      "mode": "0644",
+      "sha256": "9b1a4d2fe90454c89790f12a4bdf02ad88dbb00e76052fdfce6107e194044a60"
+    },
+    {
+      "path": ".github/config/android17-6.18.json",
+      "bytes": 292,
+      "mode": "0644",
+      "sha256": "a060cce43d33cfc09e4a7221358bcd347d0815e87cb5a1f6adb990b5a7aa9fa4"
+    },
+    {
+      "path": ".github/device.json",
+      "bytes": 701,
+      "mode": "0644",
+      "sha256": "a85e5435ff9fafe21a583c62ced603d3a62144353cc6cce5d3a13ed1ac439da9"
+    },
+    {
+      "path": ".github/device_evidence.py",
+      "bytes": 5479,
+      "mode": "0644",
+      "sha256": "9cec31c42c6c27449f32100a214e2f4744bf35edaf46611feab8d47f2f65d90e"
+    },
+    {
+      "path": ".github/extract-ikconfig",
+      "bytes": 1779,
+      "mode": "0644",
+      "sha256": "070020a9c5a0b9e6f7e24f5728073e8e62155be49133a9f3f37e8fc19230a9b1"
+    },
+    {
+      "path": ".github/gki_enable_autofdo.py",
+      "bytes": 2007,
+      "mode": "0644",
+      "sha256": "5264d4c7697773fede32827fc37f07a75ce1a117cb8f04065bddb8285ceb570c"
+    },
+    {
+      "path": ".github/kmi_crc_guard.py",
+      "bytes": 6084,
+      "mode": "0644",
+      "sha256": "980ec75442f8c35a609084c08eea728c8832266e67c57ca80fb1b69a4560acf5"
+    },
+    {
+      "path": ".github/known-good.json",
+      "bytes": 4417,
+      "mode": "0644",
+      "sha256": "9462c2e8288cdd1f2dc7a17b65098974801d0295bec80b6cae7dfe9de0b2126b"
+    },
+    {
+      "path": ".github/new_patches.py",
+      "bytes": 8483,
+      "mode": "0644",
+      "sha256": "1bd2da272f929cf4bc7cd6eb1c46276fdc9a0feffde0c6503f8737c39594c27d"
+    },
+    {
+      "path": ".github/patch-allowlist.txt",
+      "bytes": 209,
+      "mode": "0644",
+      "sha256": "527fd1c775a75cbf7bb8e86edd59df5e1fc625c6032ab668f15a958afc2ad72a"
+    },
+    {
+      "path": ".github/patch-denylist.txt",
+      "bytes": 1009,
+      "mode": "0644",
+      "sha256": "b50c35f8d6c2d48081165227bfd179ee9df3be359e19e17511cff935425a813c"
+    },
+    {
+      "path": ".github/patch-policy.json",
+      "bytes": 35,
+      "mode": "0644",
+      "sha256": "e6d17532024ba423619b6b6e67968156942d5c7991864fee5e3a579be628c44d"
+    },
+    {
+      "path": ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.69.patch",
+      "bytes": 9228,
+      "mode": "0644",
+      "sha256": "b68f0be09ad42b41344aff4ea77f49cb7d6ba58d7c2862e5dba4a266117eebb2"
+    },
+    {
+      "path": ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.92.patch",
+      "bytes": 9255,
+      "mode": "0644",
+      "sha256": "8f6075fb9a3a7e15cfa79ae7c101d6a37c678e27032685d9aaefdefe0fc40cbd"
+    },
+    {
+      "path": ".github/patches/android16-6.12/oplus-sdp-900ma.patch",
+      "bytes": 29708,
+      "mode": "0644",
+      "sha256": "b73e2b64820342c4bb2063d4e59c7742c7b271d7d92b3521d3125fe112afab97"
+    },
+    {
+      "path": ".github/performance-patch-policy.json",
+      "bytes": 5771,
+      "mode": "0644",
+      "sha256": "d5fbb6c7d7911bc9ccaf3d85056aefc27b31e59b9b6547c8d90c1fc1801914b6"
+    },
+    {
+      "path": ".github/pins/history/2026-09-03T032000Z.json",
+      "bytes": 122,
+      "mode": "0644",
+      "sha256": "f520fc29888b819d3d89b76e0d945d8e9bffec093c79bf11df5c88978a1bdfd3"
+    },
+    {
+      "path": ".github/pins/history/2026-09-30T020030Z.json",
+      "bytes": 192,
+      "mode": "0644",
+      "sha256": "31329e3f112167305130e341061f6e13bef18186e8b8e636347d948363b243b4"
+    },
+    {
+      "path": ".github/rebrand_anykernel.py",
+      "bytes": 3375,
+      "mode": "0644",
+      "sha256": "c2bab5c4b5dbbd7656020f308284c2c4910bd5102370418696b89b07623efd62"
+    },
+    {
+      "path": ".github/render_kernel_notes.py",
+      "bytes": 8704,
+      "mode": "0644",
+      "sha256": "d2cdaab836f1447dd4cf2be92a2e9eb9e341336233279e153c18d206c653c40f"
+    },
+    {
+      "path": ".github/render_manager_notes.py",
+      "bytes": 1775,
+      "mode": "0644",
+      "sha256": "840a5e67951fb164421f3abcc7358331515e76917669e67ffaa57013d421051f"
+    },
+    {
+      "path": ".github/resolve_source_and_known_good.sh",
+      "bytes": 6627,
+      "mode": "0644",
+      "sha256": "e58d9d0b31ae81c68fd8bd80eb82b7e61b58962db23b80907d7ea138b56cc59c"
+    },
+    {
+      "path": ".github/scripts/apply_susfs_compat.py",
+      "bytes": 4125,
+      "mode": "0644",
+      "sha256": "90d47f33127fcaf2617ed796c69b48a8a29d4898d1d90e693a78577ec692ec88"
+    },
+    {
+      "path": ".github/scripts/asb_wakeup_blocker_apply.py",
+      "bytes": 7637,
+      "mode": "0644",
+      "sha256": "7ae00a07dd4f17914f0eec7984b246653ad6cb9b5d4d47bc73e81f68a17b6c87"
+    },
+    {
+      "path": ".github/scripts/assemble_digest_input.py",
+      "bytes": 5910,
+      "mode": "0644",
+      "sha256": "3bc6db3cdd923947d71354e1518e595c0e3f027cf45763e15886364107f721b1"
+    },
+    {
+      "path": ".github/scripts/bbg_618_compat.py",
+      "bytes": 4630,
+      "mode": "0644",
+      "sha256": "4b9763980b1fb9bc024e4bcdcdbc47bcc7e8913ccaff190272e51177934fc1fe"
+    },
+    {
+      "path": ".github/scripts/bbrv3_kabi_hide.py",
+      "bytes": 4229,
+      "mode": "0644",
+      "sha256": "7ee2911279fc6e1043c294610a9cbabd6b24c72adf7026be182168f7f5ce8d00"
+    },
+    {
+      "path": ".github/scripts/binder_ipc_ns_exports.py",
+      "bytes": 3224,
+      "mode": "0644",
+      "sha256": "cce185649886fcec37cf031863a471060de96589f07e3b5a8048097ee4ed3a79"
+    },
+    {
+      "path": ".github/scripts/bore12_flat.py",
+      "bytes": 11506,
+      "mode": "0644",
+      "sha256": "7dd88153e71eba79a9fde0984600a04d707b82e7c8e147603b1eb513d1931414"
+    },
+    {
+      "path": ".github/scripts/bore12_state.py",
+      "bytes": 3283,
+      "mode": "0644",
+      "sha256": "761a2fab1c40d8ef80a1bf57381da13370b68940212dcfa20a84b2bb6f634461"
+    },
+    {
+      "path": ".github/scripts/bore_apply.sh",
+      "bytes": 2683,
+      "mode": "0755",
+      "sha256": "efb34b44ce69592b8cb573f3f98c9d2f48ba697e9b68888e6290da169676ef8d"
+    },
+    {
+      "path": ".github/scripts/bore_gki612_fixups.py",
+      "bytes": 5196,
+      "mode": "0644",
+      "sha256": "c7fd8784ceb98c65bf13da5746fb4ccabb180cae68db3489b3db602d737c8ecb"
+    },
+    {
+      "path": ".github/scripts/bore_kabi_612.py",
+      "bytes": 5420,
+      "mode": "0644",
+      "sha256": "08e12a38e92377576ecf2bf055a764189a64328a97ad1a1e7ba7c879137150d9"
+    },
+    {
+      "path": ".github/scripts/build_delta.py",
+      "bytes": 9454,
+      "mode": "0644",
+      "sha256": "ee4a7df9341b6d8fa9d8b4f3608ec1b4bb735e1149947d480b67cdc3480c7780"
+    },
+    {
+      "path": ".github/scripts/build_summary.py",
+      "bytes": 43977,
+      "mode": "0644",
+      "sha256": "15c17f9f100cbf3bf8d6f610c3d03015a88e56c1438f842a82504ea2028e42ab"
+    },
+    {
+      "path": ".github/scripts/cifs_modules_fix.py",
+      "bytes": 2219,
+      "mode": "0644",
+      "sha256": "cf939fda96f96b3662f0cc0242a2f9b3f3945ec2c8138a6e72cabd8314bdbd4e"
+    },
+    {
+      "path": ".github/scripts/close_fd_compat.sh",
+      "bytes": 1026,
+      "mode": "0644",
+      "sha256": "aaebe62a249661b623be21717798aead46d4312865781af300359066860ed34d"
+    },
+    {
+      "path": ".github/scripts/device_evidence.py",
+      "bytes": 7606,
+      "mode": "0644",
+      "sha256": "9faf7aa2a04a9761d434922cd20b6dc19786c4bc39c48a9f3b138fdd9fc5395f"
+    },
+    {
+      "path": ".github/scripts/extract-ikconfig",
+      "bytes": 1779,
+      "mode": "0644",
+      "sha256": "070020a9c5a0b9e6f7e24f5728073e8e62155be49133a9f3f37e8fc19230a9b1"
+    },
+    {
+      "path": ".github/scripts/gki_enable_autofdo.py",
+      "bytes": 2007,
+      "mode": "0644",
+      "sha256": "5264d4c7697773fede32827fc37f07a75ce1a117cb8f04065bddb8285ceb570c"
+    },
+    {
+      "path": ".github/scripts/kernel_capability_report.py",
+      "bytes": 16431,
+      "mode": "0644",
+      "sha256": "4e974ef289171993bbd293b53efb9e6075c47e59802ae3a68a76e95d1c2d4990"
+    },
+    {
+      "path": ".github/scripts/kmi_crc_guard.py",
+      "bytes": 6084,
+      "mode": "0644",
+      "sha256": "980ec75442f8c35a609084c08eea728c8832266e67c57ca80fb1b69a4560acf5"
+    },
+    {
+      "path": ".github/scripts/ksu_susfs_api_compat.py",
+      "bytes": 4899,
+      "mode": "0644",
+      "sha256": "df9119dac366474344c85f9017d76659c0f4665ccedbf75f894e6a955026d2ec"
+    },
+    {
+      "path": ".github/scripts/new_patches.py",
+      "bytes": 8483,
+      "mode": "0644",
+      "sha256": "1bd2da272f929cf4bc7cd6eb1c46276fdc9a0feffde0c6503f8737c39594c27d"
+    },
+    {
+      "path": ".github/scripts/next_susfs_api_guard.py",
+      "bytes": 17926,
+      "mode": "0644",
+      "sha256": "39f7425d04ba79439681e55601a2722da0e2969802704df823a0d4246fcf8b3a"
+    },
+    {
+      "path": ".github/scripts/next_susfs_api_guard.sh",
+      "bytes": 2949,
+      "mode": "0644",
+      "sha256": "f5f9e85a692437bc6e3a61caee1c145a8f1f34c62321764e74e4e47b8cc07b33"
+    },
+    {
+      "path": ".github/scripts/nomount_metadata.py",
+      "bytes": 2746,
+      "mode": "0644",
+      "sha256": "dbd20b2a94e21203b8bbc76dfbbe4f9638a40129038c40dcf686f744607bad09"
+    },
+    {
+      "path": ".github/scripts/op15_config_guard.py",
+      "bytes": 3350,
+      "mode": "0644",
+      "sha256": "0750e4ced16b528b5110d93849e35171e9f167624830d54dbf7cf1a10ab5cfd7"
+    },
+    {
+      "path": ".github/scripts/performance_patch_policy.py",
+      "bytes": 3145,
+      "mode": "0644",
+      "sha256": "df35a9f6b624f67c96ed2b2cdd03f16fcb4054d04af8b3ab2295a0fcdc05ba56"
+    },
+    {
+      "path": ".github/scripts/render_kernel_notes.py",
+      "bytes": 8704,
+      "mode": "0644",
+      "sha256": "d2cdaab836f1447dd4cf2be92a2e9eb9e341336233279e153c18d206c653c40f"
+    },
+    {
+      "path": ".github/scripts/render_manager_notes.py",
+      "bytes": 1775,
+      "mode": "0644",
+      "sha256": "840a5e67951fb164421f3abcc7358331515e76917669e67ffaa57013d421051f"
+    },
+    {
+      "path": ".github/scripts/resolve_source_and_known_good.sh",
+      "bytes": 6944,
+      "mode": "0644",
+      "sha256": "35b4de35ad6b8ea9f486ee77ed8a5a4c9b36d3f0e35090fbef7ec8da589ffc7d"
+    },
+    {
+      "path": ".github/scripts/source_provenance.py",
+      "bytes": 6906,
+      "mode": "0644",
+      "sha256": "a8e5088ca1a07efcfb94cee1c51bcc5b6525df2ac30d04271207f89e19eab294"
+    },
+    {
+      "path": ".github/scripts/stock_config_guard.py",
+      "bytes": 3630,
+      "mode": "0644",
+      "sha256": "223490a1548cd3f7832c43c5b850d0667ff9d36a169b54ea5f09b54aa60535a1"
+    },
+    {
+      "path": ".github/scripts/susfs_618_compile_fixes.py",
+      "bytes": 11289,
+      "mode": "0644",
+      "sha256": "873e8376c5b5fd7ad486341bb85aa24cefc573e834cf1078029056e9759199ff"
+    },
+    {
+      "path": ".github/scripts/susfs_618_prototypes.py",
+      "bytes": 6524,
+      "mode": "0644",
+      "sha256": "3a0e02d04cab787d707ed1ceb1f48208f28fcfec9dba8413cd84ac0656ae3ca0"
+    },
+    {
+      "path": ".github/scripts/susfs_618_task_mmu.py",
+      "bytes": 6435,
+      "mode": "0644",
+      "sha256": "e0bd3071f396e9ce803e555daf2308adf240c650edbc71de0805dc98e15ca96b"
+    },
+    {
+      "path": ".github/scripts/susfs_fake_612.py",
+      "bytes": 5990,
+      "mode": "0644",
+      "sha256": "0cde67baa70c923838293e8a61d3735d2dacf45d3ea9177011605d9f707c918d"
+    },
+    {
+      "path": ".github/scripts/susfs_fake_66_smaps.py",
+      "bytes": 2412,
+      "mode": "0644",
+      "sha256": "ed84da27ad1272da2be356d0bf06ffa2e7c7860ca94a864f7ec119dc8d17032b"
+    },
+    {
+      "path": ".github/scripts/susfs_fake_fdinfo.py",
+      "bytes": 5029,
+      "mode": "0644",
+      "sha256": "0953d7734639766eeaf475f17fffe9a57b397b9e35beb47c63c3326226327f07"
+    },
+    {
+      "path": ".github/scripts/susfs_fdinfo_fanotify_arity.py",
+      "bytes": 3367,
+      "mode": "0644",
+      "sha256": "1a58f8f288942d054bd1551872cd0b9937d9e69a1ffbb5c4361dc47eada9c893"
+    },
+    {
+      "path": ".github/scripts/susfs_guard_priority_helpers.py",
+      "bytes": 3576,
+      "mode": "0644",
+      "sha256": "04f8748309b6c7cb636bc7a9daf5bc972b458f2d0539ad3b8312c6fc8f1b8308"
+    },
+    {
+      "path": ".github/scripts/susfs_idmap_compat.py",
+      "bytes": 1834,
+      "mode": "0644",
+      "sha256": "70a8874e18dc828a53354473e361d6a260d5493cda647605c1907363212f1c29"
+    },
+    {
+      "path": ".github/scripts/susfs_restore_context.py",
+      "bytes": 4962,
+      "mode": "0644",
+      "sha256": "35074c977283f67c865298224ebbcae614bd49281368c0290917868ab26f3678"
+    },
+    {
+      "path": ".github/scripts/telegram_digest.py",
+      "bytes": 30343,
+      "mode": "0644",
+      "sha256": "393b8052f85604fc55f80a144c65be19f5900e20c9c37a37341a4fb70b1c8603"
+    },
+    {
+      "path": ".github/scripts/trim_sukisu_managers.py",
+      "bytes": 4576,
+      "mode": "0644",
+      "sha256": "e5c22f6e68097ce02a8c51a6259cd5a7271eb4e51adabd1739595752d137140b"
+    },
+    {
+      "path": ".github/scripts/update_check.py",
+      "bytes": 12658,
+      "mode": "0644",
+      "sha256": "073c889ff0c622a023c7811d6ded5a18c3fe13e6bbb180280267071bd5ee0b2d"
+    },
+    {
+      "path": ".github/scripts/update_kernel_matrix.py",
+      "bytes": 6405,
+      "mode": "0644",
+      "sha256": "8b855b212684fefa5fca2fd0a4acadc51aff7b4fa8c311bfe79652095c8b7185"
+    },
+    {
+      "path": ".github/scripts/update_verified_pins.py",
+      "bytes": 5704,
+      "mode": "0644",
+      "sha256": "26d1ec18034389b3cc2a368fffe1a3a10fbfe11f4fc752a02fc0d6fab4199f5a"
+    },
+    {
+      "path": ".github/scripts/usb_arsenal_already_present.py",
+      "bytes": 1832,
+      "mode": "0644",
+      "sha256": "21e6bc61acc5f5728e698317f190afcbb0faae64c271c15fc7d5696c04aa34ee"
+    },
+    {
+      "path": ".github/scripts/validate_python.py",
+      "bytes": 1249,
+      "mode": "0644",
+      "sha256": "a8874891d62cc8ff7488bba5b268aef86331889543811beae2347fa5e99bc5fd"
+    },
+    {
+      "path": ".github/scripts/validate_shell.py",
+      "bytes": 1091,
+      "mode": "0644",
+      "sha256": "1ce889e9441512417912abed4fe09997b96d9c368df35a6fa91a7d0629263a88"
+    },
+    {
+      "path": ".github/scripts/validate_workflows.py",
+      "bytes": 5273,
+      "mode": "0644",
+      "sha256": "42e1780305315d8fe7bb211c319ba33cce8fc3f2d96275ce29767fd456784f86"
+    },
+    {
+      "path": ".github/scripts/vpnhide_integrate.py",
+      "bytes": 2361,
+      "mode": "0644",
+      "sha256": "48ee396ac917fb4a698674f1485fdd36fa63d2c0a56ae4a9688c45f44470d2d7"
+    },
+    {
+      "path": ".github/source_provenance.py",
+      "bytes": 6906,
+      "mode": "0644",
+      "sha256": "a8e5088ca1a07efcfb94cee1c51bcc5b6525df2ac30d04271207f89e19eab294"
+    },
+    {
+      "path": ".github/stock_config_guard.py",
+      "bytes": 2753,
+      "mode": "0644",
+      "sha256": "0c9576753d1fc4d67ca2c187dc177238e51248218f057ce5f26cf86af1231376"
+    },
+    {
+      "path": ".github/susfs_618_compile_fixes.py",
+      "bytes": 11289,
+      "mode": "0644",
+      "sha256": "873e8376c5b5fd7ad486341bb85aa24cefc573e834cf1078029056e9759199ff"
+    },
+    {
+      "path": ".github/susfs_618_prototypes.py",
+      "bytes": 6524,
+      "mode": "0644",
+      "sha256": "3a0e02d04cab787d707ed1ceb1f48208f28fcfec9dba8413cd84ac0656ae3ca0"
+    },
+    {
+      "path": ".github/susfs_618_task_mmu.py",
+      "bytes": 6435,
+      "mode": "0644",
+      "sha256": "e0bd3071f396e9ce803e555daf2308adf240c650edbc71de0805dc98e15ca96b"
+    },
+    {
+      "path": ".github/susfs_fake_612.py",
+      "bytes": 5990,
+      "mode": "0644",
+      "sha256": "0cde67baa70c923838293e8a61d3735d2dacf45d3ea9177011605d9f707c918d"
+    },
+    {
+      "path": ".github/susfs_fake_66_smaps.py",
+      "bytes": 2412,
+      "mode": "0644",
+      "sha256": "ed84da27ad1272da2be356d0bf06ffa2e7c7860ca94a864f7ec119dc8d17032b"
+    },
+    {
+      "path": ".github/susfs_fake_fdinfo.py",
+      "bytes": 5029,
+      "mode": "0644",
+      "sha256": "0953d7734639766eeaf475f17fffe9a57b397b9e35beb47c63c3326226327f07"
+    },
+    {
+      "path": ".github/susfs_fdinfo_fanotify_arity.py",
+      "bytes": 3367,
+      "mode": "0644",
+      "sha256": "1a58f8f288942d054bd1551872cd0b9937d9e69a1ffbb5c4361dc47eada9c893"
+    },
+    {
+      "path": ".github/susfs_guard_priority_helpers.py",
+      "bytes": 3576,
+      "mode": "0644",
+      "sha256": "04f8748309b6c7cb636bc7a9daf5bc972b458f2d0539ad3b8312c6fc8f1b8308"
+    },
+    {
+      "path": ".github/susfs_idmap_compat.py",
+      "bytes": 1834,
+      "mode": "0644",
+      "sha256": "70a8874e18dc828a53354473e361d6a260d5493cda647605c1907363212f1c29"
+    },
+    {
+      "path": ".github/susfs_restore_context.py",
+      "bytes": 4962,
+      "mode": "0644",
+      "sha256": "35074c977283f67c865298224ebbcae614bd49281368c0290917868ab26f3678"
+    },
+    {
+      "path": ".github/telegram_digest.py",
+      "bytes": 29862,
+      "mode": "0644",
+      "sha256": "8de11a7e11f74bb2fcff9b5f070a38990c148cf9249e30d2f6d35d5d52fd6262"
+    },
+    {
+      "path": ".github/trim_sukisu_managers.py",
+      "bytes": 4576,
+      "mode": "0644",
+      "sha256": "e5c22f6e68097ce02a8c51a6259cd5a7271eb4e51adabd1739595752d137140b"
+    },
+    {
+      "path": ".github/update_check.py",
+      "bytes": 12587,
+      "mode": "0644",
+      "sha256": "ee75de016d6432732e0625f95e28108da7756bd661d251f0cf7951e2076c4de9"
+    },
+    {
+      "path": ".github/update_kernel_matrix.py",
+      "bytes": 6405,
+      "mode": "0644",
+      "sha256": "8b855b212684fefa5fca2fd0a4acadc51aff7b4fa8c311bfe79652095c8b7185"
+    },
+    {
+      "path": ".github/update_verified_pins.py",
+      "bytes": 5704,
+      "mode": "0644",
+      "sha256": "26d1ec18034389b3cc2a368fffe1a3a10fbfe11f4fc752a02fc0d6fab4199f5a"
+    },
+    {
+      "path": ".github/usb_arsenal_already_present.py",
+      "bytes": 1832,
+      "mode": "0644",
+      "sha256": "21e6bc61acc5f5728e698317f190afcbb0faae64c271c15fc7d5696c04aa34ee"
+    },
+    {
+      "path": ".github/validate_python.py",
+      "bytes": 1249,
+      "mode": "0644",
+      "sha256": "a8874891d62cc8ff7488bba5b268aef86331889543811beae2347fa5e99bc5fd"
+    },
+    {
+      "path": ".github/validate_shell.py",
+      "bytes": 1091,
+      "mode": "0644",
+      "sha256": "1ce889e9441512417912abed4fe09997b96d9c368df35a6fa91a7d0629263a88"
+    },
+    {
+      "path": ".github/validate_workflows.py",
+      "bytes": 5273,
+      "mode": "0644",
+      "sha256": "42e1780305315d8fe7bb211c319ba33cce8fc3f2d96275ce29767fd456784f86"
+    },
+    {
+      "path": ".github/vpnhide_integrate.py",
+      "bytes": 2361,
+      "mode": "0644",
+      "sha256": "48ee396ac917fb4a698674f1485fdd36fa63d2c0a56ae4a9688c45f44470d2d7"
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "bytes": 36529,
+      "mode": "0644",
+      "sha256": "a10087381502d0b63fba68313c76aa0c936cb46c4e930e6384d997cddc422293"
+    },
+    {
+      "path": ".github/workflows/clear-cache.yml",
+      "bytes": 1233,
+      "mode": "0644",
+      "sha256": "749e8503c31775cf22e97c63424692ff421f9e2bee069addedf14ad951739424"
+    },
+    {
+      "path": ".github/workflows/commit-status.yml",
+      "bytes": 3320,
+      "mode": "0644",
+      "sha256": "cc7139a3234738514891eca2c7b3034dc177f6681064e95ba01c7934a9b7cb9c"
+    },
+    {
+      "path": ".github/workflows/main.yml",
+      "bytes": 122911,
+      "mode": "0644",
+      "sha256": "2b1273b148fdf21e230777b84d406f8427687ce9700b44b1d526dc2d08195b95"
+    },
+    {
+      "path": ".github/workflows/managers.yml",
+      "bytes": 38530,
+      "mode": "0644",
+      "sha256": "ad31c3cb3edc8c0197bda00c4afb9b64c8211791b319449a50a511a2e23559ae"
+    },
+    {
+      "path": ".github/workflows/mark-known-good.yml",
+      "bytes": 7602,
+      "mode": "0644",
+      "sha256": "392f122a697ed5db5b8eec7da3a7687b3b8c427e225718b289b19f942669debf"
+    },
+    {
+      "path": ".github/workflows/opencode.yml",
+      "bytes": 5003,
+      "mode": "0644",
+      "sha256": "c5a674a9a0505e623f9f1071ecafd8651a5ece4548aa5f4440d9ca5b66d5d402"
+    },
+    {
+      "path": ".github/workflows/prepare.yml",
+      "bytes": 15817,
+      "mode": "0644",
+      "sha256": "dde237922320ded503bcd05fdbc90a8326a9c317e77377817cfc53469f65a70c"
+    },
+    {
+      "path": ".github/workflows/release-from-run.yml",
+      "bytes": 1806,
+      "mode": "0644",
+      "sha256": "f6796ad67faab540154ead5c5d2bf7e06bfc449af5f56658bf6f3997d192107c"
+    },
+    {
+      "path": ".github/workflows/sync-matrix.yml",
+      "bytes": 10345,
+      "mode": "0644",
+      "sha256": "dd650eec3cce0a2c2f3ed00a6c30a118a0740b2575c03c32779f182441958cfc"
+    },
+    {
+      "path": ".github/workflows/update-check.yml",
+      "bytes": 3712,
+      "mode": "0644",
+      "sha256": "a62b745c153522224fe0a2bfa6c44639258b16e01876ddf9d281b3e89be99cef"
+    },
+    {
+      "path": ".github/workflows/validate.yml",
+      "bytes": 867,
+      "mode": "0644",
+      "sha256": "2bf7064c38f47623f83be50541e3abd66681b3cdc86958c87cdcb9bbc9745a26"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 62,
+      "mode": "0644",
+      "sha256": "cfb02a2244315b76de7ed67631f5911d7a583dc4426f53ce78b4019efe0e6b78"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 15749,
+      "mode": "0644",
+      "sha256": "c109e618b6c74b16b4577d6f92e74f23cf3b8173684d5afc3c6c38871fac4353"
+    },
+    {
+      "path": "README.md",
+      "bytes": 13088,
+      "mode": "0644",
+      "sha256": "f59b19ce893e9837fb936e475b5d97e4ab8df6a5f057a2b55fac897489a2810f"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "bytes": 2497,
+      "mode": "0644",
+      "sha256": "f72466046a28cf97483923138843ba9c54e2acf684a2a768b6960abef0823f5b"
+    },
+    {
+      "path": "docs/KRILIKD.md",
+      "bytes": 28709,
+      "mode": "0644",
+      "sha256": "0cb58b0f4a849f4e5b73ee9fd363dfb2e00b70582e2cae8d868459a30122168b"
+    },
+    {
+      "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
+      "bytes": 6372,
+      "mode": "0644",
+      "sha256": "ec66d41ce702d26639f12b4f5e302557c4412dd1b9bf35aae18f2cdc7d5b5700"
+    },
+    {
+      "path": "docs/KRILIKD_PROFILES.md",
+      "bytes": 1400,
+      "mode": "0644",
+      "sha256": "24cb89e508ca6fbeb5d2be1fbffe05039f4c52fccf58e169e777c9eadeea4d82"
+    },
+    {
+      "path": "docs/build-from-fork.md",
+      "bytes": 13890,
+      "mode": "0644",
+      "sha256": "f2af66fb34f592ea38686599cfb2c5ed3e4b930b8bdce5bedc01e505007b72b4"
+    },
+    {
+      "path": "docs/features.md",
+      "bytes": 6326,
+      "mode": "0644",
+      "sha256": "c72670d3b52e72f023c043143b65bdbd5d922b020e1daf8828b4c850641a55b7"
+    },
+    {
+      "path": "docs/installation.md",
+      "bytes": 2265,
+      "mode": "0644",
+      "sha256": "82d7e260ef039a9f327bfde95e35a734867dfeeffb1a29cfe1b5df5d4fe3775c"
+    },
+    {
+      "path": "docs/kernelflasher.md",
+      "bytes": 1117,
+      "mode": "0644",
+      "sha256": "38109f0e55ddb6fb34adea2b3650ee02999411a3248a4b9ca2810b84a9e0cf69"
+    },
+    {
+      "path": "docs/magiskboot.md",
+      "bytes": 1994,
+      "mode": "0644",
+      "sha256": "c5db86012038ea3b40e08ac6187d2b791f9d771af630f1b16f67afe32dff04b1"
+    },
+    {
+      "path": "docs/post-install.md",
+      "bytes": 1966,
+      "mode": "0644",
+      "sha256": "b9c1fcd4792548d4d1c7c02f4d800c80470e870506fccb251e015b7fab1e01dd"
+    },
+    {
+      "path": "tests/run.py",
+      "bytes": 345,
+      "mode": "0644",
+      "sha256": "e62b96d69a75673c7407a954d560b6af9400a1677d88605d9311d7f6dbf688df"
+    },
+    {
+      "path": "tests/test_bore.py",
+      "bytes": 11213,
+      "mode": "0644",
+      "sha256": "57b6aeb1e08e250263cbc3bc370339076bed95553a5884ec3174e78e9c1886d3"
+    },
+    {
+      "path": "tests/test_build_delta.py",
+      "bytes": 8926,
+      "mode": "0644",
+      "sha256": "f01370ec53be2fde315fac168c04366b1f262d246c41d49096e891663ea02051"
+    },
+    {
+      "path": "tests/test_build_evidence.py",
+      "bytes": 95287,
+      "mode": "0644",
+      "sha256": "7eafe6d3460e8c169b4ac4599a45749a9a6cd31a81b18c59c397386f3b585d46"
+    },
+    {
+      "path": "tests/test_next_susfs_guard.py",
+      "bytes": 19096,
+      "mode": "0644",
+      "sha256": "a2c43af33660cc718574c27407eaac319da5691a314358903b1e1a53f8557e5f"
+    }
+  ],
+  "evidence_scope": "Source/host verification only. This manifest is not a compiled-kernel, physical-boot, runtime-scheduler, battery or performance attestation."
+}
