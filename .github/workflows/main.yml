@@ -834,7 +834,7 @@ jobs:
           fi
           {
             echo "### NoMount metamodule"
-            echo "\`${ver}\` · versionCode ${code}"
+            echo "\`${ver}\` · versionCode ${code} · commit \`${NOMOUNT_COMMIT:0:12}\`"
           } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
       - name: Upload NoMount metamodule
@@ -895,6 +895,28 @@ jobs:
           unzip -q "$RUNNER_TEMP/vpnhide-out/vpnhide-builtin.zip" -d "$RUNNER_TEMP/vpnhide-module"
           grep -E '^(id|version)=' "$RUNNER_TEMP/vpnhide-module/module.prop"
           test -x "$RUNNER_TEMP/vpnhide-module/activator"
+
+      # The run summary names every companion module the run packaged, with the version the
+      # root manager will show, like the NoMount job does. Reporting only: a mismatch between
+      # the module and the fetched VERSION is a warning, never a reason to drop the module.
+      - name: Report VPN Hide module version
+        if: env.VPNHIDE_WANTED == 'true'
+        shell: bash
+        env:
+          VPNHIDE_MODULE_DIR: ${{ runner.temp }}/vpnhide-module
+        run: |
+          set -euo pipefail
+          prop="$VPNHIDE_MODULE_DIR/module.prop"
+          kv() { sed -n "s/^$1=//p" "$prop" | head -n 1 | tr -d '\r'; }
+          id="$(kv id)"; name="$(kv name)"; ver="$(kv version)"; code="$(kv versionCode)"
+          want="v$(tr -d ' \r\n' < vpnhide/VERSION 2>/dev/null || true)"
+          echo "VPN Hide module: id=${id} version=${ver} versionCode=${code} commit=${VPNHIDE_COMMIT}"
+          [ "$ver" = "$want" ] || echo "::warning::VPN Hide module.prop says version '${ver}', the fetched source says '${want}'."
+          [[ "$code" =~ ^[1-9][0-9]*$ ]] || echo "::warning::VPN Hide module.prop has no positive versionCode ('${code}')."
+          {
+            echo "### VPN Hide built-in module"
+            echo "\`${ver}\` · versionCode ${code:-none} · commit \`${VPNHIDE_COMMIT:0:12}\` · id \`${id}\` (${name})"
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
       - name: Upload VPN Hide built-in companion module
         if: env.VPNHIDE_WANTED == 'true'
