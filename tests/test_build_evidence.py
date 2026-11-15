@@ -161,7 +161,7 @@ class CapabilityReportTest(unittest.TestCase):
             controls = caps.make_report(path, "VPN")["asb_contract"]["controls"]
             self.assertEqual(set(controls), {
                 "mglru_mode", "kernel_mglru_min_ttl", "kernel_timer_migration", "kernel_sched_nr_migrate",
-                "kernel_sched_stats", "kernel_sched_autogroup", "kernel_sched_child_runs_first",
+                "kernel_sched_stats", "kernel_sched_autogroup", "kernel_sched_child_runs_first", "kernel_rt_boost",
             })
             for name, control in controls.items():
                 self.assertEqual(control["interface"], "standard_linux")
@@ -185,6 +185,16 @@ class CapabilityReportTest(unittest.TestCase):
             })
             self.assertEqual(controls["kernel_sched_autogroup"]["runtime_path"], "/proc/sys/kernel/sched_autogroup_enabled")
             self.assertEqual(controls["kernel_sched_child_runs_first"]["runtime_path"], "/proc/sys/kernel/sched_child_runs_first")
+            rt = controls["kernel_rt_boost"]
+            self.assertEqual(rt["runtime_path"], "/proc/sys/kernel/sched_util_clamp_min_rt_default")
+            self.assertEqual(rt["configs"], {"CONFIG_UCLAMP_TASK": "not_exposed"})
+            self.assertEqual(rt["requests"]["auto"]["battery"], ["0"])
+            self.assertEqual(rt["requests"]["auto"]["performance"], ["256"])
+            self.assertNotIn("1024", rt["requests"])
+            self.assertIn("post-boot", rt["runtime_guard"])
+            self.assertEqual(controls["kernel_sched_nr_migrate"]["requests"]["auto"],
+                             {"battery": ["2"], "balanced": ["4"], "smart": ["4"], "performance": ["8"]})
+            self.assertEqual(controls["kernel_timer_migration"]["requests"]["auto"]["performance"], ["0"])
 
     def test_missing_mglru_config_does_not_create_a_control_claim(self):
         with tempfile.TemporaryDirectory() as d:
@@ -792,28 +802,75 @@ class NoMountMetadataTest(unittest.TestCase):
                 self.assertIn("metadata validation failed", result.stderr)
                 self.assertEqual(prop, original)
 
-    def test_workflow_rejects_a_stale_metamodule_package_before_upload(self):
+    def test_workflow_applies_the_nomount_version_whatever_the_action_wrote(self):
         # Run 43639382910 packaged versionCode=1 from an out-of-date copy of the action; the
         # root manager then offered NoMount 720 as an update over the kernel-matched build.
+        # Run 43656353821: the dev56 check caught the same stale action and failed the job, so
+        # every kernel build that needs it was skipped. The workflow now applies the scheme
+        # itself from the pinned commit and fails only on an inconsistent pinned source.
         main = (ROOT / ".github/workflows/main.yml").read_text()
         job = main[main.index("  build-nomount-module:"):main.index("  build-vpnhide-module:")]
-        self.assertLess(job.index("uses: ./.github/actions/nomount-metamodule"), job.index("- name: Verify NoMount metamodule version"))
-        self.assertLess(job.index("- name: Verify NoMount metamodule version"), job.index("- name: Upload NoMount metamodule"))
-        step = job[job.index("- name: Verify NoMount metamodule version"):job.index("- name: Upload NoMount metamodule")]
-        self.assertIn("NOMOUNT_MODULE_DIR: ${{ steps.buildmod.outputs.module_dir }}", step)
+        self.assertNotIn("- name: Verify NoMount metamodule version", job)
+        self.assertNotIn("is out of date: upload", job)
+        self.assertLess(job.index("uses: ./.github/actions/nomount-metamodule"), job.index("- name: Apply NoMount metamodule version"))
+        self.assertLess(job.index("- name: Apply NoMount metamodule version"), job.index("- name: Upload NoMount metamodule"))
+        step = job[job.index("- name: Apply NoMount metamodule version"):job.index("- name: Upload NoMount metamodule")]
+        for token in ("NOMOUNT_MODULE_DIR: ${{ steps.buildmod.outputs.module_dir }}",
+                      "NOMOUNT_MODULE_ZIP: ${{ steps.buildmod.outputs.module_path }}",
+                      "NOMOUNT_COMMIT: ${{ steps.clone.outputs.commit }}"):
+            self.assertIn(token, step)
+        self.assertNotIn("nomount_metadata.py", step)
         body = step[step.index("run: |") + len("run: |"):]
         script = textwrap.dedent("\n".join(l for l in body.splitlines() if l.strip() or l == ""))
-        cases = (("version=v2.3.0 (720)\nversionCode=720\n", 0), ("version=v2.3.0 (721)\nversionCode=721\n", 0),
-                 ("version=v2.3.0\nversionCode=1\n", 1), ("version=v2.3.0\nversionCode=\n", 1),
-                 ("version=v2.3.0 (720)\nversionCode=1\n", 1), ("version=v2.3.0 (719)\nversionCode=720\n", 1))
-        for prop, rc in cases:
-            with self.subTest(prop=prop), tempfile.TemporaryDirectory() as d:
-                Path(d, "module.prop").write_text("id=nomount\n" + prop)
-                res = subprocess.run(["bash", "-c", script], text=True, capture_output=True,
-                                     env=dict(os.environ, NOMOUNT_MODULE_DIR=d, GITHUB_STEP_SUMMARY=str(Path(d, "summary"))))
-                self.assertEqual(res.returncode, rc, res.stdout + res.stderr)
-                if rc:
-                    self.assertIn("nomount-metamodule action in this repository is out of date", res.stderr)
+
+        def upstream(d, commits, prop_version="v2.3.0", meta=None):
+            repo = Path(d, "upstream")
+            (repo / "module").mkdir(parents=True)
+            git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+            git("init", "-q", "-b", "master")
+            git("config", "user.email", "t@example.invalid"); git("config", "user.name", "t")
+            for n in range(commits):
+                (repo / "module/module.prop").write_text(f"id=nomount\nname=NoMount\nversion={prop_version}\nversionCode=\n")
+                (repo / "update.json").write_text(json.dumps(meta or {"version": prop_version, "versionCode": commits}))
+                (repo / "n").write_text(str(n))
+                git("add", "-A"); git("commit", "-q", "-m", f"c{n}")
+            return repo, git("rev-parse", "HEAD").stdout.strip()
+
+        def run(d, packaged, commits=5, **kw):
+            repo, sha = upstream(d, commits, **kw)
+            mod = Path(d, "mod"); mod.mkdir()
+            Path(mod, "module.prop").write_text("id=nomount\nname=NoMount\n" + packaged + "author=x\n")
+            zipf = Path(d, "NoMount.zip")
+            subprocess.run(["zip", "-qr", str(zipf), "."], cwd=mod, check=True)
+            res = subprocess.run(["bash", "-c", script], text=True, capture_output=True, cwd=d,
+                                 env=dict(os.environ, NOMOUNT_MODULE_DIR=str(mod), NOMOUNT_MODULE_ZIP=str(zipf),
+                                          NOMOUNT_COMMIT=sha, NOMOUNT_REPO=str(repo), RUNNER_TEMP=d,
+                                          GITHUB_STEP_SUMMARY=str(Path(d, "summary"))))
+            return res, Path(mod, "module.prop").read_text(), zipf
+
+        for packaged in ("version=v2.3.0\nversionCode=1\n", "version=v2.3.0\nversionCode=\n",
+                         "version=v2.3.0 (5)\nversionCode=5\n", "version=v2.3.0 (4)\nversionCode=1\n",
+                         "version=v2.3.0\n"):
+            with self.subTest(packaged=packaged), tempfile.TemporaryDirectory() as d:
+                res, prop, zipf = run(d, packaged)
+                self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+                self.assertIn("\nversion=v2.3.0 (5)\n", prop)
+                self.assertIn("\nversionCode=5\n", prop)
+                self.assertEqual((prop.count("\nversion="), prop.count("\nversionCode=")), (1, 1))
+                self.assertTrue(prop.startswith("id=nomount\nname=NoMount\n") and "author=x" in prop)
+                inside = subprocess.run(["unzip", "-p", str(zipf), "module.prop"], capture_output=True, text=True).stdout
+                self.assertEqual(inside, prop)
+                self.assertIn("`v2.3.0 (5)` · versionCode 5", Path(d, "summary").read_text())
+                self.assertEqual("::notice::" in res.stdout, packaged != "version=v2.3.0 (5)\nversionCode=5\n")
+        for kw, why in (({"meta": {"version": "v2.3.0", "versionCode": 9}}, "older than its update metadata"),
+                        ({"meta": {"version": "v2.2.0", "versionCode": 5}}, "base versions differ"),
+                        ({"meta": {"version": "v2.3.0"}}, "no positive versionCode"),
+                        ({"prop_version": "2.3"}, "unsupported base version")):
+            with self.subTest(why=why), tempfile.TemporaryDirectory() as d:
+                res, prop, _ = run(d, "version=v2.3.0\nversionCode=1\n", **kw)
+                self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+                self.assertIn(why, res.stderr)
+                self.assertIn("versionCode=1", prop)
 
     def test_packaging_uses_full_history_and_never_forces_version_code_one(self):
         action = (ROOT / ".github/actions/nomount-metamodule/action.yml").read_text()
@@ -1374,7 +1431,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("kernel_mglru_min_ttl", capabilities.CONTROL_CANDIDATES)
         ttl = capabilities.CONTROL_CANDIDATES["kernel_mglru_min_ttl"]
         self.assertEqual(ttl["runtime_path"], "/sys/kernel/mm/lru_gen/min_ttl_ms")
-        self.assertEqual(set(ttl["requests"]), {"stock", "1000", "2000", "5000"})
+        self.assertEqual(set(ttl["requests"]), {"stock", "1000", "2000"})
 
     def test_known_good_supports_url_only_boot_and_optional_full_evidence(self):
         text = (ROOT / ".github/workflows/mark-known-good.yml").read_text()
