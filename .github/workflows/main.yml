@@ -141,9 +141,13 @@ on:
         type: boolean
         default: true
       use_perf:
-        description: "Performance (patches that do not apply to the tree are skipped, not fatal)"
-        type: boolean
-        default: true
+        description: "Performance: true = reviewed patches (those that do not apply are skipped); bore = the same plus the BORE scheduler (experimental, 6.12.x-android16 only, boot-test it first); false = none"
+        type: choice
+        options:
+          - "true"
+          - "false"
+          - bore
+        default: "true"
       power_app_features:
         description: "Re-Kernel / ASB wakeup blocker / SDP 900 mA (android16-6.12; all = three, both = first two)"
         type: choice
@@ -626,6 +630,7 @@ jobs:
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
             F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true; F_RK=true; F_AWL=true; F_SDP=true
+            F_BORE=false
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
@@ -637,7 +642,17 @@ jobs:
               none)    F_PTRACE=false; F_UNICODE=false ;;
               *) echo "Unsupported compatibility_patches selection" >&2; exit 2 ;;
             esac
-            F_BPF="${{ inputs.use_bpf }}";        F_PERF="${{ inputs.use_perf }}"
+            F_BPF="${{ inputs.use_bpf }}"
+            case "${{ inputs.use_perf }}" in
+              true)  F_PERF=true;  F_BORE=false ;;
+              false) F_PERF=false; F_BORE=false ;;
+              bore)  F_PERF=true;  F_BORE=true ;;
+              *) echo "Unsupported use_perf selection" >&2; exit 2 ;;
+            esac
+            if [ "$F_BORE" = "true" ] && [ "${{ inputs.kernel_build_version }}" != "6.12.x-android16" ]; then
+              echo "::error::use_perf=bore is wired for Kernel Version 6.12.x-android16 only (selected: ${{ inputs.kernel_build_version }})"
+              exit 2
+            fi
             F_VPN="${{ inputs.use_vpnhide }}";    F_USB="${{ inputs.use_usb_arsenal }}"
             case "${{ inputs.power_app_features }}" in
               all)            F_RK=true;  F_AWL=true;  F_SDP=true ;;
@@ -661,6 +676,7 @@ jobs:
           [ "$F_UNICODE" = "true" ] && FEATURES="${FEATURES}Unicode+"
           [ "$F_BPF" = "true" ] && FEATURES="${FEATURES}BPF+"
           [ "$F_PERF" = "true" ] && FEATURES="${FEATURES}Perf+"
+          [ "$F_BORE" = "true" ] && FEATURES="${FEATURES}BORE+"
           [ "$F_VPN" = "true" ] && FEATURES="${FEATURES}VPN+"
           [ "$F_USB" = "true" ] && FEATURES="${FEATURES}USB+"
           [ "$F_RK" = "true" ] && FEATURES="${FEATURES}RK+"
@@ -2151,6 +2167,7 @@ jobs:
           USE_UNICODE: ${{ github.event_name == 'schedule' || inputs.compatibility_patches == 'both' || inputs.compatibility_patches == 'unicode' }}
           USE_BPF: ${{ inputs.use_bpf || (github.event_name == 'schedule' && true) || false }}
           USE_PERF: ${{ inputs.use_perf || false }}
+          USE_BORE: ${{ inputs.use_perf == 'bore' }}
           PAGE_SIZE: ${{ inputs.page_size || '4k' }}
           KERNEL_BUILD_VERSION: ${{ inputs.kernel_build_version || 'All' }}
           NOMOUNT_COMMIT: ${{ needs.resolve-sources.outputs.nomount_commit }}

@@ -513,6 +513,12 @@ jobs:
           device: ${{ fromJSON(inputs.extra_pins || '{}').device || '' }}
           soc: ${{ fromJSON(inputs.extra_pins || '{}').soc || '' }}
 
+      - name: Apply BORE scheduler (experimental)
+        if: contains(inputs.feature_set, 'BORE') && inputs.version == 'android16-6.12'
+        uses: ./.github/actions/bore
+        with:
+          kernel_version: ${{ inputs.kernel_version }}
+
       - name: Inventory patches when Performance is disabled
         if: "!contains(inputs.feature_set, 'Perf')"
         shell: bash
