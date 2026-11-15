@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -790,6 +791,29 @@ class NoMountMetadataTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("metadata validation failed", result.stderr)
                 self.assertEqual(prop, original)
+
+    def test_workflow_rejects_a_stale_metamodule_package_before_upload(self):
+        # Run 43639382910 packaged versionCode=1 from an out-of-date copy of the action; the
+        # root manager then offered NoMount 720 as an update over the kernel-matched build.
+        main = (ROOT / ".github/workflows/main.yml").read_text()
+        job = main[main.index("  build-nomount-module:"):main.index("  build-vpnhide-module:")]
+        self.assertLess(job.index("uses: ./.github/actions/nomount-metamodule"), job.index("- name: Verify NoMount metamodule version"))
+        self.assertLess(job.index("- name: Verify NoMount metamodule version"), job.index("- name: Upload NoMount metamodule"))
+        step = job[job.index("- name: Verify NoMount metamodule version"):job.index("- name: Upload NoMount metamodule")]
+        self.assertIn("NOMOUNT_MODULE_DIR: ${{ steps.buildmod.outputs.module_dir }}", step)
+        body = step[step.index("run: |") + len("run: |"):]
+        script = textwrap.dedent("\n".join(l for l in body.splitlines() if l.strip() or l == ""))
+        cases = (("version=v2.3.0 (720)\nversionCode=720\n", 0), ("version=v2.3.0 (721)\nversionCode=721\n", 0),
+                 ("version=v2.3.0\nversionCode=1\n", 1), ("version=v2.3.0\nversionCode=\n", 1),
+                 ("version=v2.3.0 (720)\nversionCode=1\n", 1), ("version=v2.3.0 (719)\nversionCode=720\n", 1))
+        for prop, rc in cases:
+            with self.subTest(prop=prop), tempfile.TemporaryDirectory() as d:
+                Path(d, "module.prop").write_text("id=nomount\n" + prop)
+                res = subprocess.run(["bash", "-c", script], text=True, capture_output=True,
+                                     env=dict(os.environ, NOMOUNT_MODULE_DIR=d, GITHUB_STEP_SUMMARY=str(Path(d, "summary"))))
+                self.assertEqual(res.returncode, rc, res.stdout + res.stderr)
+                if rc:
+                    self.assertIn("nomount-metamodule action in this repository is out of date", res.stderr)
 
     def test_packaging_uses_full_history_and_never_forces_version_code_one(self):
         action = (ROOT / ".github/actions/nomount-metamodule/action.yml").read_text()
