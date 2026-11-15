@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "device": "OnePlus 15",
+  "model": "CPH2745",
+  "stock_family": "android16-6.12",
+  "stock_kernel": "6.12.69-android16-2026-03",
+  "allowed_candidate_families": [
+    "android16-6.12"
+  ],
+  "experimental_families": [
+    "android17-6.18"
+  ],
+  "allow_cross_family_flash": false,
+  "field_test_order": [
+    "6.12.69 bore_off",
+    "6.12.69 bore_on",
+    "6.12.92 bore_off",
+    "6.12.92 bore_on",
+    "6.18 lab_only_after_same_family_results"
+  ],
+  "notes": [
+    "A matrix entry permits a source build, not a OnePlus 15 boot-compatibility claim.",
+    "6.12.92 is a candidate in the stock KMI family; physical boot and vendor-module validation remain unproven.",
+    "android17-6.18 is a separate lab family, not a sublevel upgrade for the daily-driver image.",
+    "This workflow records compatibility scope; it cannot enforce what a user manually flashes."
+  ]
+}

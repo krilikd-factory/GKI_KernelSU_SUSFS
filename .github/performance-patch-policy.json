@@ -88,9 +88,9 @@
     },
     {
       "name": "increase_ext4_default_commit_age",
-      "channel": "stable",
-      "mechanism": "Raises the ext4 journal commit interval from 5 s to 30 s.",
-      "power_review": "Can batch journal writes but enlarges the potential uncommitted-data window after a crash."
+      "channel": "blocked",
+      "mechanism": "Would raise the ext4 journal commit interval from 5 s to 30 s; blocked in both build channels.",
+      "power_review": "Blocked: batching journal writes enlarges the potential uncommitted-data window after a crash and is not an accepted power optimization."
     },
     {
       "name": "increase_sk_mem_packets",
