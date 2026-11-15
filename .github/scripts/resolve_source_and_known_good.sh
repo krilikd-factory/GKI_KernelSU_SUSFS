@@ -7,58 +7,98 @@
 # KERNEL_SOURCE, EFFECTIVE_OPL, OEM_REPO, OEM_BRANCH, OEM_TIP, KG_KEY and the
 # KG_* known-good pins.
 
-# ---- Kernel source (aosp | oneplus) -------------------------------
-# oneplus: build from OnePlusOSS's own common tree for this phone.
-# Its base GKI release (e.g. android16-6.12-2025-06) decides which
-# patch-level leg (= which Kleaf build tools) runs; kernel/common is
-# then swapped for the OnePlus tree in download-kernel. Refuses a
-# source older than the phone's stock kernel (.github/device.json):
-# ColorOS vendor modules built for a newer KMI would not load.
+# ---- Kernel source selection (requested auto | aosp | oneplus) ----
+# Explicit oneplus is fail-closed. Auto uses OnePlus only after the remote branch,
+# Makefile identity, stock minima, patch-level matrix and Kleaf files all check out;
+# otherwise it selects AOSP and exports a stable, non-secret fallback reason.
 oem_retry() { local i; for i in 1 2 3 4 5; do "$@" && return 0; sleep $((i*3)); done; return 1; }
-KERNEL_SOURCE="${IN_KERNEL_SOURCE:-aosp}"
+REQUESTED_KERNEL_SOURCE="${IN_KERNEL_SOURCE:-aosp}"
+case "$REQUESTED_KERNEL_SOURCE" in auto|aosp|oneplus) ;; *) echo "::error::invalid kernel_source '$REQUESTED_KERNEL_SOURCE'"; exit 1 ;; esac
+KERNEL_SOURCE="$REQUESTED_KERNEL_SOURCE"
+KERNEL_SOURCE_FALLBACK_REASON="none"
 EFFECTIVE_OPL="${IN_OS_PATCH_LEVEL:-}"
-OEM_REPO=""; OEM_BRANCH=""; OEM_TIP=""; OEM_SUBLEVEL=""
-if [ "$KERNEL_SOURCE" = "oneplus" ]; then
-  [ "${IN_KVER:-}" = "6.12.x-android16" ] || {
-    echo "::error::kernel_source=oneplus needs kernel_build_version=6.12.x-android16"; exit 1; }
+OEM_REPO=""; OEM_BRANCH=""; OEM_TIP=""; OEM_SUBLEVEL=""; OEM_FAILURE_REASON=""; OEM_TMP=""
+
+oem_reject() {
+  OEM_FAILURE_REASON="$1"
+  echo "::notice::OnePlus source preflight rejected: $OEM_FAILURE_REASON"
+  [ -z "$OEM_TMP" ] || rm -rf "$OEM_TMP"
+  OEM_TMP=""
+  return 1
+}
+
+resolve_oneplus_source() {
+  [ "${IN_KVER:-}" = "6.12.x-android16" ] || { oem_reject family_not_oneplus15_stock; return 1; }
   DEV=.github/device.json
   OEM_REPO="$(jq -r .oneplus_kernel_repo "$DEV")"
   MATCH="$(jq -r .oneplus_branch_match "$DEV")"
   STOCK_SUB="$(jq -r .stock_sublevel "$DEV")"
   STOCK_OPL="$(jq -r .stock_patch_level "$DEV")"
+  case "$OEM_REPO" in https://github.com/OnePlusOSS/*) ;; *) oem_reject oneplus_repository_invalid; return 1 ;; esac
+  [ -n "$MATCH" ] && [ "$MATCH" != null ] || { oem_reject oneplus_branch_pattern_missing; return 1; }
+  case "$STOCK_SUB" in ''|*[!0-9]*) oem_reject device_stock_sublevel_invalid; return 1 ;; esac
+  [[ "$STOCK_OPL" =~ ^[0-9]{4}-[0-9]{2}$ ]] || { oem_reject device_stock_patch_level_invalid; return 1; }
   OEM_BRANCH="${IN_ONEPLUS_BRANCH:-}"
   if [ -z "$OEM_BRANCH" ]; then
-    OEM_BRANCH="$(oem_retry git ls-remote --heads "$OEM_REPO" | sed 's#.*refs/heads/##' \
+    OEM_BRANCH="$(oem_retry git ls-remote --heads "$OEM_REPO" 2>/dev/null | sed 's#.*refs/heads/##' \
                   | while read -r b; do if [[ "$b" == $MATCH ]]; then echo "$b"; fi; done | sort -V | tail -n1)"
   fi
-  [ -n "$OEM_BRANCH" ] || { echo "::error::no OnePlus branch matches '$MATCH' in $OEM_REPO"; exit 1; }
+  [[ "$OEM_BRANCH" == $MATCH ]] || { oem_reject oneplus_branch_unavailable; return 1; }
   OEM_TMP="$(mktemp -d)"
-  git -C "$OEM_TMP" init -q
-  oem_retry git -C "$OEM_TMP" fetch -q --depth=1 --filter=blob:none "$OEM_REPO" "refs/heads/$OEM_BRANCH"
-  OEM_TIP="$(git -C "$OEM_TMP" rev-parse FETCH_HEAD)"
-  OEM_SUBLEVEL="$(git -C "$OEM_TMP" show FETCH_HEAD:Makefile | sed -n 's/^SUBLEVEL = //p' | head -n1)"
+  git -C "$OEM_TMP" init -q || { oem_reject oneplus_temporary_repository_failed; return 1; }
+  oem_retry git -C "$OEM_TMP" fetch -q --depth=1 --filter=blob:none "$OEM_REPO" "refs/heads/$OEM_BRANCH" || {
+    oem_reject oneplus_fetch_failed; return 1; }
+  OEM_TIP="$(git -C "$OEM_TMP" rev-parse FETCH_HEAD 2>/dev/null)" || { oem_reject oneplus_tip_unavailable; return 1; }
+  [[ "$OEM_TIP" =~ ^[0-9a-f]{40}$ ]] || { oem_reject oneplus_tip_invalid; return 1; }
+  OEM_VERSION="$(git -C "$OEM_TMP" show FETCH_HEAD:Makefile 2>/dev/null | sed -n 's/^VERSION = //p' | head -n1)"
+  OEM_PATCHLEVEL="$(git -C "$OEM_TMP" show FETCH_HEAD:Makefile 2>/dev/null | sed -n 's/^PATCHLEVEL = //p' | head -n1)"
+  OEM_SUBLEVEL="$(git -C "$OEM_TMP" show FETCH_HEAD:Makefile 2>/dev/null | sed -n 's/^SUBLEVEL = //p' | head -n1)"
+  [ "$OEM_VERSION" = 6 ] && [ "$OEM_PATCHLEVEL" = 12 ] || { oem_reject oneplus_makefile_family_mismatch; return 1; }
+  case "$OEM_SUBLEVEL" in ''|*[!0-9]*) oem_reject oneplus_sublevel_missing; return 1 ;; esac
+  [ "$OEM_SUBLEVEL" -ge "$STOCK_SUB" ] || { oem_reject oneplus_source_older_than_stock; return 1; }
+  for _kleaf in BUILD.bazel build.config.gki.aarch64 arch/arm64/configs/gki_defconfig; do
+    git -C "$OEM_TMP" cat-file -e "FETCH_HEAD:$_kleaf" 2>/dev/null || { oem_reject oneplus_kleaf_files_incomplete; return 1; }
+  done
   OEM_MSG="$(git -C "$OEM_TMP" log -1 --format=%B FETCH_HEAD)"
   OEM_OPL="$(printf '%s' "$OEM_MSG" | grep -oE 'android16-6\.12-[0-9]{4}-[0-9]{2}' | head -n1 | sed 's/^android16-6\.12-//')"
   if [ -z "$OEM_OPL" ]; then
-    # No release tag in the message: map the sublevel onto the matrix.
     OEM_OPL="$(jq -r --arg s "$OEM_SUBLEVEL" '[.include[] | select(.sublevel == $s) | .date] | first // empty' .github/config/android16-6.12.json)"
   fi
-  rm -rf "$OEM_TMP"
-  echo "[+] OnePlus source: $OEM_REPO @ $OEM_BRANCH (${OEM_TIP:0:12}), kernel 6.12.${OEM_SUBLEVEL}, base ${OEM_OPL:-unknown}"
-  if [ -z "$OEM_SUBLEVEL" ] || [ "$OEM_SUBLEVEL" -lt "$STOCK_SUB" ] || \
-     { [ -n "$OEM_OPL" ] && [[ "$OEM_OPL" < "$STOCK_OPL" ]]; }; then
-    {
-      echo "::error::OnePlus has not published sources for your firmware yet."
-      echo "::error::Newest OnePlus source: 6.12.${OEM_SUBLEVEL:-?} (${OEM_OPL:-?}, branch $OEM_BRANCH); your phone runs 6.12.${STOCK_SUB} (${STOCK_OPL}) per .github/device.json."
-      echo "::error::A kernel older than stock cannot load ColorOS's vendor modules (boot-logo hang). Build with kernel_source=aosp until OnePlus releases the matching source; update device.json if your stock kernel changed."
-    } >&2
-    exit 1
+  if [ -n "$OEM_OPL" ] && [[ "$OEM_OPL" < "$STOCK_OPL" ]]; then
+    oem_reject oneplus_patch_level_older_than_stock; return 1
   fi
-  [ -n "$OEM_OPL" ] && jq -e --arg d "$OEM_OPL" 'any(.include[]; .date == $d)' .github/config/android16-6.12.json >/dev/null || {
-    echo "::error::OnePlus base '${OEM_OPL:-unknown}' has no entry in .github/config/android16-6.12.json (needed for its build tools)"; exit 1; }
+  if [ -z "$OEM_OPL" ] || ! jq -e --arg d "$OEM_OPL" 'any(.include[]; .date == $d)' .github/config/android16-6.12.json >/dev/null; then
+    oem_reject oneplus_kleaf_base_missing; return 1
+  fi
+  rm -rf "$OEM_TMP"; OEM_TMP=""
   EFFECTIVE_OPL="$OEM_OPL"
+  echo "[+] OnePlus source: $OEM_REPO @ $OEM_BRANCH (${OEM_TIP:0:12}), kernel 6.12.${OEM_SUBLEVEL}, base ${OEM_OPL}"
+  return 0
+}
+
+if [ "$REQUESTED_KERNEL_SOURCE" = auto ] && [ "${IN_KVER:-}" != "6.12.x-android16" ]; then
+  KERNEL_SOURCE="aosp"
+  KERNEL_SOURCE_FALLBACK_REASON="family_not_oneplus15_stock"
+elif [ "$REQUESTED_KERNEL_SOURCE" != aosp ]; then
+  if resolve_oneplus_source; then
+    KERNEL_SOURCE="oneplus"
+  else
+    if [ "$REQUESTED_KERNEL_SOURCE" = auto ]; then
+      KERNEL_SOURCE="aosp"
+      KERNEL_SOURCE_FALLBACK_REASON="${OEM_FAILURE_REASON:-oneplus_preflight_failed}"
+      EFFECTIVE_OPL="${IN_OS_PATCH_LEVEL:-}"
+      OEM_REPO=""; OEM_BRANCH=""; OEM_TIP=""; OEM_SUBLEVEL=""
+      echo "::warning::kernel_source=auto fallback to AOSP: $KERNEL_SOURCE_FALLBACK_REASON"
+    else
+      echo "::error::kernel_source=oneplus refused: ${OEM_FAILURE_REASON:-oneplus_preflight_failed}. Use auto for a recorded AOSP fallback." >&2
+      exit 1
+    fi
+  fi
 fi
 echo "effective_os_patch_level=${EFFECTIVE_OPL}" >> "$GITHUB_OUTPUT"
+echo "kernel_source_requested=${REQUESTED_KERNEL_SOURCE}" >> "$GITHUB_OUTPUT"
+echo "kernel_source_actual=${KERNEL_SOURCE}" >> "$GITHUB_OUTPUT"
+echo "kernel_source_fallback_reason=${KERNEL_SOURCE_FALLBACK_REASON}" >> "$GITHUB_OUTPUT"
 
 # known-good: reuse the exact component commits of a build that was
 # flashed and booted (recorded by "Mark build as known-good" into

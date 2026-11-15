@@ -53,8 +53,23 @@ def kernel_version(tree: Path) -> tuple[str, int]:
 def build_report(a: argparse.Namespace) -> dict:
     tree = Path(a.tree).resolve()
     device = json.loads(Path(a.device_file).read_text(encoding="utf-8"))
+    requested_source = getattr(a, "requested_source", None)
+    fallback_reason = getattr(a, "fallback_reason", "none")
+    if requested_source is None:
+        requested_source = a.source  # compatibility for offline users of the pre-auto CLI
     if a.source not in ("aosp", "oneplus"):
-        raise ValueError("source must be aosp or oneplus")
+        raise ValueError("actual source must be aosp or oneplus")
+    if requested_source not in ("auto", "aosp", "oneplus"):
+        raise ValueError("requested source must be auto, aosp or oneplus")
+    if requested_source != "auto" and requested_source != a.source:
+        raise ValueError("explicit requested/actual source selection changed unexpectedly")
+    if fallback_reason != "none":
+        if requested_source != "auto" or a.source != "aosp":
+            raise ValueError("an AOSP fallback reason is valid only for requested auto -> actual aosp")
+        if not re.fullmatch(r"[a-z0-9_:-]{1,120}", fallback_reason):
+            raise ValueError("source fallback reason is malformed")
+    elif requested_source == "auto" and a.source == "aosp":
+        raise ValueError("auto -> aosp requires an explicit fallback reason")
     if not HEX40.fullmatch(a.commit):
         raise ValueError("expected source commit is not a full lowercase Git SHA")
     actual_commit = git(tree, "rev-parse", "HEAD")
@@ -96,7 +111,8 @@ def build_report(a: argparse.Namespace) -> dict:
         path = tree / name
         if path.is_file():
             files[name] = {"sha256": sha256(path), "bytes": path.stat().st_size}
-        elif name in ("Makefile", "build.config.gki.aarch64", "arch/arm64/configs/gki_defconfig"):
+        elif name in ("Makefile", "build.config.gki.aarch64", "arch/arm64/configs/gki_defconfig") or \
+                (a.source == "oneplus" and name == "BUILD.bazel"):
             raise ValueError(f"required source file is missing: {name}")
     clang_revisions = {}
     for name in ("build.config.constants", "build.config.gki.aarch64"):
@@ -121,6 +137,13 @@ def build_report(a: argparse.Namespace) -> dict:
         "stage": "downloaded-source-preflight",
         **identity,
         "source_digest": source_digest,
+        "requested_source": requested_source,
+        "actual_source": a.source,
+        "fallback": {
+            "from": "oneplus" if fallback_reason != "none" else None,
+            "to": "aosp" if fallback_reason != "none" else None,
+            "reason": fallback_reason,
+        },
         "git_clean_before_features": True,
         "oem": {
             "repo": a.oem_repo,
@@ -136,7 +159,9 @@ def main() -> int:
     ap.add_argument("--output", required=True)
     ap.add_argument("--device-file", required=True)
     ap.add_argument("--base-manifest", required=True)
-    ap.add_argument("--source", required=True)
+    ap.add_argument("--source", required=True, help="actual checked-out source: aosp or oneplus")
+    ap.add_argument("--requested-source", default=None, choices=("auto", "aosp", "oneplus"))
+    ap.add_argument("--fallback-reason", default="none")
     ap.add_argument("--family", required=True)
     ap.add_argument("--expected-kernel", required=True)
     ap.add_argument("--expected-sublevel", required=True)

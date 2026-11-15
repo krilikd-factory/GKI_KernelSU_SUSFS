@@ -23,8 +23,8 @@ def load_policy(path: Path) -> dict:
         if not isinstance(name, str) or not name or name in seen:
             raise ValueError(f"invalid or duplicate patch name: {name!r}")
         seen.add(name)
-        if item.get("channel") not in ("stable", "candidate"):
-            raise ValueError(f"{name}: channel must be stable or candidate")
+        if item.get("channel") not in ("stable", "candidate", "blocked"):
+            raise ValueError(f"{name}: channel must be stable, candidate or blocked")
         for field in ("mechanism", "power_review"):
             if not isinstance(item.get(field), str) or not item[field].strip():
                 raise ValueError(f"{name}: missing {field}")
@@ -39,7 +39,9 @@ def render(data: dict, channel: str, policy_path: Path, source_commit: str) -> d
     patches = []
     for item in data["patches"]:
         entry = dict(item)
-        entry["decision"] = "apply" if channel == "candidate" or item["channel"] == "stable" else "candidate_only"
+        entry["decision"] = ("blocked" if item["channel"] == "blocked" else
+                             "apply" if channel == "candidate" or item["channel"] == "stable" else
+                             "candidate_only")
         patches.append(entry)
     return {
         "schema": 1,

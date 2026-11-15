@@ -167,6 +167,7 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
     patch_channel = env.get("PATCH_CHANNEL") or "stable"
     lto = env.get("KERNEL_LTO") or "unknown"
     provenance, provenance_error = read_json(workspace / "source-provenance.json")
+    kmi_report, kmi_error = read_json(workspace / "kmi-compatibility-report.json")
     device, device_error = read_json(workspace / ".github/device.json")
     compact_inventory, _ = read_json(workspace / "patch-inventory.json")
     delta, delta_error = read_json(workspace / "build-delta.json")
@@ -205,7 +206,10 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
     table(lines, ("Result", "Concise evidence"), [
         ("Build / artifact", f"{status} · {a.file_name}"),
         ("Kernel / config", f"{a.kernel_version}.{a.sublevel}-{a.android_version}-{a.os_patch_level} · {a.family} · {a.page_size} · LTO={lto}"),
-        ("Source base", f"{source} · {source_commit}"),
+        ("Source base", f"{source} (requested {env.get('KERNEL_SOURCE_REQUESTED') or source}) · {source_commit}"),
+        ("Source fallback", env.get("KERNEL_SOURCE_FALLBACK_REASON") or "not recorded"),
+        ("OnePlus 15 KMI scope", (f"{kmi_report.get('classification')} · {kmi_report.get('build_scope')} · runtime evidence unknown"
+                                  if isinstance(kmi_report, dict) else f"not recorded: {kmi_error}")),
         ("OnePlus published source", oneplus_brief),
         ("Patches", patch_brief),
         ("Root / SUSFS pins", f"{root_impl} {root_commit} · {susfs_brief}"),
@@ -319,6 +323,9 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         table(lines, ("Source field", "Recorded evidence"), [
             ("Preflight result", "✅ Recorded before feature patches" if not identity_mismatches else "⚠️ Recorded, but summary identity mismatch"),
             ("Source type", prov_source),
+            ("Requested source", provenance.get("requested_source", "not_recorded")),
+            ("Actual source", provenance.get("actual_source", prov_source)),
+            ("Fallback reason", (provenance.get("fallback") or {}).get("reason", "not_recorded") if isinstance(provenance.get("fallback"), dict) else "not_recorded"),
             ("OnePlus repository", oem.get("repo") if prov_source == "oneplus" else "not applicable (AOSP common)"),
             ("OnePlus selected branch", oem.get("branch") if prov_source == "oneplus" else "not applicable"),
             ("Exact actual HEAD", prov_commit),
