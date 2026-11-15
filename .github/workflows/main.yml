@@ -121,9 +121,10 @@ on:
         type: boolean
         default: true
       kernel_source:
-        description: "Kernel source: aosp = Google android16-6.12 common; oneplus = OnePlusOSS common for this phone (.github/device.json; refused while OnePlus's newest source is older than the stock kernel)"
+        description: "Kernel source: auto = use a suitable OnePlus 15 source or fall back to AOSP with a recorded reason; aosp = Google common; oneplus = require suitable OnePlusOSS source (fail closed)"
         type: choice
         options:
+          - auto
           - aosp
           - oneplus
         default: aosp
@@ -586,6 +587,8 @@ jobs:
             --arg usb_arsenal_commit "$USB_SHA" \
             --arg rekernel_commit "$RK_SHA" \
             --arg kernel_source "$KERNEL_SOURCE" \
+            --arg kernel_source_requested "$REQUESTED_KERNEL_SOURCE" \
+            --arg kernel_source_fallback_reason "$KERNEL_SOURCE_FALLBACK_REASON" \
             --arg oem_repo "$OEM_REPO" \
             --arg oem_branch "$OEM_BRANCH" \
             --arg oem_commit "$OEM_COMMIT" \

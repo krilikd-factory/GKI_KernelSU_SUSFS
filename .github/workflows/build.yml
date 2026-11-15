@@ -122,6 +122,8 @@ jobs:
       PIN_USB_ARSENAL_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').usb_arsenal_commit }}
       PIN_REKERNEL_COMMIT: ${{ fromJSON(inputs.extra_pins || '{}').rekernel_commit }}
       KERNEL_SOURCE: ${{ fromJSON(inputs.extra_pins || '{}').kernel_source || 'aosp' }}
+      KERNEL_SOURCE_REQUESTED: ${{ fromJSON(inputs.extra_pins || '{}').kernel_source_requested || fromJSON(inputs.extra_pins || '{}').kernel_source || 'aosp' }}
+      KERNEL_SOURCE_FALLBACK_REASON: ${{ fromJSON(inputs.extra_pins || '{}').kernel_source_fallback_reason || 'none' }}
       PATCH_CHANNEL: ${{ inputs.patch_channel }}
       OEM_REPO: ${{ fromJSON(inputs.extra_pins || '{}').oem_repo }}
       OEM_BRANCH: ${{ fromJSON(inputs.extra_pins || '{}').oem_branch }}
@@ -218,6 +220,8 @@ jobs:
             --device-file .github/device.json \
             --base-manifest kernel/.repo/manifests/default.xml \
             --source "${KERNEL_SOURCE:-aosp}" \
+            --requested-source "${KERNEL_SOURCE_REQUESTED:-aosp}" \
+            --fallback-reason "${KERNEL_SOURCE_FALLBACK_REASON:-none}" \
             --family "${{ inputs.version }}" \
             --expected-kernel "${{ inputs.kernel_version }}" \
             --expected-sublevel "${{ inputs.sublevel }}" \
@@ -225,6 +229,18 @@ jobs:
             --commit "${KERNEL_SOURCE_COMMIT:-}" \
             --oem-repo "${OEM_REPO:-}" \
             --oem-branch "${OEM_BRANCH:-}"
+          python3 -I .github/scripts/kmi_compatibility.py \
+            --policy .github/device-kmi-policy.json \
+            --family "${{ inputs.version }}" \
+            --source "${KERNEL_SOURCE:-aosp}" \
+            --output kmi-compatibility-report.json
+          python3 -I .github/scripts/scheduler_ab_evidence.py \
+            --family "${{ inputs.version }}" \
+            --sublevel "${{ inputs.sublevel }}" \
+            --source "${KERNEL_SOURCE:-aosp}" \
+            --feature-set "${{ inputs.feature_set }}" \
+            --source-provenance source-provenance.json \
+            --output scheduler-ab-plan.json
 
       - name: Spoof /proc/config.gz With Stock Config
         uses: ./.github/actions/stock-config
@@ -731,6 +747,8 @@ jobs:
           path: |
             /tmp/build-summary-${{ steps.build-summary.outputs.summary_base }}.md
             ${{ github.workspace }}/source-provenance.json
+            ${{ github.workspace }}/kmi-compatibility-report.json
+            ${{ github.workspace }}/scheduler-ab-plan.json
             ${{ github.workspace }}/kernel-final.config
             ${{ github.workspace }}/kernel-capabilities.json
             ${{ github.workspace }}/rekernel-provenance.json
@@ -784,6 +802,8 @@ jobs:
             --arg source_provenance_sha256 "$(sha256sum source-provenance.json | cut -d' ' -f1)" \
             --arg capabilities_sha256 "$(sha256sum kernel-capabilities.json | cut -d' ' -f1)" \
             --arg kernel_source "${KERNEL_SOURCE:-aosp}" \
+            --arg kernel_source_requested "${KERNEL_SOURCE_REQUESTED:-aosp}" \
+            --arg kernel_source_fallback_reason "${KERNEL_SOURCE_FALLBACK_REASON:-none}" \
             --arg oem_repo "${OEM_REPO:-}" \
             --arg oem_branch "${OEM_BRANCH:-}" \
             --arg from_run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
@@ -795,7 +815,9 @@ jobs:
               anykernel3_commit: $anykernel3_commit,
               vpnhide_commit: $vpnhide_commit, vpnhide_mode: $vpnhide_mode,
               usb_arsenal_commit: $usb_arsenal_commit, rekernel_commit: $rekernel_commit,
-              kernel_source: $kernel_source, oem_repo: $oem_repo, oem_branch: $oem_branch,
+              kernel_source: $kernel_source, kernel_source_requested: $kernel_source_requested,
+              kernel_source_fallback_reason: $kernel_source_fallback_reason,
+              oem_repo: $oem_repo, oem_branch: $oem_branch,
               patch_channel: $patch_channel, patch_policy_sha256: $patch_policy_sha256,
               patch_inventory_sha256: $patch_inventory_sha256,
               candidate_patches_applied: $candidate_patches_applied,
