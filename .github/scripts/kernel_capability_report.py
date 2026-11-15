@@ -84,6 +84,13 @@ CAPABILITIES = {
         "runtime_paths": [],
         "asb_use": "build default only; no power-saving percentage is implied",
     },
+    # Stock GKI already builds the UVC gadget function (android14+). It is listed so a
+    # build that lost it is visible, because ASB's Camera Tools webcam mode depends on it.
+    "media.usb_webcam": {
+        "configs": ["CONFIG_USB_CONFIGFS_F_UVC", "CONFIG_USB_F_UVC"],
+        "runtime_paths": ["/config/usb_gadget/g1/functions"],
+        "asb_use": "Camera Tools USB webcam: Android's DeviceAsWebcam streams through a uvc.0 gadget function that ASB creates only after the user opts in; the ROM's USB gadget HAL must still accept the uvc function",
+    },
 }
 
 # These are descriptions of existing Linux interfaces, not a KRILIKD ABI. ASB must
@@ -293,6 +300,7 @@ def make_report(config_path: Path, feature_set: str) -> dict:
             "external_owners": {
                 "vpn_hide": "VPN Hide app and its matching built-in companion; ASB has no control channel",
                 "network": "existing ASB network runtime; this report adds no second network writer",
+                "usb_webcam": "Android DeviceAsWebcam and the ROM's USB gadget HAL own streaming and USB switching; ASB only sets ro.usb.uvc.enabled at boot and creates the uvc.0 descriptor set (MJPEG 1080p/720p/480p, 30 fps) after an explicit opt-in",
             },
         },
     }

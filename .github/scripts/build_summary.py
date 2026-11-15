@@ -408,6 +408,15 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
     else:
         lines += [f"⚠️ Capability report: {md(caps_error)}.", ""]
 
+    if isinstance(capabilities, dict):
+        webcam = capabilities.get("capabilities", {}).get("media.usb_webcam")
+        if isinstance(webcam, dict):
+            uvc = ", ".join(f"`{md(k)}={md(v)}`" for k, v in sorted(webcam.get("configs", {}).items()))
+            ok = webcam.get("build_state") == "available_in_config"
+            lines += ["### 📷 ASB Camera Tools", "",
+                      f"- **USB webcam (UVC gadget):** {'✅ built in' if ok else '⚠️ not in the final config'} ({uvc}). ASB's Camera Tools use it through Android's DeviceAsWebcam service after an explicit opt-in; the ROM's USB gadget HAL decides whether the `uvc` function is accepted, so this is not a device test.",
+                      "- **Audio, video and photo drivers:** the Qualcomm audio, camera, video-codec, display and GPU drivers are vendor modules built against the KMI. This GKI image does not patch them; ASB's media work stays in userspace (camera grading, media profiles, the RT boost floor and the camera guard).", ""]
+
     lines += [
         "#### ASB controls: mechanism and trade-offs",
         "",
