@@ -777,24 +777,60 @@ jobs:
         with:
           commit: ${{ steps.clone.outputs.commit }}
 
-      # The packaged module must carry NoMount's own version scheme (versionCode = commit count
-      # of the pinned history, the number upstream publishes in update.json). A stale copy of the
-      # action forced versionCode=1, so after the first reboot the root manager offered the
-      # upstream release (720) as an update over the kernel-matched build.
-      - name: Verify NoMount metamodule version
+      # NoMount's own version scheme: versionCode = commit count of the pinned history (the
+      # number upstream publishes in update.json), version "vX.Y.Z (count)". It is applied here,
+      # in the workflow, from the pinned commit itself, whatever the composite action wrote: a
+      # stale copy of the action in the repository forced versionCode=1 (the root manager then
+      # offered upstream 720 as an "update" after the first reboot), and the dev56 check that
+      # caught it failed this job - and with it every kernel build that needs it (run
+      # 43656353821). Only a real inconsistency of the pinned source still fails here.
+      - name: Apply NoMount metamodule version
         if: env.NOMOUNT_WANTED == 'true'
         shell: bash
         env:
           NOMOUNT_MODULE_DIR: ${{ steps.buildmod.outputs.module_dir }}
+          NOMOUNT_MODULE_ZIP: ${{ steps.buildmod.outputs.module_path }}
+          NOMOUNT_COMMIT: ${{ steps.clone.outputs.commit }}
+          NOMOUNT_REPO: https://github.com/maxsteeel/nomount.git
         run: |
           set -euo pipefail
           prop="$NOMOUNT_MODULE_DIR/module.prop"
+          fail() { echo "::error::NoMount metamodule version: $*" >&2; exit 1; }
+          [ -f "$prop" ] || fail "module.prop is missing from the packaged metamodule"
+          [[ "$NOMOUNT_COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail "the pinned commit is not a full SHA"
+          hist="${RUNNER_TEMP:-/tmp}/nomount-history.git"
+          rm -rf "$hist"
+          git clone --quiet --bare --filter=tree:0 "$NOMOUNT_REPO" "$hist"
+          if ! git -C "$hist" cat-file -e "${NOMOUNT_COMMIT}^{commit}" 2>/dev/null; then
+            git -C "$hist" fetch --quiet origin "$NOMOUNT_COMMIT"
+          fi
+          count="$(git -C "$hist" rev-list --count "$NOMOUNT_COMMIT")"
+          base="$(git -C "$hist" show "${NOMOUNT_COMMIT}:module/module.prop" | sed -n 's/^version=//p' | head -n 1 | tr -d '\r ')"
+          meta="$(git -C "$hist" show "${NOMOUNT_COMMIT}:update.json" | python3 -I -c 'import json, sys
+          d = json.load(sys.stdin); c = d.get("versionCode")
+          print("%s|%s" % (d.get("version", ""), c if type(c) is int else ""))')"
+          IFS='|' read -r up_ver up_code <<< "$meta" || true
+          [[ "$count" =~ ^[1-9][0-9]*$ ]] || fail "commit count '${count}' is not a positive integer"
+          [[ "$base" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "unsupported base version '${base}' in module/module.prop"
+          [[ "${up_code:-}" =~ ^[1-9][0-9]*$ ]] || fail "update.json has no positive versionCode"
+          [ "${up_ver:-}" = "$base" ] || fail "module.prop (${base}) and update.json (${up_ver:-none}) base versions differ"
+          [ "$count" -ge "$up_code" ] || fail "the pinned history (${count}) is older than its update metadata (${up_code})"
+          [ "$(grep -c '^version=' "$prop")" = 1 ] || fail "expected exactly one version= line in the packaged module.prop"
+          if [ "$(grep -c '^versionCode=' "$prop")" = 0 ]; then printf 'versionCode=\n' >> "$prop"; fi
+          [ "$(grep -c '^versionCode=' "$prop")" = 1 ] || fail "expected exactly one versionCode= line in the packaged module.prop"
+          before="$(grep -E '^(version|versionCode)=' "$prop" | tr '\n' ' ')"
+          sed -i -e "s/^version=.*/version=${base} (${count})/" -e "s/^versionCode=.*/versionCode=${count}/" "$prop"
           code="$(sed -n 's/^versionCode=//p' "$prop" | head -n 1 | tr -d '\r')"
           ver="$(sed -n 's/^version=//p' "$prop" | head -n 1 | tr -d '\r')"
-          echo "NoMount metamodule: version=${ver} versionCode=${code}"
-          if ! [[ "$code" =~ ^[1-9][0-9]*$ ]] || [ "$code" -le 1 ] || [[ "$ver" != *"(${code})" ]]; then
-            echo "::error::NoMount module.prop has version='${ver}' versionCode='${code}'. The nomount-metamodule action in this repository is out of date: upload .github/actions/nomount-metamodule/action.yml and .github/scripts/nomount_metadata.py." >&2
-            exit 1
+          [ "$code" = "$count" ] && [ "$ver" = "${base} (${count})" ] || fail "module.prop still reads version='${ver}' versionCode='${code}'"
+          if [ -n "${NOMOUNT_MODULE_ZIP:-}" ] && [ -f "$NOMOUNT_MODULE_ZIP" ]; then
+            rm -f "$NOMOUNT_MODULE_ZIP"
+            ( cd "$NOMOUNT_MODULE_DIR" && zip -qr "$NOMOUNT_MODULE_ZIP" . )
+            sha256sum "$NOMOUNT_MODULE_ZIP" > "${NOMOUNT_MODULE_ZIP}.sha256"
+          fi
+          echo "NoMount metamodule: ${before}-> version=${ver} versionCode=${code}"
+          if [ "${before}" != "version=${ver} versionCode=${code} " ]; then
+            echo "::notice::NoMount version applied by the workflow (the packaging action left: ${before% })"
           fi
           {
             echo "### NoMount metamodule"
