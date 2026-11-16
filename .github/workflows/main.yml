@@ -143,12 +143,13 @@ on:
         type: boolean
         default: true
       use_perf:
-        description: "Performance: true = reviewed patches (those that do not apply are skipped); bore = the same plus the BORE scheduler (experimental, 6.12.x-android16 only, boot-test it first); false = none"
+        description: "Performance: true = reviewed patches; bore = BORE only; bore_adios = BORE plus runtime-selectable ADIOS 3.3.0 (both experimental, android16-6.12 only); false = none"
         type: choice
         options:
           - "true"
           - "false"
           - bore
+          - bore_adios
         default: "true"
       power_app_features:
         description: "Re-Kernel / ASB wakeup blocker / SDP 900 mA (android16-6.12; all = three, both = first two)"
@@ -639,7 +640,7 @@ jobs:
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
             F_BPF=true;    F_PERF=true;    F_VPN=true;    F_USB=true; F_RK=true; F_AWL=true; F_SDP=true
-            F_BORE=true
+            F_BORE=true;   F_ADIOS=true
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
@@ -653,9 +654,10 @@ jobs:
             esac
             F_BPF="${{ inputs.use_bpf }}"
             case "${{ inputs.use_perf }}" in
-              true)  F_PERF=true;  F_BORE=false ;;
-              false) F_PERF=false; F_BORE=false ;;
-              bore)  F_PERF=true;  F_BORE=true ;;
+              true)  F_PERF=true;  F_BORE=false; F_ADIOS=false ;;
+              false) F_PERF=false; F_BORE=false; F_ADIOS=false ;;
+              bore)  F_PERF=true;  F_BORE=true; F_ADIOS=false ;;
+              bore_adios) F_PERF=true; F_BORE=true; F_ADIOS=true ;;
               *) echo "Unsupported use_perf selection" >&2; exit 2 ;;
             esac
             if [ "$F_BORE" = "true" ] && [ "${{ inputs.kernel_build_version }}" != "6.12.x-android16" ]; then
@@ -686,12 +688,14 @@ jobs:
           [ "$F_BPF" = "true" ] && FEATURES="${FEATURES}BPF+"
           [ "$F_PERF" = "true" ] && FEATURES="${FEATURES}Perf+"
           [ "$F_BORE" = "true" ] && FEATURES="${FEATURES}BORE+"
+          [ "$F_ADIOS" = "true" ] && FEATURES="${FEATURES}ADIOS+"
           [ "$F_VPN" = "true" ] && FEATURES="${FEATURES}VPN+"
           [ "$F_USB" = "true" ] && FEATURES="${FEATURES}USB+"
           [ "$F_RK" = "true" ] && FEATURES="${FEATURES}RK+"
           [ "$F_AWL" = "true" ] && FEATURES="${FEATURES}AWL+"
           [ "$F_SDP" = "true" ] && FEATURES="${FEATURES}SDP900+"
           FEATURES_NO_BORE="${FEATURES//BORE+/}"
+          FEATURES_NO_BORE="${FEATURES_NO_BORE//ADIOS+/}"
           echo "feature_set=${FEATURES%+}" >> "$GITHUB_OUTPUT"
           echo "feature_set_no_bore=${FEATURES_NO_BORE%+}" >> "$GITHUB_OUTPUT"
 
@@ -2183,6 +2187,7 @@ jobs:
           # scheduled runs have no inputs.use_perf value.
           USE_PERF: ${{ contains(needs.resolve-sources.outputs.feature_set, 'Perf') }}
           USE_BORE: ${{ contains(needs.resolve-sources.outputs.feature_set, 'BORE') }}
+          USE_ADIOS: ${{ contains(needs.resolve-sources.outputs.feature_set, 'ADIOS') }}
           PAGE_SIZE: ${{ inputs.page_size || '4k' }}
           KERNEL_BUILD_VERSION: ${{ inputs.kernel_build_version || 'All' }}
           NOMOUNT_COMMIT: ${{ needs.resolve-sources.outputs.nomount_commit }}

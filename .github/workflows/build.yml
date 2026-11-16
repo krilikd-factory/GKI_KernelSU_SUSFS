@@ -529,6 +529,12 @@ jobs:
           device: ${{ fromJSON(inputs.extra_pins || '{}').device || '' }}
           soc: ${{ fromJSON(inputs.extra_pins || '{}').soc || '' }}
 
+      - name: Apply ADIOS I/O scheduler
+        if: contains(inputs.feature_set, 'ADIOS') && inputs.version == 'android16-6.12'
+        uses: ./.github/actions/adios
+        with:
+          kernel_version: ${{ inputs.kernel_version }}
+
       - name: Apply BORE scheduler (experimental)
         if: contains(inputs.feature_set, 'BORE') && inputs.version == 'android16-6.12'
         uses: ./.github/actions/bore
