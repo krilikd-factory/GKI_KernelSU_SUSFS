@@ -17,15 +17,19 @@ the future kernel telemetry/lease interface is documented in `KRILIKD_PROFILES.m
 
 ## Update Check composition and physical boot evidence (kernel dev66)
 
-- **Known-good features survive automatic builds:** Update Check validates the selected
-  non-`@previous` entry's complete `feature_set` and forwards the corresponding `main.yml` inputs.
-  `Perf+BORE` becomes `use_perf=bore`; a non-BORE entry remains non-BORE. Missing, unknown,
-  duplicated or internally inconsistent features stop the check with an actionable error. Multiple
-  primary entries must agree on one composition; otherwise an explicit key is required.
-- **Candidate cache identity includes features:** the fingerprint now covers upstream tips and the
-  canonical feature set. The same updates with and without BORE therefore cannot reuse one cache
-  entry. Component pins still come from `commit_mode=latest`; stable/candidate patch gates and the
-  physical-attestation requirement in Mark build as known-good are unchanged.
+- **Known-good evidence and candidate policy are separate:** Update Check validates the selected
+  non-`@previous` entry's complete `feature_set`, then explicitly composes an automatic BORE
+  candidate on supported `android16-6.12` and forwards `use_perf=bore`. The recorded boot-attested
+  feature set remains unchanged; the new BORE candidate is not promoted automatically. Missing,
+  unknown, duplicated or inconsistent features stop the check. Multiple primary entries must agree
+  on one base composition; otherwise an explicit key is required.
+- **Module-only updates use changed-path evidence:** NoMount and VPN Hide are not module-only by
+  component name, because both also have kernel integration. Only fully accounted companion input
+  paths dispatch `release_type=Modules`; all kernel, mixed, unknown, empty or unreachable evidence
+  fails closed to a full build. Module runs skip kernel images, managers, rejects and releases.
+- **Candidate cache identity includes features and action:** the fingerprint covers upstream tips,
+  the canonical candidate feature set and the full/module-only plan. Component pins still come from
+  `commit_mode=latest`; stable/candidate patch gates and physical-attestation promotion stay intact.
 - **6.12.92 field result:** `device-kmi-policy.json` records the owner's physical
   `boot_logo_stuck`. This result is not known-good and does not attest vendor modules or runtime
   functions. Compilation and same-KMI membership do not override it. A firmware update is not
