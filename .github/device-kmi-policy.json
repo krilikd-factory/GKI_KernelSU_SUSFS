@@ -14,13 +14,21 @@
   "field_test_order": [
     "6.12.69 bore_off",
     "6.12.69 bore_on",
-    "6.12.92 bore_off",
-    "6.12.92 bore_on",
+    "6.12.92 stopped_after_boot_logo_stuck",
     "6.18 lab_only_after_same_family_results"
   ],
+  "field_results": {
+    "6.12.92": {
+      "status": "boot_logo_stuck",
+      "physical_boot_attested": false,
+      "known_good_eligible_from_this_result": false,
+      "scope": "physical OnePlus 15 boot attempt; vendor modules and runtime functions were not validated",
+      "interpretation": "Compilation and membership in the stock KMI family do not override the observed physical boot failure. A firmware update is not a guaranteed fix."
+    }
+  },
   "notes": [
     "A matrix entry permits a source build, not a OnePlus 15 boot-compatibility claim.",
-    "6.12.92 is a candidate in the stock KMI family; physical boot and vendor-module validation remain unproven.",
+    "6.12.92 physically failed with boot_logo_stuck; it is not known-good. Same-KMI is not boot compatibility, and a firmware update is not a guaranteed fix.",
     "android17-6.18 is a separate lab family, not a sublevel upgrade for the daily-driver image.",
     "This workflow records compatibility scope; it cannot enforce what a user manually flashes."
   ]
