@@ -1,5 +1,18 @@
 # KRILIKD — ядро для OnePlus 15 (ColorOS 17, GKI 6.12.69)
 
+## dev66 buildfix3: NoMount Update Check использует ветку Build
+
+В журналах run 43905804756 фактический `nomount_commit` загруженного и отмеченного known-good
+ядра сохранён корректно. Последующий Update Check ошибочно сравнивал этот pin с `refs/heads/dev`,
+тогда как Build разрешает NoMount из `refs/heads/master`. Поэтому список из 21 commit описывал
+разницу между разными ветками, а не потерю known-good.
+
+Update Check теперь сравнивает NoMount с `master`, той же веткой, которую использует Build.
+Существующий fail-closed changed-path gate не ослаблен: kernel/mixed/unknown изменения по-прежнему
+требуют полной сборки. Mark known-good по-прежнему фиксирует pins конкретного booted run и не
+переписывает состав уже собранного бинарника. Host regression подтверждает parity веток; новый
+физический boot этим изменением не заявляется.
+
 ## Один режим: TOP
 
 Профилей safe / balanced / lab больше нет. Включена **Performance** — значит применяется всё, что подходит дереву:
