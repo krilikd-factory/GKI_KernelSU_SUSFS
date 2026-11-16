@@ -23,6 +23,79 @@ from pathlib import Path
 
 MAX_LOG = 25
 
+# Keep this order identical to the feature_set writer in main.yml.  Update Check
+# must reproduce the boot-attested composition, not silently combine old pins
+# with whichever feature defaults main.yml happens to have today.
+FEATURE_ORDER = (
+    "SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode",
+    "BPF", "Perf", "BORE", "VPN", "USB", "RK", "AWL", "SDP900",
+)
+FEATURE_INPUTS = {
+    "SUSFS": "use_susfs", "NoMount": "use_nomount", "BBG": "use_bbg",
+    "NET": "use_net", "DS": "use_ds", "NTSync": "use_ntsync",
+    "BPF": "use_bpf", "VPN": "use_vpnhide", "USB": "use_usb_arsenal",
+}
+POWER_INPUTS = {
+    (True, True, True): "all", (True, True, False): "both",
+    (True, False, False): "rekernel", (False, True, False): "wakeup-blocker",
+    (False, False, True): "sdp-900ma", (False, False, False): "none",
+}
+
+
+def dispatch_inputs_for_feature_set(value: str) -> tuple[str, dict[str, str]]:
+    """Validate and translate a known-good feature set to main.yml inputs."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("selected known-good entry has no usable feature_set; re-mark a successful build")
+    parts = value.split("+")
+    if any(not p for p in parts) or len(parts) != len(set(parts)):
+        raise ValueError(f"malformed feature_set {value!r}; empty or repeated features are not allowed")
+    unknown = sorted(set(parts) - set(FEATURE_ORDER))
+    if unknown:
+        raise ValueError("unknown known-good feature(s): " + ", ".join(unknown)
+                         + "; update the explicit Update Check mapping before building")
+    enabled = set(parts)
+    if "BORE" in enabled and "Perf" not in enabled:
+        raise ValueError("BORE requires Perf in feature_set; refusing to invent a scheduler composition")
+    canonical = "+".join(name for name in FEATURE_ORDER if name in enabled)
+    inputs = {arg: ("true" if name in enabled else "false")
+              for name, arg in FEATURE_INPUTS.items()}
+    compat = ("Ptrace" in enabled, "Unicode" in enabled)
+    inputs["compatibility_patches"] = {(True, True): "both", (True, False): "ptrace",
+                                      (False, True): "unicode", (False, False): "none"}[compat]
+    inputs["use_perf"] = "bore" if "BORE" in enabled else ("true" if "Perf" in enabled else "false")
+    inputs["power_app_features"] = POWER_INPUTS[tuple(name in enabled for name in ("RK", "AWL", "SDP900"))]
+    return canonical, inputs
+
+
+def select_build_composition(kg_all: dict, requested_key: str = "") -> tuple[str, str, dict[str, str]] | None:
+    """Select one unambiguous non-@previous composition for the automatic build."""
+    if not isinstance(kg_all, dict):
+        raise ValueError("known-good.json must be an object")
+    keys = [requested_key] if requested_key else sorted(k for k in kg_all if "@previous" not in k)
+    if not keys:
+        return None
+    if any(not isinstance(k, str) or not k for k in keys):
+        raise ValueError("known-good key must be a non-empty string")
+    resolved = []
+    for key in keys:
+        entry = kg_all.get(key)
+        if not isinstance(entry, dict):
+            raise ValueError(f"known-good set {key!r} not found or not an object")
+        canonical, inputs = dispatch_inputs_for_feature_set(entry.get("feature_set"))
+        resolved.append((key, canonical, inputs))
+    compositions = {(canonical, json.dumps(inputs, sort_keys=True)) for _, canonical, inputs in resolved}
+    if len(compositions) != 1:
+        raise ValueError("known-good sets have different feature compositions; rerun Update Check with an explicit key")
+    return resolved[0]
+
+
+def candidate_fingerprint(tips: list, feature_set: str) -> str:
+    """Cache identity includes scheduler/features as well as upstream tips."""
+    import hashlib
+    payload = {"tips": tips, "feature_set": feature_set or "workflow-defaults"}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
 
 def git(*args: str, cwd: str | None = None, check: bool = True) -> str:
     r = subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True)
@@ -85,8 +158,18 @@ def main() -> int:
     kg_all = json.loads((root / ".github/known-good.json").read_text())
     device = json.loads((root / ".github/device.json").read_text())
     keys = [a.key] if a.key else [k for k in kg_all if "@previous" not in k]
+    try:
+        composition = select_build_composition(kg_all, a.key)
+    except ValueError as exc:
+        print(f"::error::Update Check feature inheritance failed: {exc}", file=sys.stderr)
+        return 2
     md: list[str] = ["# KRILIKD update check", ""]
     summary: dict = {"sets": {}, "updates": 0}
+    if composition:
+        selected_key, feature_set, build_inputs = composition
+        summary.update({"known_good_key": selected_key, "feature_set": feature_set,
+                        "build_inputs": build_inputs})
+        md += [f"Automatic build inherits `{selected_key}` features: `{feature_set}`.", ""]
 
 
     for key in keys:
@@ -223,10 +306,9 @@ def main() -> int:
             md += ["## Upstream workflow (WildKernels/GKI_KernelSU_SUSFS main), latest commits", "```",
                    *git("-C", d, "log", "--format=%h %cs %s", "-15", "FETCH_HEAD", check=False).splitlines(), "```", ""]
 
-    import hashlib
     tips = sorted((k, n, v.get("tip", "")) for k, comp in summary["sets"].items()
                   for n, v in comp.items() if isinstance(v, dict) and v.get("status") == "newer")
-    summary["fingerprint"] = hashlib.sha256(json.dumps(tips).encode()).hexdigest()[:16]
+    summary["fingerprint"] = candidate_fingerprint(tips, summary.get("feature_set", ""))
 
     md += [f"**Components with updates: {summary['updates']}.** "
            "To try component updates: run *Build Kernels* with `commit_mode=latest`. New unreviewed patches remain observed; use `patch_channel=candidate` only after adding a scoped policy entry. After your boot check, promote known-good with the run URL; the full device checklist is optional and recorded separately.", ""]
