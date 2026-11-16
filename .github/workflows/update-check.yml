@@ -52,6 +52,7 @@ jobs:
           cat update-report.md >> "$GITHUB_STEP_SUMMARY"
           echo "updates=$(jq -r .updates update-summary.json)" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$(jq -r .fingerprint update-summary.json)" >> "$GITHUB_OUTPUT"
+          echo "build_inputs=$(jq -c '.build_inputs // {}' update-summary.json)" >> "$GITHUB_OUTPUT"
 
       - name: Upload report
         uses: actions/upload-artifact@v7
@@ -62,10 +63,10 @@ jobs:
             update-summary.json
 
       # A scheduled run starts the latest build by itself, once per distinct
-      # set of upstream updates: the cache entry keyed on the fingerprint of
-      # the new tips marks "a candidate for exactly these updates was already
-      # built". So there is always a fresh candidate kernel waiting, and no
-      # rebuild loop while you have not marked it known-good yet.
+      # set of upstream updates AND known-good features: the fingerprint marks
+      # "a candidate for exactly these updates and this scheduler composition
+      # was already built". So there is always a fresh candidate kernel waiting,
+      # and no rebuild loop while you have not marked it known-good yet.
       - name: Was a candidate for these updates already built?
         id: seen
         if: steps.check.outputs.updates != '0'
@@ -82,11 +83,22 @@ jobs:
           (inputs.build_latest || (github.event_name == 'schedule' && steps.seen.outputs.cache-hit != 'true'))
         env:
           GH_TOKEN: ${{ github.token }}
+          BUILD_INPUTS: ${{ steps.check.outputs.build_inputs }}
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f commit_mode=latest
-          echo "Started Build Kernels (commit_mode=latest) for update set ${{ steps.check.outputs.fingerprint }}. Stable build only observes unknown patches. After your boot check, paste this run URL into 'Mark build as known-good'; the full Pins checklist remains optional." >> "$GITHUB_STEP_SUMMARY"
+          # Never drop the boot-attested feature composition back to main.yml
+          # defaults. In particular Perf+BORE must arrive as use_perf=bore.
+          jq -e 'type == "object" and all(to_entries[]; (.key | type == "string") and (.value | type == "string"))' \
+            <<< "$BUILD_INPUTS" > /dev/null
+          build_args=()
+          while IFS=$'\t' read -r name value; do
+            [ -n "$name" ] && [ -n "$value" ] || { echo "::error::Empty inherited build input" >&2; exit 2; }
+            build_args+=("-f" "$name=$value")
+          done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' <<< "$BUILD_INPUTS")
+          gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" \
+            -f commit_mode=latest "${build_args[@]}"
+          echo "Started Build Kernels (commit_mode=latest) for update set ${{ steps.check.outputs.fingerprint }} with the selected known-good feature composition. Stable build only observes unknown patches. After your boot check, paste this run URL into 'Mark build as known-good'; the full Pins checklist remains optional." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remember that this update set has a candidate
         if: steps.start.outcome == 'success' && steps.seen.outputs.cache-hit != 'true'
