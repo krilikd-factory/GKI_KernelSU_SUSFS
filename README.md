@@ -124,6 +124,8 @@ After a successful personal boot check, open **Actions → Mark build as known-g
 - New upstream patches are **observed, not auto-applied**.
 - Candidate and enabled entries require provenance, license and target scope.
 - Denylist and risky-header review remain independent barriers.
+- **Update Check is fail-closed:** only NoMount `module/`, `userspace/`, `update.json` or VPN Hide `builtin/`, `VERSION` diffs can dispatch `release_type=Modules`. Kernel, SUSFS, mixed, unknown, empty or unreachable path evidence triggers a full candidate instead. Module-only runs build only changed companions and skip kernel images, manager/reject and release jobs.
+- **Automatic candidates explicitly enable BORE** through `use_perf=bore` on the supported `android16-6.12` target. The recorded known-good `feature_set` is not rewritten: a BORE candidate remains unattested until its own physical boot check and promotion.
 - LTO is intentionally disabled for the primary `android16-6.12` target because of the Rust/BTF/Android boot constraint documented in [KRILIKD.md](docs/KRILIKD.md).
 - No thermal bypass, hardcoded voltage/frequency table, universal 1 Hz promise or unverified performance percentage is part of this project.
 
