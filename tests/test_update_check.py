@@ -65,6 +65,90 @@ class UpdateCheckFeatureInheritanceTest(unittest.TestCase):
         self.assertNotIn('-f commit_mode=latest\n', workflow)
         self.assertIn("Perf+BORE must arrive as use_perf=bore", workflow)
         self.assertIn("updates AND known-good features", workflow)
+        self.assertIn('build_args+=("-f" "release_type=Modules")', workflow)
+        self.assertIn('if .update_plan.action == "modules_only"', workflow)
+        self.assertIn("use_perf=bore", workflow)
+        main = (ROOT / ".github/workflows/main.yml").read_text()
+        self.assertNotIn('      modules_only:\n', main)
+        self.assertIn('          - Modules\n', main)
+        self.assertEqual(main.count("inputs.release_type != 'Modules' && !inputs.test_release_notes && ((github.event_name == 'schedule'"), 8)
+        import yaml
+        parsed = yaml.safe_load(main)
+        self.assertEqual(len(parsed[True]["workflow_dispatch"]["inputs"]), 25)
+        self.assertIn('build_args+=', workflow)
+
+    @staticmethod
+    def module_summary(paths, component="NoMount"):
+        return {"updates": 1, "sets": {"key": {component: {
+            "status": "newer", "tip": "b" * 40,
+            "change_evidence": "available", "changed_paths": paths,
+        }}}}
+
+    def test_nomount_and_vpn_companion_only_diffs_produce_only_changed_modules(self):
+        plan = update_check.classify_update_plan(self.module_summary(
+            ["module/module.prop", "userspace/src/nm.c", "update.json"]))
+        self.assertEqual(plan, {"action": "modules_only", "modules": ["NoMount"],
+                                "reason": "every newer component diff is confined to its companion artifact inputs"})
+        plan = update_check.classify_update_plan(self.module_summary(
+            ["builtin/build.py", "builtin/module/module.prop", "VERSION"], "VPN Hide"))
+        self.assertEqual(plan["action"], "modules_only")
+        self.assertEqual(plan["modules"], ["VPN Hide"])
+
+    def test_kernel_mixed_unknown_empty_and_unsafe_paths_fail_to_full_build(self):
+        cases = [
+            self.module_summary(["kernel/hooks.c", "module/module.prop"]),
+            self.module_summary(["README.md"]),
+            self.module_summary([], "NoMount"),
+            self.module_summary(["../module/module.prop"]),
+            self.module_summary(["builtin/build.py"], "KernelSU-Next"),
+        ]
+        unavailable = self.module_summary(["module/module.prop"])
+        unavailable["sets"]["key"]["NoMount"]["change_evidence"] = "unavailable"
+        cases.append(unavailable)
+        unknown = self.module_summary(["module/module.prop"])
+        unknown["sets"]["key"]["NoMount"]["status"] = "mystery"
+        cases.append(unknown)
+        for summary in cases:
+            with self.subTest(summary=summary):
+                self.assertEqual(update_check.classify_update_plan(summary)["action"], "full_build")
+
+    def test_mixed_components_and_unreachable_evidence_fail_to_full_build(self):
+        mixed = self.module_summary(["module/module.prop"])
+        mixed["sets"]["key"]["SUSFS"] = {"status": "newer", "tip": "c" * 40}
+        self.assertEqual(update_check.classify_update_plan(mixed)["action"], "full_build")
+        unreachable = self.module_summary(["module/module.prop"])
+        unreachable["sets"]["key"]["Kernel source (AOSP common)"] = {"status": "unreachable"}
+        self.assertEqual(update_check.classify_update_plan(unreachable)["action"], "full_build")
+
+    def test_no_updates_and_invalid_counts_do_not_create_a_module_run(self):
+        self.assertEqual(update_check.classify_update_plan({"updates": 0, "sets": {}})["action"], "none")
+        self.assertEqual(update_check.classify_update_plan({"updates": -1, "sets": {}})["action"], "full_build")
+
+    def test_module_action_is_part_of_candidate_fingerprint(self):
+        tips = [("key", "NoMount", "b" * 40)]
+        full = {"action": "full_build", "modules": [], "reason": "mixed"}
+        modules = {"action": "modules_only", "modules": ["NoMount"], "reason": "proved"}
+        self.assertNotEqual(update_check.candidate_fingerprint(tips, BASE, full),
+                            update_check.candidate_fingerprint(tips, BASE, modules))
+
+    def test_actual_known_good_gets_an_explicit_unattested_bore_candidate(self):
+        kg_all = json.loads((ROOT / ".github/known-good.json").read_text())
+        before = json.dumps(kg_all, sort_keys=True)
+        key, candidate, inputs = update_check.select_automatic_candidate_composition(kg_all)
+        self.assertEqual(key, "android16-6.12-2026-03/KernelSU-Next")
+        self.assertIn("Perf", candidate.split("+"))
+        self.assertIn("BORE", candidate.split("+"))
+        self.assertEqual(inputs["use_perf"], "bore")
+        self.assertNotIn("BORE", kg_all[key]["feature_set"].split("+"))
+        self.assertEqual(json.dumps(kg_all, sort_keys=True), before)
+
+    def test_automatic_bore_policy_fails_closed_without_perf_or_supported_family(self):
+        with self.assertRaisesRegex(ValueError, "requires Perf"):
+            update_check.select_automatic_candidate_composition(
+                {"android16-6.12-2026-03/KernelSU-Next": {"feature_set": BASE.replace("+Perf", "")}})
+        with self.assertRaisesRegex(ValueError, "supported only"):
+            update_check.select_automatic_candidate_composition(
+                {"android17-6.18-2026-03/KernelSU-Next": {"feature_set": BASE}})
 
     def test_candidate_and_physical_attestation_gates_remain_intact(self):
         mark = (ROOT / ".github/workflows/mark-known-good.yml").read_text()
