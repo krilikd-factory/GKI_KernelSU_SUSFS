@@ -18,8 +18,8 @@ the future kernel telemetry/lease interface is documented in `KRILIKD_PROFILES.m
 ## Update Check composition and physical boot evidence (kernel dev66)
 
 - **Known-good evidence and candidate policy are separate:** Update Check validates the selected
-  non-`@previous` entry's complete `feature_set`, then explicitly composes an automatic BORE
-  candidate on supported `android16-6.12` and forwards `use_perf=bore`. The recorded boot-attested
+  non-`@previous` entry's complete `feature_set`, then explicitly composes an automatic BORE+ADIOS
+  candidate on supported `android16-6.12` and forwards `use_perf=bore_adios`. The recorded boot-attested
   feature set remains unchanged; the new BORE candidate is not promoted automatically. Missing,
   unknown, duplicated or inconsistent features stop the check. Multiple primary entries must agree
   on one base composition; otherwise an explicit key is required.
@@ -115,3 +115,21 @@ switch.
   it is marked known-good. Keep the previous image to flash back.
 - **Switching it off at runtime:** BORE exposes `/proc/sys/kernel/sched_bore` (0 = plain EEVDF),
   so a boot that works can be compared against stock behaviour without reflashing.
+
+## ADIOS 3.3.0 with BORE (kernel dev66 buildfix2)
+
+`use_perf=bore_adios` composes BORE and ADIOS on `android16-6.12`; `use_perf=bore` remains the
+exact BORE-only composition for reproducing older known-good builds. Scheduled candidates request
+`bore_adios`. Other kernel families strip both tokens and the dispatch form remains at 25 inputs.
+
+ADIOS is a block-I/O scheduler, not another CPU scheduler: BORE handles task selection while ADIOS
+handles storage request deadlines/batching. The vendored 6.12 patch is applied atomically by
+`adios_apply.sh`, with source/hash/version guards and no silent failure. Its upstream desktop
+`all`/`clean` host-module Makefile targets are removed for Android in-tree builds. Exact-source
+`git apply --check` and apply guards passed against AOSP 6.12.69 and 6.12.92 host snapshots.
+
+The action sets `CONFIG_MQ_IOSCHED_ADIOS=y` and explicitly disables
+`CONFIG_MQ_IOSCHED_DEFAULT_ADIOS`; inclusion therefore does not silently replace the stock default.
+ASB discovers and selects `adios` at runtime only through its bounded per-queue scheduler owner.
+No private ADIOS tunables are written. Build/apply success is not physical boot proof, and no UFS
+battery, latency or throughput improvement is claimed without same-device A/B evidence.

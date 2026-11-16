@@ -77,7 +77,7 @@ Resolver раскрывает choices в прежние feature flags; release-n
 
 ## Цикл обновлений и каналы патчей
 
-0. Каждый день **KRILIKD Update Check** обрабатывает новый набор один раз. Если changed-path evidence доказывает обновление только companion modules, запускается `release_type=Modules` и создаются только изменённые module artifacts. Kernel/SUSFS/mixed/unknown/unreachable изменения запускают полный `latest`-кандидат с явным `use_perf=bore`; known-good `feature_set` при этом не переписывается. Свежие неизвестные патчи только попадают в отчёт: **apply-by-default удалён**.
+0. Каждый день **KRILIKD Update Check** обрабатывает новый набор один раз. Если changed-path evidence доказывает обновление только companion modules, запускается `release_type=Modules` и создаются только изменённые module artifacts. Kernel/SUSFS/mixed/unknown/unreachable изменения запускают полный `latest`-кандидат с явным `use_perf=bore_adios`; known-good `feature_set` при этом не переписывается. Свежие неизвестные патчи только попадают в отчёт: **apply-by-default удалён**.
 1. У каждого ранее не обработанного `kernel_patches/common/*.patch` есть состояние:
    - `observed` — обнаружен, посчитан SHA-256, но не применяется;
    - `candidate` — человек указал provenance, лицензию и target в `.github/patch-policy.json`; применяется только при явном `patch_channel=candidate`;
