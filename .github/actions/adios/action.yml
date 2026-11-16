@@ -1,0 +1,28 @@
+name: 'Apply ADIOS I/O Scheduler'
+description: 'Apply reviewed ADIOS 3.3.0 to android16-6.12 without making it the unconditional default'
+
+inputs:
+  kernel_version:
+    description: 'Kernel version; only 6.12 is wired'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Apply ADIOS atomically
+      shell: bash
+      env:
+        KERNEL_VERSION: ${{ inputs.kernel_version }}
+      run: |
+        set -euo pipefail
+        [ "$KERNEL_VERSION" = "6.12" ] || { echo "ADIOS is wired for 6.12 only (got $KERNEL_VERSION)" >&2; exit 1; }
+        PATCH="${{ github.action_path }}/patches/0001-linux6.12-ADIOS-3.3.0.patch"
+        echo "ADIOS patch sha256: $(sha256sum "$PATCH" | cut -d' ' -f1)"
+        bash "${{ github.workspace }}/.github/scripts/adios_apply.sh" "${{ github.workspace }}/kernel/common" "$PATCH"
+
+    - name: Enable ADIOS but preserve the stock default
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_MQ_IOSCHED_ADIOS=y
+          CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=n
