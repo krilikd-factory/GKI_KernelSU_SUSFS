@@ -13,7 +13,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
-FEATURE_ORDER = ("SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode", "BPF", "Perf", "BORE", "VPN", "USB", "RK", "AWL", "SDP900")
+FEATURE_ORDER = ("SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode", "BPF", "Perf", "BORE", "ADIOS", "VPN", "USB", "RK", "AWL", "SDP900")
 FEATURES = {
     "SUSFS": ("🛡️ SUSFS", "Kernel-side SUSFS integration; matching userspace remains required"),
     "NoMount": ("🧩 NoMount", "Mount metamodule integration; companion artifact is built separately"),
@@ -26,6 +26,7 @@ FEATURES = {
     "BPF": ("📊 BPF stack", "BTF, eBPF and FUSE-BPF build options"),
     "Perf": ("🚀 Performance pass", "Dry-run-checked patches plus stock-config and KMI guards"),
     "BORE": ("⏱️ BORE scheduler (experimental)", "Burst-oriented EEVDF variant with its state kept out of task_struct's layout"),
+    "ADIOS": ("🗄️ ADIOS 3.3.0 I/O scheduler", "Adaptive deadline block I/O scheduler; built in but not the unconditional default"),
     "VPN": ("🕵️ VPN Hide", "Built-in driver; managed only by its own app and matching companion"),
     "USB": ("🔌 USB Arsenal", "USB gadget integration, including ISO/DVD mode where the patch fits"),
     "RK": ("🧊 Re-Kernel", "Pinned built-in Re-Kernel driver and its netlink transport"),
@@ -80,6 +81,10 @@ FEATURE_GUIDE = {
         "Applies the BORE 7.0.0 scheduler patch to the 6.12 common tree. Its per-task state is moved out of task_struct into a pointer in the last reserved slot, so the structure keeps its stock layout and the KMI guard still compares against the stock ABI.",
         "Changes how EEVDF picks the next task, mostly for interactive responsiveness. No battery or frame-rate gain is claimed here, and the phone's vendor scheduler still makes most placement decisions.",
         "Compilation proves nothing about boot. The patch needed three hand ports on 6.12.69, and the same patch on another sublevel can stop the build. Boot-test and measure before relying on it."),
+    "ADIOS": (
+        "Adds the reviewed ADIOS 3.3.0 block I/O scheduler beside BORE. BORE schedules CPU tasks; ADIOS schedules block requests, so their roles do not overlap. The upstream desktop-only Makefile targets were removed for Android in-tree builds.",
+        "ADIOS is intended to adapt request deadlines and batching under I/O load. No OnePlus 15/UFS latency, throughput or battery improvement is claimed without an on-device A/B against mq-deadline, kyber, bfq and none.",
+        "CONFIG_MQ_IOSCHED_ADIOS=y only exposes the scheduler; CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=n preserves the normal kernel default. ASB may select it only after per-device runtime discovery and readback. Patch application is not boot or field validation."),
     "VPN": (
         "Builds the in-kernel VPN Hide driver at the pinned revision for use by its own app and matching companion.",
         "No ASB network policy or always-on worker is added. Runtime cost depends on the external owner's active configuration.",

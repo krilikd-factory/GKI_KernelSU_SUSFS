@@ -28,7 +28,7 @@ MAX_LOG = 25
 # with whichever feature defaults main.yml happens to have today.
 FEATURE_ORDER = (
     "SUSFS", "NoMount", "BBG", "NET", "DS", "NTSync", "Ptrace", "Unicode",
-    "BPF", "Perf", "BORE", "VPN", "USB", "RK", "AWL", "SDP900",
+    "BPF", "Perf", "BORE", "ADIOS", "VPN", "USB", "RK", "AWL", "SDP900",
 )
 FEATURE_INPUTS = {
     "SUSFS": "use_susfs", "NoMount": "use_nomount", "BBG": "use_bbg",
@@ -56,13 +56,15 @@ def dispatch_inputs_for_feature_set(value: str) -> tuple[str, dict[str, str]]:
     enabled = set(parts)
     if "BORE" in enabled and "Perf" not in enabled:
         raise ValueError("BORE requires Perf in feature_set; refusing to invent a scheduler composition")
+    if "ADIOS" in enabled and "BORE" not in enabled:
+        raise ValueError("ADIOS is currently composed with BORE; refusing an unreviewed standalone composition")
     canonical = "+".join(name for name in FEATURE_ORDER if name in enabled)
     inputs = {arg: ("true" if name in enabled else "false")
               for name, arg in FEATURE_INPUTS.items()}
     compat = ("Ptrace" in enabled, "Unicode" in enabled)
     inputs["compatibility_patches"] = {(True, True): "both", (True, False): "ptrace",
                                       (False, True): "unicode", (False, False): "none"}[compat]
-    inputs["use_perf"] = "bore" if "BORE" in enabled else ("true" if "Perf" in enabled else "false")
+    inputs["use_perf"] = ("bore_adios" if "ADIOS" in enabled else "bore") if "BORE" in enabled else ("true" if "Perf" in enabled else "false")
     inputs["power_app_features"] = POWER_INPUTS[tuple(name in enabled for name in ("RK", "AWL", "SDP900"))]
     return canonical, inputs
 
@@ -106,6 +108,8 @@ def select_automatic_candidate_composition(kg_all: dict, requested_key: str = ""
         raise ValueError("automatic BORE policy requires Perf in the selected known-good feature_set")
     if "BORE" not in enabled:
         enabled.append("BORE")
+    if "ADIOS" not in enabled:
+        enabled.append("ADIOS")
     canonical, inputs = dispatch_inputs_for_feature_set("+".join(enabled))
     return key, canonical, inputs
 
