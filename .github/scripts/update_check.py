@@ -304,7 +304,7 @@ def main() -> int:
         comps = [
             ("KernelSU-Next (pershoot dev-susfs)", "https://github.com/pershoot/KernelSU-Next", "refs/heads/dev-susfs", "root_commit"),
             ("SUSFS", "https://gitlab.com/simonpunk/susfs4ksu.git", f"refs/heads/gki-{family}", "susfs_commit"),
-            ("NoMount", "https://github.com/maxsteeel/nomount.git", "refs/heads/dev", "nomount_commit"),
+            ("NoMount", "https://github.com/maxsteeel/nomount.git", "refs/heads/master", "nomount_commit"),
             ("Baseband-guard", "https://github.com/vc-teahouse/Baseband-guard.git", "refs/heads/main", "bbg_commit"),
             ("DroidSpaces", "https://github.com/ravindu644/Droidspaces-OSS.git", "refs/heads/main", "droidspaces_commit"),
             ("kernel_patches", "https://github.com/WildKernels/kernel_patches.git", "refs/heads/main", "kernel_patches_commit"),
