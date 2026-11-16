@@ -5,9 +5,10 @@ name: KRILIKD Update Check
 # new commits: KernelSU-Next, SUSFS, NoMount, Baseband-guard, DroidSpaces,
 # kernel_patches, AnyKernel3, USB-Arsenal, VPN Hide releases, the kernel
 # source itself, plus OnePlus source availability and upstream workflow news.
-# The daily scheduled run starts a commit_mode=latest build by itself when
-# something is newer (once per set of updates); a manual run does so only
-# with build_latest ticked.
+# The daily scheduled run starts a commit_mode=latest candidate by itself when
+# something is newer (once per set of updates); a manual run does so only with
+# build_latest ticked. Proven companion-only diffs dispatch release_type=Modules;
+# kernel, mixed, unknown or unreachable evidence still requires a full build.
 
 on:
   workflow_dispatch:
@@ -53,6 +54,8 @@ jobs:
           echo "updates=$(jq -r .updates update-summary.json)" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$(jq -r .fingerprint update-summary.json)" >> "$GITHUB_OUTPUT"
           echo "build_inputs=$(jq -c '.build_inputs // {}' update-summary.json)" >> "$GITHUB_OUTPUT"
+          echo "update_action=$(jq -r '.update_plan.action // "full_build"' update-summary.json)" >> "$GITHUB_OUTPUT"
+          echo "modules_only=$(jq -r 'if .update_plan.action == "modules_only" then "true" else "false" end' update-summary.json)" >> "$GITHUB_OUTPUT"
 
       - name: Upload report
         uses: actions/upload-artifact@v7
@@ -76,7 +79,7 @@ jobs:
           key: latest-candidate-${{ steps.check.outputs.fingerprint }}
           lookup-only: true
 
-      - name: Start a latest build
+      - name: Start latest candidate or changed module artifacts
         id: start
         if: >-
           steps.check.outputs.updates != '0' &&
@@ -84,6 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_INPUTS: ${{ steps.check.outputs.build_inputs }}
+          MODULES_ONLY: ${{ steps.check.outputs.modules_only }}
         shell: bash
         run: |
           set -euo pipefail
@@ -96,9 +100,22 @@ jobs:
             [ -n "$name" ] && [ -n "$value" ] || { echo "::error::Empty inherited build input" >&2; exit 2; }
             build_args+=("-f" "$name=$value")
           done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' <<< "$BUILD_INPUTS")
+          case "$MODULES_ONLY" in
+            true|false) ;;
+            *) echo "::error::Invalid modules_only gate: $MODULES_ONLY" >&2; exit 2 ;;
+          esac
+          if [ "$MODULES_ONLY" = true ]; then
+            build_args+=("-f" "release_type=Modules")
+          else
+            build_args+=("-f" "release_type=CI")
+          fi
           gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" \
             -f commit_mode=latest "${build_args[@]}"
-          echo "Started Build Kernels (commit_mode=latest) for update set ${{ steps.check.outputs.fingerprint }} with the selected known-good feature composition. Stable build only observes unknown patches. After your boot check, paste this run URL into 'Mark build as known-good'; the full Pins checklist remains optional." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MODULES_ONLY" = true ]; then
+            echo "Started only the changed companion module artifact jobs for update set ${{ steps.check.outputs.fingerprint }}; all kernel image and release jobs are gated off." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Started a full Build Kernels candidate (commit_mode=latest, use_perf=bore) for update set ${{ steps.check.outputs.fingerprint }}. The known-good feature_set remains boot-attested and unchanged; this BORE candidate still needs a separate boot check before promotion." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Remember that this update set has a candidate
         if: steps.start.outcome == 'success' && steps.seen.outputs.cache-hit != 'true'
