@@ -138,8 +138,10 @@ class UpdateCheckFeatureInheritanceTest(unittest.TestCase):
         self.assertEqual(key, "android16-6.12-2026-03/KernelSU-Next")
         self.assertIn("Perf", candidate.split("+"))
         self.assertIn("BORE", candidate.split("+"))
-        self.assertEqual(inputs["use_perf"], "bore")
+        self.assertIn("ADIOS", candidate.split("+"))
+        self.assertEqual(inputs["use_perf"], "bore_adios")
         self.assertNotIn("BORE", kg_all[key]["feature_set"].split("+"))
+        self.assertNotIn("ADIOS", kg_all[key]["feature_set"].split("+"))
         self.assertEqual(json.dumps(kg_all, sort_keys=True), before)
 
     def test_automatic_bore_policy_fails_closed_without_perf_or_supported_family(self):
