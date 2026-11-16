@@ -173,5 +173,12 @@ class UpdateCheckFeatureInheritanceTest(unittest.TestCase):
         self.assertNotIn("6.12.92 bore_off", policy["field_test_order"])
 
 
+    def test_nomount_update_check_uses_the_same_master_branch_as_build(self):
+        update = (ROOT / ".github/scripts/update_check.py").read_text()
+        build = (ROOT / ".github/workflows/main.yml").read_text()
+        self.assertIn('("NoMount", "https://github.com/maxsteeel/nomount.git", "refs/heads/master", "nomount_commit")', update)
+        self.assertNotIn('("NoMount", "https://github.com/maxsteeel/nomount.git", "refs/heads/dev", "nomount_commit")', update)
+        self.assertIn('https://github.com/maxsteeel/nomount.git refs/heads/master', build)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
