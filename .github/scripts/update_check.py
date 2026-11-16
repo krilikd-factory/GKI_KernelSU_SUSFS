@@ -89,12 +89,96 @@ def select_build_composition(kg_all: dict, requested_key: str = "") -> tuple[str
     return resolved[0]
 
 
-def candidate_fingerprint(tips: list, feature_set: str) -> str:
-    """Cache identity includes scheduler/features as well as upstream tips."""
+def select_automatic_candidate_composition(kg_all: dict, requested_key: str = "") -> tuple[str, str, dict[str, str]] | None:
+    """Compose the automatic candidate explicitly with BORE, without rewriting attestation.
+
+    known-good.feature_set remains the exact composition that physically booted. The
+    automatic update candidate is a new, explicitly un-attested composition instead.
+    """
+    selected = select_build_composition(kg_all, requested_key)
+    if selected is None:
+        return None
+    key, attested, _ = selected
+    if not key.startswith("android16-6.12-"):
+        raise ValueError("automatic BORE candidates are supported only for android16-6.12; select a supported known-good key")
+    enabled = attested.split("+")
+    if "Perf" not in enabled:
+        raise ValueError("automatic BORE policy requires Perf in the selected known-good feature_set")
+    if "BORE" not in enabled:
+        enabled.append("BORE")
+    canonical, inputs = dispatch_inputs_for_feature_set("+".join(enabled))
+    return key, canonical, inputs
+
+
+def candidate_fingerprint(tips: list, feature_set: str, update_plan: dict | None = None) -> str:
+    """Cache identity includes scheduler/features, artifact action and upstream tips."""
     import hashlib
     payload = {"tips": tips, "feature_set": feature_set or "workflow-defaults"}
+    if update_plan is not None:
+        payload["update_plan"] = update_plan
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+# Only files consumed by the companion artifact builds may classify as module-only.
+# NoMount and VPN Hide also have kernel integration, so a component name alone is
+# never sufficient evidence. Unknown paths fail closed to a full kernel build.
+MODULE_PATH_POLICIES = {
+    "NoMount": {"prefixes": ("module/", "userspace/"), "files": {"update.json"}},
+    "VPN Hide": {"prefixes": ("builtin/",), "files": {"VERSION"}},
+}
+
+
+def module_paths_only(component: str, paths: list[str]) -> bool:
+    """True only for a non-empty, fully accounted companion-module diff."""
+    policy = MODULE_PATH_POLICIES.get(component)
+    if not policy or not isinstance(paths, list) or not paths:
+        return False
+    for path in paths:
+        if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
+            return False
+        if path not in policy["files"] and not any(path.startswith(p) for p in policy["prefixes"]):
+            return False
+    return True
+
+
+def classify_update_plan(summary: dict) -> dict:
+    """Return none/modules_only/full_build; every uncertainty means full_build."""
+    if not isinstance(summary.get("updates"), int) or summary["updates"] < 0:
+        return {"action": "full_build", "modules": [], "reason": "invalid update count"}
+    if summary["updates"] == 0:
+        return {"action": "none", "modules": [], "reason": "no newer components"}
+    modules = set()
+    reasons = []
+    sets = summary.get("sets")
+    if not isinstance(sets, dict):
+        return {"action": "full_build", "modules": [], "reason": "missing component evidence"}
+    for set_name, components in sets.items():
+        if not isinstance(components, dict):
+            return {"action": "full_build", "modules": [], "reason": f"invalid component set {set_name}"}
+        for name, evidence in components.items():
+            if not isinstance(evidence, dict) or name.startswith("new_patches_"):
+                continue
+            status = evidence.get("status")
+            if status == "current":
+                continue
+            if status in ("unreachable", "unpinned"):
+                reasons.append(f"{name}: {status}")
+                continue
+            if status != "newer":
+                reasons.append(f"{name}: unknown status")
+                continue
+            paths = evidence.get("changed_paths")
+            if evidence.get("change_evidence") != "available" or not module_paths_only(name, paths):
+                reasons.append(f"{name}: kernel/mixed/unknown changed paths")
+                continue
+            modules.add(name)
+    if reasons:
+        return {"action": "full_build", "modules": [], "reason": "; ".join(sorted(set(reasons)))}
+    if not modules:
+        return {"action": "full_build", "modules": [], "reason": "updates lack module-only evidence"}
+    return {"action": "modules_only", "modules": sorted(modules),
+            "reason": "every newer component diff is confined to its companion artifact inputs"}
 
 
 def git(*args: str, cwd: str | None = None, check: bool = True) -> str:
@@ -146,6 +230,34 @@ def commits_between(url: str, ref: str, old: str, new: str) -> tuple[list[str], 
         return log, ""
 
 
+def changed_paths_between(url: str, ref: str, old: str, new: str) -> tuple[list[str], str]:
+    """Changed paths for old..new, or an explicit evidence error (never an empty guess)."""
+    if not re.fullmatch(r"[0-9a-f]{40}", old or "") or not re.fullmatch(r"[0-9a-f]{40}", new or ""):
+        return [], "module-only classification requires full old/new commit SHAs"
+    with tempfile.TemporaryDirectory() as d:
+        git("init", "-q", d)
+        r = subprocess.run(
+            ["git", "-C", d, "fetch", "-q", "--filter=blob:none", "--depth=400", url, ref],
+            text=True, capture_output=True,
+        )
+        if r.returncode != 0:
+            return [], "could not fetch changed-path history"
+        have_old = subprocess.run(["git", "-C", d, "cat-file", "-e", f"{old}^{{commit}}"],
+                                  capture_output=True).returncode == 0
+        have_new = subprocess.run(["git", "-C", d, "cat-file", "-e", f"{new}^{{commit}}"],
+                                  capture_output=True).returncode == 0
+        if not have_old or not have_new:
+            return [], "old/new commit is not in the fetched 400-commit history"
+        diff = subprocess.run(["git", "-C", d, "diff", "--name-only", old, new],
+                              text=True, capture_output=True)
+        if diff.returncode != 0:
+            return [], "git diff failed for module-only evidence"
+        paths = sorted(set(diff.stdout.splitlines()))
+        if not paths:
+            return [], "newer commit has no changed paths"
+        return paths, ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-root", default=".")
@@ -159,17 +271,20 @@ def main() -> int:
     device = json.loads((root / ".github/device.json").read_text())
     keys = [a.key] if a.key else [k for k in kg_all if "@previous" not in k]
     try:
-        composition = select_build_composition(kg_all, a.key)
+        composition = select_automatic_candidate_composition(kg_all, a.key)
     except ValueError as exc:
-        print(f"::error::Update Check feature inheritance failed: {exc}", file=sys.stderr)
+        print(f"::error::Update Check candidate composition failed: {exc}", file=sys.stderr)
         return 2
     md: list[str] = ["# KRILIKD update check", ""]
     summary: dict = {"sets": {}, "updates": 0}
     if composition:
         selected_key, feature_set, build_inputs = composition
-        summary.update({"known_good_key": selected_key, "feature_set": feature_set,
+        attested = kg_all[selected_key].get("feature_set", "")
+        summary.update({"known_good_key": selected_key, "known_good_feature_set": attested,
+                        "feature_set": feature_set, "candidate_policy": "automatic_bore",
                         "build_inputs": build_inputs})
-        md += [f"Automatic build inherits `{selected_key}` features: `{feature_set}`.", ""]
+        md += [f"Automatic candidate from `{selected_key}` uses explicit BORE policy: `{feature_set}`.",
+               f"Boot-attested known-good remains `{attested}`; this candidate is not marked as physically booted.", ""]
 
 
     for key in keys:
@@ -225,6 +340,12 @@ def main() -> int:
             log, note = commits_between(url, ref, pinned, tip)
             row(name, pinned, tip, str(len(log)) if not note else "?", note)
             sets[name] = {"status": "newer", "tip": tip, "commits": log[:MAX_LOG]}
+            if name == "NoMount":
+                paths, path_note = changed_paths_between(url, ref, pinned, tip)
+                sets[name]["change_evidence"] = "available" if not path_note else "unavailable"
+                sets[name]["changed_paths"] = paths
+                if path_note:
+                    row("NoMount changed-path gate", pinned, tip, "?", path_note + "; full build required")
             summary["updates"] += 1
             details += [f"### {name}: {len(log)} new", "```", *log[:MAX_LOG], "```", ""]
 
@@ -240,7 +361,13 @@ def main() -> int:
                 row(f"VPN Hide (release {tag})", vp, sha, "0" if same else "new release")
             if vp and not same:
                 summary["updates"] += 1
-                sets["VPN Hide"] = {"status": "newer", "tip": sha, "tag": tag}
+                paths, path_note = changed_paths_between("https://github.com/okhsunrog/vpnhide",
+                                                         f"refs/tags/{tag}", vp, sha)
+                sets["VPN Hide"] = {"status": "newer", "tip": sha, "tag": tag,
+                                    "change_evidence": "available" if not path_note else "unavailable",
+                                    "changed_paths": paths}
+                if path_note:
+                    row("VPN Hide changed-path gate", vp, sha, "?", path_note + "; full build required")
         md.append("")
         md += details
 
@@ -308,10 +435,22 @@ def main() -> int:
 
     tips = sorted((k, n, v.get("tip", "")) for k, comp in summary["sets"].items()
                   for n, v in comp.items() if isinstance(v, dict) and v.get("status") == "newer")
-    summary["fingerprint"] = candidate_fingerprint(tips, summary.get("feature_set", ""))
+    plan = classify_update_plan(summary)
+    summary["update_plan"] = plan
+    if plan["action"] == "modules_only" and composition:
+        # Build only companions that actually changed. Kernel jobs are gated off by
+        # modules_only; all other inherited feature inputs remain explicit and harmless.
+        summary["build_inputs"]["use_nomount"] = "true" if "NoMount" in plan["modules"] else "false"
+        summary["build_inputs"]["use_vpnhide"] = "true" if "VPN Hide" in plan["modules"] else "false"
+    summary["fingerprint"] = candidate_fingerprint(tips, summary.get("feature_set", ""), plan)
 
+    if plan["action"] == "modules_only":
+        md += ["**Update action: companion module artifacts only (`release_type=Modules`).** "
+               f"Changed modules: {', '.join(plan['modules'])}. No kernel image job or release will run.", ""]
+    elif plan["action"] == "full_build":
+        md += [f"**Update action: full kernel build.** Fail-closed reason: {plan['reason']}.", ""]
     md += [f"**Components with updates: {summary['updates']}.** "
-           "To try component updates: run *Build Kernels* with `commit_mode=latest`. New unreviewed patches remain observed; use `patch_channel=candidate` only after adding a scoped policy entry. After your boot check, promote known-good with the run URL; the full device checklist is optional and recorded separately.", ""]
+           "Full candidates use `commit_mode=latest` with the explicit automatic BORE composition. Module-only updates produce only the changed companion artifacts. New unreviewed patches remain observed; use `patch_channel=candidate` only after adding a scoped policy entry. After a full candidate boot check, promote known-good with the run URL; the full device checklist is optional and recorded separately.", ""]
     text = "\n".join(md)
     print(text)
     if a.report:
