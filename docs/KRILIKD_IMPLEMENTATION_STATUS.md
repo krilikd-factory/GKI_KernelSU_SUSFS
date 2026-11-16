@@ -15,6 +15,22 @@ IRQ-affinity mutation is included. Those changes require the actual OnePlus 15
 vendor/device tree and boot-tested stock KMI data. ASB remains the policy owner;
 the future kernel telemetry/lease interface is documented in `KRILIKD_PROFILES.md`.
 
+## Update Check composition and physical boot evidence (kernel dev66)
+
+- **Known-good features survive automatic builds:** Update Check validates the selected
+  non-`@previous` entry's complete `feature_set` and forwards the corresponding `main.yml` inputs.
+  `Perf+BORE` becomes `use_perf=bore`; a non-BORE entry remains non-BORE. Missing, unknown,
+  duplicated or internally inconsistent features stop the check with an actionable error. Multiple
+  primary entries must agree on one composition; otherwise an explicit key is required.
+- **Candidate cache identity includes features:** the fingerprint now covers upstream tips and the
+  canonical feature set. The same updates with and without BORE therefore cannot reuse one cache
+  entry. Component pins still come from `commit_mode=latest`; stable/candidate patch gates and the
+  physical-attestation requirement in Mark build as known-good are unchanged.
+- **6.12.92 field result:** `device-kmi-policy.json` records the owner's physical
+  `boot_logo_stuck`. This result is not known-good and does not attest vendor modules or runtime
+  functions. Compilation and same-KMI membership do not override it. A firmware update is not
+  claimed to be a guaranteed fix, and no BORE-on follow-up is prescribed after this boot failure.
+
 ## Audio, video and photo (ASB dev59)
 
 The Qualcomm audio (ADSP, codec), camera (CAMX), video codec, display and GPU drivers on
