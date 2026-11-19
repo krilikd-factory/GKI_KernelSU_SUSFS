@@ -613,6 +613,11 @@ jobs:
             CONFIG_DEVTMPFS_MOUNT=n
             CONFIG_DEBUG_FS=y
             CONFIG_SCHED_DEBUG=y
+            # Mainline blk-mq choices for ASB runtime discovery. Do not force a
+            # default elevator: Stock and the kernel's device policy stay intact.
+            CONFIG_MQ_IOSCHED_DEADLINE=y
+            CONFIG_MQ_IOSCHED_KYBER=y
+            CONFIG_IOSCHED_BFQ=y
 
       - name: Note OnePlus 15 / DroidSpaces config precedence
         if: inputs.version == 'android16-6.12' && (contains(inputs.feature_set, 'DS') || inputs.feature_set == 'All')
