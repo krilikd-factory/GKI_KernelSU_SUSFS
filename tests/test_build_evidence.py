@@ -636,6 +636,9 @@ class OnePlusPolicyTest(unittest.TestCase):
         "CONFIG_DEVTMPFS_MOUNT": "n",
         "CONFIG_DEBUG_FS": "y",
         "CONFIG_SCHED_DEBUG": "y",
+        "CONFIG_MQ_IOSCHED_DEADLINE": "y",
+        "CONFIG_MQ_IOSCHED_KYBER": "y",
+        "CONFIG_IOSCHED_BFQ": "y",
     }
     power_expected = {
         "CONFIG_WQ_POWER_EFFICIENT_DEFAULT": "y",
@@ -660,7 +663,7 @@ class OnePlusPolicyTest(unittest.TestCase):
             result = subprocess.run(command, text=True, capture_output=True, check=False)
             return result, report.read_text()
 
-    def test_all_five_symbols_are_checked_after_final_kconfig_resolution(self):
+    def test_all_eight_symbols_are_checked_after_final_kconfig_resolution(self):
         result, report = self.run_guard(self.expected)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("policy verified", result.stdout)
@@ -681,6 +684,15 @@ class OnePlusPolicyTest(unittest.TestCase):
                         continue
                     self.assertEqual(result.returncode, 1)
                     self.assertIn(key, result.stderr)
+
+    def test_mainline_io_choices_are_built_in_without_forcing_a_default(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        step = workflow[workflow.index("- name: Apply OnePlus 15 integrity and scheduler config"):
+                       workflow.index("- name: Note OnePlus 15 / DroidSpaces config precedence")]
+        for key in ("CONFIG_MQ_IOSCHED_DEADLINE", "CONFIG_MQ_IOSCHED_KYBER", "CONFIG_IOSCHED_BFQ"):
+            self.assertIn(f"{key}=y", step)
+        self.assertNotIn("CONFIG_DEFAULT_IOSCHED", step)
+        self.assertNotIn("CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y", step)
 
     def test_performance_defaults_are_checked_only_for_the_perf_feature(self):
         result, report = self.run_guard(self.expected)
