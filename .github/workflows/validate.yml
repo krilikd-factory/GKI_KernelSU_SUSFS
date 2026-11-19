@@ -34,3 +34,39 @@ jobs:
 
       - name: Run build-evidence and patch-lifecycle regressions
         run: python3 tests/run.py
+
+  nomount-userspace-smoke:
+    name: Compile pinned NoMount userspace for ARM64 and ARM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NOMOUNT_SMOKE_COMMIT: dcd77d03e9912f397a586d7da81694d1628f170e
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up the tested Zig release
+        uses: jetsung/setup-zig@v0.0.4
+        with:
+          version: 0.17.1
+
+      - name: Fetch and verify the exact NoMount source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$NOMOUNT_SMOKE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "NoMount smoke commit must be a full 40-character SHA." >&2
+            exit 2
+          fi
+          source_dir="$RUNNER_TEMP/nomount-smoke-source"
+          git init -q "$source_dir"
+          git -C "$source_dir" fetch --depth=1 https://github.com/maxsteeel/nomount.git "$NOMOUNT_SMOKE_COMMIT"
+          git -C "$source_dir" checkout --detach "$NOMOUNT_SMOKE_COMMIT"
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$NOMOUNT_SMOKE_COMMIT"
+
+      - name: Build and inspect both static ELF binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/actions/nomount-metamodule/build-userspace.sh \
+            "$RUNNER_TEMP/nomount-smoke-source" "$RUNNER_TEMP/nomount-smoke-bin"
