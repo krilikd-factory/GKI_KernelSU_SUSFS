@@ -21,7 +21,9 @@ runs:
     - name: Set up Zig
       uses: jetsung/setup-zig@v0.0.4
       with:
-        version: master
+        # Keep the compiler and libc headers on a tested release. A moving
+        # master toolchain can break this companion before any kernel job starts.
+        version: 0.17.1
 
     - name: Build and package matching metamodule
       id: package
@@ -39,7 +41,9 @@ runs:
         module_dir="${RUNNER_TEMP}/nomount-metamodule"
         module_zip="${RUNNER_TEMP}/NoMount-${expected_commit}.zip"
         git clone --no-checkout https://github.com/maxsteeel/nomount.git "$source_dir"
-        git -C "$source_dir" fetch --depth=1 origin "$expected_commit"
+        # Keep full history: the workflow derives module versionCode from the
+        # pinned commit count after this action returns the packaged module.
+        git -C "$source_dir" fetch origin "$expected_commit"
         git -C "$source_dir" checkout --detach "$expected_commit"
         actual_commit="$(git -C "$source_dir" rev-parse HEAD)"
         if [ "$actual_commit" != "$expected_commit" ]; then
@@ -47,23 +51,18 @@ runs:
           exit 1
         fi
 
-        mkdir -p "$source_dir/bin"
-        (
-          cd "$source_dir/userspace/src"
-          zig cc -target aarch64-linux -Oz -mcmodel=tiny -static -nostdlib \
-            -ffreestanding -fno-unwind-tables -fno-ident -Wno-invalid-noreturn \
-            -Wl,--entry=_start nm.c -o ../../bin/nm-arm64
-          zig cc -target arm-linux -Oz -static -nostdlib -ffreestanding \
-            -fno-unwind-tables -fno-ident -Wno-invalid-noreturn \
-            -ffunction-sections -fdata-sections -Wl,--gc-sections \
-            -Wl,--entry=_start nm.c -o ../../bin/nm-arm
-        )
+        bash "$GITHUB_ACTION_PATH/build-userspace.sh" "$source_dir" "$source_dir/bin"
 
         cp -a "$source_dir/module" "$module_dir"
         mkdir -p "$module_dir/bin"
         install -m 0755 "$source_dir/bin/nm-arm64" "$module_dir/bin/nm-arm64"
         install -m 0755 "$source_dir/bin/nm-arm" "$module_dir/bin/nm-arm"
-        sed -i "s/^versionCode=.*/versionCode=1/" "$module_dir/module.prop"
+        commit_count="$(git -C "$source_dir" rev-list --count HEAD)"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/nomount_metadata.py" \
+          --module-prop "$module_dir/module.prop" \
+          --update-json "$source_dir/update.json" \
+          --commit-count "$commit_count"
+        grep -E '^(version|versionCode)=' "$module_dir/module.prop"
         printf '%s\n' "$actual_commit" > "$module_dir/NOMOUNT_SOURCE_COMMIT"
         (
           cd "$module_dir"
