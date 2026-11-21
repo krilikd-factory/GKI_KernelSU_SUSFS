@@ -1,6 +1,6 @@
 # KRILIKD — ядро для OnePlus 15 (ColorOS 17, GKI 6.12.69)
 
-## buildfix26: версии и брендинг видны правильно, Re-Kernel в Update Check
+## 21.11.2026: версии и брендинг видны правильно, Re-Kernel в Update Check
 
 - **Дата сборки ядра.** В образе было `#1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 1970` (run 44889845649). Kleaf без `--config=stamp` сам экспортирует `SOURCE_DATE_EPOCH=0` и выводит из него `KBUILD_BUILD_TIMESTAMP` уже после чтения build config, поэтому ни окружение job, ни способ из апстрима (экспорт из `build.config.gki.aarch64`, PR #354) дату не меняют — проверено сборкой run 44924584180. Дата теперь записывается в строку `build-timestamp` в `init/Makefile`; она попадает только в UTS_VERSION, символы, CRC и config не меняются. Дата воспроизводимая: 5-е число месяца patch level, 04:20 UTC.
 - **Release notes.** Модули NoMount и VPN Hide скачиваются в отдельные каталоги (один артефакт распаковывается прямо в path, и второй перезаписывал `module.prop`).

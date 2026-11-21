@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "release": "GKI_KernelSU_SUSFS-KRILIKD-buildfix26-source",
-  "base": "GKI_KernelSU_SUSFS-IO-Schedulers-buildfix25-source.zip",
+  "release": "GKI_KernelSU_SUSFS-KRILIKD-2026-11-21-source",
+  "base": "GKI_KernelSU_SUSFS-IO-Schedulers-source.zip",
   "hash_algorithm": "SHA-256",
   "manifest_coverage": "Every regular file except RELEASE_MANIFEST.json itself; no symlinks or other non-regular entries are present.",
   "file_count_excluding_manifest": 186,
@@ -1081,7 +1081,7 @@
       "path": "docs/KRILIKD.md",
       "bytes": 33636,
       "mode": "0644",
-      "sha256": "bbe77887c0c32b62f3cbaae4d73464c92a53cafc611d255c538e20bfdfea4b15"
+      "sha256": "eb903e8603c303955d5299ca95f741ea729a8ea47db74d60759a7aef901a5e23"
     },
     {
       "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
