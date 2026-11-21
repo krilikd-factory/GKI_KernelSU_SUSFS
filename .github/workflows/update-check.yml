@@ -114,7 +114,8 @@ jobs:
           if [ "$MODULES_ONLY" = true ]; then
             echo "Started only the changed companion module artifact jobs for update set ${{ steps.check.outputs.fingerprint }}; all kernel image and release jobs are gated off." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Started a full Build Kernels candidate (commit_mode=latest, use_perf=bore) for update set ${{ steps.check.outputs.fingerprint }}. The known-good feature_set remains boot-attested and unchanged; this BORE candidate still needs a separate boot check before promotion." >> "$GITHUB_STEP_SUMMARY"
+            USE_PERF_SENT="$(jq -r '.use_perf // "true"' <<< "$BUILD_INPUTS")"
+            echo "Started a full Build Kernels candidate (commit_mode=latest, use_perf=${USE_PERF_SENT}) for update set ${{ steps.check.outputs.fingerprint }}. The known-good feature_set remains boot-attested and unchanged; this BORE candidate still needs a separate boot check before promotion." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Remember that this update set has a candidate

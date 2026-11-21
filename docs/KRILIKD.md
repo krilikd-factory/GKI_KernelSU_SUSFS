@@ -1,5 +1,16 @@
 # KRILIKD — ядро для OnePlus 15 (ColorOS 17, GKI 6.12.69)
 
+## buildfix26: версии и брендинг видны правильно, Re-Kernel в Update Check
+
+- **Дата сборки ядра.** Kleaf не видел `SOURCE_DATE_EPOCH` и `KBUILD_BUILD_TIMESTAMP` из окружения job, поэтому `Linux version … #1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 1970` (проверено на образе run 44889845649). Метка экспортируется из `build.config.gki.aarch64` (как в апстриме WildKernels, PR #354): дата остаётся воспроизводимой — 5-е число месяца patch level, 04:20 UTC.
+- **Release notes.** Заголовок по `brand_name` (KRILIKD) вместо «Wild Kernels»; таблица сборок с реальной строкой `uname -r` из образа; KernelSU-Next с версией и version code (тот же 33555, что показывает менеджер); NoMount и VPN Hide с версиями модулей; добавлены VPN Hide, USB Arsenal, Re-Kernel, AWL и SDP 900 mA. Блок «Build availability» со ссылкой на issues WildKernels показывается только для сборки `All` и ведёт в этот репозиторий.
+- **BuildInfo.** «Version string» больше не «not extracted»: строка читается из `AnyKernel3/Image`.
+- **Pins / known-good.** Новые поля `kernel_version_string` и `root_version_code`.
+- **Артефакты.** `NoMount-Metamodule-<версия>-<code>-<sha7>` и `VPNHide-Builtin-Module-<версия>-<sha7>`. Релизные шаги, build-metadata и проверка zip ищут по префиксу.
+- **Update Check.** Re-Kernel (ветка main) теперь отслеживается, если в known-good есть `RK`: сборка берёт его tip, а новый commit раньше не запускал кандидата. Итог запуска называет фактически отправленный `use_perf` (было всегда «bore», отправлялось `bore_adios`).
+- **Чистка.** Удалены устаревшие копии скриптов в корне `.github/` (workflows используют только `.github/scripts/`). `build-userspace.sh` снова исполняемый, из-за этого падал Validate. Тест Update Check переведён на фикстуру, т. к. живой known-good уже содержит BORE+ADIOS.
+- Физическая загрузка этой ревизией не заявляется: изменены упаковка, отчёты и метка времени, а не код ядра.
+
 ## dev66 buildfix3: NoMount Update Check использует ветку Build
 
 В журналах run 43905804756 фактический `nomount_commit` загруженного и отмеченного known-good

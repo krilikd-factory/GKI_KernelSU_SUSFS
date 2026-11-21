@@ -71,7 +71,7 @@ runs:
         echo "SUMMARY_BASE=${SUMMARY_BASE}" >> "$GITHUB_ENV"
 
         KERNEL_VER_STR=""
-        for image in /home/runner/out/dist/Image /home/runner/out/Image; do
+        for image in "${{ github.workspace }}/AnyKernel3/Image" "${{ github.workspace }}/kernel/bazel-bin/common/kernel_aarch64/Image" /home/runner/out/dist/Image /home/runner/out/Image; do
           if [ -f "$image" ]; then
             KERNEL_VER_STR=$(strings "$image" | grep -m1 "^Linux version " | sed 's/Linux version //' || true)
             break

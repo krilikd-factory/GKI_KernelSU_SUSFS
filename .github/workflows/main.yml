@@ -817,6 +817,7 @@ jobs:
       # 43656353821). Only a real inconsistency of the pinned source still fails here.
       - name: Apply NoMount metamodule version
         if: env.NOMOUNT_WANTED == 'true'
+        id: nmver
         shell: bash
         env:
           NOMOUNT_MODULE_DIR: ${{ steps.buildmod.outputs.module_dir }}
@@ -860,6 +861,7 @@ jobs:
             sha256sum "$NOMOUNT_MODULE_ZIP" > "${NOMOUNT_MODULE_ZIP}.sha256"
           fi
           echo "NoMount metamodule: ${before}-> version=${ver} versionCode=${code}"
+          echo "artifact=NoMount-Metamodule-${base}-${code}-${NOMOUNT_COMMIT:0:7}" >> "${GITHUB_OUTPUT:-/dev/null}"
           if [ "${before}" != "version=${ver} versionCode=${code} " ]; then
             echo "::notice::NoMount version applied by the workflow (the packaging action left: ${before% })"
           fi
@@ -872,7 +874,8 @@ jobs:
         if: env.NOMOUNT_WANTED == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: NoMount-Metamodule
+          # The artifact (and the release zip made from it) names the NoMount it carries.
+          name: ${{ steps.nmver.outputs.artifact || 'NoMount-Metamodule' }}
           path: ${{ steps.buildmod.outputs.module_dir }}
           if-no-files-found: error
           compression-level: 0
@@ -932,6 +935,7 @@ jobs:
       # the module and the fetched VERSION is a warning, never a reason to drop the module.
       - name: Report VPN Hide module version
         if: env.VPNHIDE_WANTED == 'true'
+        id: vhver
         shell: bash
         env:
           VPNHIDE_MODULE_DIR: ${{ runner.temp }}/vpnhide-module
@@ -944,6 +948,8 @@ jobs:
           echo "VPN Hide module: id=${id} version=${ver} versionCode=${code} commit=${VPNHIDE_COMMIT}"
           [ "$ver" = "$want" ] || echo "::warning::VPN Hide module.prop says version '${ver}', the fetched source says '${want}'."
           [[ "$code" =~ ^[1-9][0-9]*$ ]] || echo "::warning::VPN Hide module.prop has no positive versionCode ('${code}')."
+          slug="$(printf '%s' "$ver" | tr -c 'A-Za-z0-9._-' '-' | sed 's/-\+/-/g; s/^-//; s/-$//')"
+          echo "artifact=VPNHide-Builtin-Module${slug:+-$slug}-${VPNHIDE_COMMIT:0:7}" >> "${GITHUB_OUTPUT:-/dev/null}"
           {
             echo "### VPN Hide built-in module"
             echo "\`${ver}\` · versionCode ${code:-none} · commit \`${VPNHIDE_COMMIT:0:12}\` · id \`${id}\` (${name})"
@@ -954,7 +960,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           # The downloaded artifact zip IS the flashable module (files at root).
-          name: VPNHide-Builtin-Module
+          name: ${{ steps.vhver.outputs.artifact || 'VPNHide-Builtin-Module' }}
           path: ${{ runner.temp }}/vpnhide-module
           if-no-files-found: error
           compression-level: 0
@@ -2060,7 +2066,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: release-assets
-          pattern: "*NoMount-Metamodule"
+          pattern: "*NoMount-Metamodule*"
           merge-multiple: false
 
       - name: Zip AnyKernel3 for Release
@@ -2081,7 +2087,8 @@ jobs:
           set -e
           shopt -s nullglob
 
-          for dir in release-assets/*NoMount-Metamodule; do
+          for dir in release-assets/*NoMount-Metamodule*/; do
+            dir="${dir%/}"
             zip_name="${dir}.zip"
             rm -f "$zip_name"
             cd "$dir"
@@ -2095,8 +2102,8 @@ jobs:
           set -euo pipefail
           # The metamodule silently missed r20 (artifact built fine, no zip
           # on the release). Fail loud instead of shipping without it.
-          if ! ls release-assets/NoMount-Metamodule.zip >/dev/null 2>&1; then
-            echo "ERROR: use_nomount is true but release-assets/NoMount-Metamodule.zip is missing" >&2
+          if ! ls release-assets/NoMount-Metamodule*.zip >/dev/null 2>&1; then
+            echo "ERROR: use_nomount is true but no release-assets/NoMount-Metamodule*.zip is present" >&2
             ls release-assets/ >&2
             exit 1
           fi
@@ -2159,16 +2166,45 @@ jobs:
 
   notes-preview:
     if: always() && inputs.release_type != 'Modules' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.ENABLE_SCHEDULED_BUILDS == 'true'))
-    needs: [resolve-sources, build-android12-5-10, build-android13-5-10, build-android13-5-15, build-android14-5-15, build-android14-6-1, build-android15-6-6, build-android16-6-12, build-android17-6-18]
+    needs: [resolve-sources, build-android12-5-10, build-android13-5-10, build-android13-5-15, build-android14-5-15, build-android14-6-1, build-android15-6-6, build-android16-6-12, build-android17-6-18, build-nomount-module, build-vpnhide-module]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # Versions the notes show (root version code, kernel release string,
+      # companion module versions) come from what the builds actually produced.
+      # A failed or skipped build simply leaves them out.
+      - name: Download build pins for the notes
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          path: notes-input/pins
+          pattern: '*-Pins'
+          merge-multiple: false
+      - name: Download NoMount module for the notes
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          path: notes-input/modules
+          pattern: '*NoMount-Metamodule*'
+          merge-multiple: false
+      - name: Download VPN Hide module for the notes
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          path: notes-input/modules
+          pattern: 'VPNHide-Builtin-Module*'
+          merge-multiple: false
       - name: Render release notes preview (always)
         # Renderer lives in .github/scripts (extracted out of this workflow).
         uses: ./.github/actions/release-notes-preview
         with:
           mode: kernel
         env:
+          PINS_DIR: notes-input/pins
+          MODULES_DIR: notes-input/modules
+          BRAND_NAME: ${{ inputs.brand_name || 'KRILIKD' }}
+          VPNHIDE_COMMIT: ${{ needs.resolve-sources.outputs.vpnhide_commit }}
+          USB_ARSENAL_COMMIT: ${{ needs.resolve-sources.outputs.usb_arsenal_commit }}
           ROOT_FLAVOR: ${{ inputs.root_flavor }}
           FEATURE_SET: ${{ needs.resolve-sources.outputs.feature_set }}
           MANAGER_LIST: ${{ needs.resolve-sources.outputs.manager_list }}
@@ -2320,14 +2356,15 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: release-assets
-          pattern: '*NoMount-Metamodule'
+          pattern: '*NoMount-Metamodule*'
           merge-multiple: false
 
       - name: Zip artifacts for Release
         run: |
           set -e
           shopt -s nullglob
-          for dir in release-assets/*-AnyKernel3 release-assets/*NoMount-Metamodule; do
+          for dir in release-assets/*-AnyKernel3/ release-assets/*NoMount-Metamodule*/; do
+            dir="${dir%/}"
             zip_name="${dir}.zip"
             rm -f "$zip_name"
             (cd "$dir" && zip -r -q -9 "../$(basename "$zip_name")" .)

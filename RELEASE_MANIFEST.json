@@ -1,46 +1,79 @@
 {
   "schema": 1,
-  "release": "GKI_KernelSU_SUSFS-BORE-6.12.92-source",
-  "base": "GKI_KernelSU_SUSFS-dev62-source.zip",
+  "release": "GKI_KernelSU_SUSFS-KRILIKD-buildfix26-source",
+  "base": "GKI_KernelSU_SUSFS-IO-Schedulers-buildfix25-source.zip",
   "hash_algorithm": "SHA-256",
   "manifest_coverage": "Every regular file except RELEASE_MANIFEST.json itself; no symlinks or other non-regular entries are present.",
-  "file_count_excluding_manifest": 211,
+  "file_count_excluding_manifest": 186,
   "inventory_vs_base": {
     "changed": [
-      ".github/actions/asb-wakeup-blocker/action.yml",
+      ".github/actions/build-kernel/action.yml",
+      ".github/actions/build-metadata/action.yml",
       ".github/actions/build-summary/action.yml",
-      ".github/render_kernel_notes.py",
-      ".github/scripts/bore_apply.sh",
-      ".github/scripts/build_summary.py",
+      ".github/known-good.json",
       ".github/scripts/render_kernel_notes.py",
-      ".github/scripts/telegram_digest.py",
+      ".github/scripts/update_check.py",
       ".github/workflows/build.yml",
       ".github/workflows/main.yml",
+      ".github/workflows/update-check.yml",
+      "docs/KRILIKD.md",
+      "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
+      "docs/KRILIKD_PROFILES.md",
       "tests/test_bore.py",
-      "tests/test_build_evidence.py"
+      "tests/test_update_check.py"
     ],
     "added": [
-      ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.69.patch",
-      ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.92.patch",
-      ".github/scripts/asb_wakeup_blocker_apply.py",
-      ".github/scripts/build_delta.py",
-      "RELEASE_MANIFEST.json",
-      "tests/test_build_delta.py"
+      "tests/test_presentation_versions.py"
     ],
     "deleted": [
-      ".github/patches/android16-6.12/asb-wakeup-blocker.patch"
+      ".github/apply_susfs_compat.py",
+      ".github/assemble_digest_input.py",
+      ".github/bbg_618_compat.py",
+      ".github/bbrv3_kabi_hide.py",
+      ".github/binder_ipc_ns_exports.py",
+      ".github/build_summary.py",
+      ".github/cifs_modules_fix.py",
+      ".github/close_fd_compat.sh",
+      ".github/device_evidence.py",
+      ".github/extract-ikconfig",
+      ".github/gki_enable_autofdo.py",
+      ".github/kmi_crc_guard.py",
+      ".github/new_patches.py",
+      ".github/rebrand_anykernel.py",
+      ".github/render_kernel_notes.py",
+      ".github/render_manager_notes.py",
+      ".github/resolve_source_and_known_good.sh",
+      ".github/source_provenance.py",
+      ".github/stock_config_guard.py",
+      ".github/susfs_618_compile_fixes.py",
+      ".github/susfs_618_prototypes.py",
+      ".github/susfs_618_task_mmu.py",
+      ".github/susfs_fake_612.py",
+      ".github/susfs_fake_66_smaps.py",
+      ".github/susfs_fake_fdinfo.py",
+      ".github/susfs_fdinfo_fanotify_arity.py",
+      ".github/susfs_guard_priority_helpers.py",
+      ".github/susfs_idmap_compat.py",
+      ".github/susfs_restore_context.py",
+      ".github/telegram_digest.py",
+      ".github/trim_sukisu_managers.py",
+      ".github/update_check.py",
+      ".github/update_kernel_matrix.py",
+      ".github/update_verified_pins.py",
+      ".github/usb_arsenal_already_present.py",
+      ".github/validate_python.py",
+      ".github/validate_shell.py",
+      ".github/validate_workflows.py",
+      ".github/vpnhide_integrate.py"
     ],
     "mode_changes": [],
     "counts": {
-      "changed": 11,
-      "added": 6,
-      "deleted": 1,
+      "changed": 14,
+      "added": 1,
+      "deleted": 39,
       "mode_changes": 0
     }
   },
-  "executable_files": [
-    ".github/scripts/bore_apply.sh"
-  ],
   "files": [
     {
       "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
@@ -65,6 +98,24 @@
       "bytes": 568,
       "mode": "0644",
       "sha256": "644723d02a8b2ff8907129ac124684307b6e4e05f6a98bcea010f896a02924b4"
+    },
+    {
+      "path": ".github/actions/adios/README.md",
+      "bytes": 1191,
+      "mode": "0644",
+      "sha256": "bfa812655494581c8b58ded7c06fef11b1a99a5fd0a206634039eeee002c2c6d"
+    },
+    {
+      "path": ".github/actions/adios/action.yml",
+      "bytes": 1041,
+      "mode": "0644",
+      "sha256": "4538427564c6fd2f43d16df204390df5998dfc9bbe08e672a8f3730544023deb"
+    },
+    {
+      "path": ".github/actions/adios/patches/0001-linux6.12-ADIOS-3.3.0.patch",
+      "bytes": 65764,
+      "mode": "0644",
+      "sha256": "ebcd195e0715165f4cc27fcbf690f325150b47d75fcdf29719fc8a5158815af8"
     },
     {
       "path": ".github/actions/apply-device-patches/action.yml",
@@ -164,21 +215,21 @@
     },
     {
       "path": ".github/actions/build-kernel/action.yml",
-      "bytes": 16472,
+      "bytes": 17521,
       "mode": "0644",
-      "sha256": "d354abdca44aea17d15a39686bdde90055d52afe1698921dd89298a3549d7125"
+      "sha256": "1d1358a5dd39dcd32fcf0acb541b089ff1b730cb578747af204d14bbe85f455c"
     },
     {
       "path": ".github/actions/build-metadata/action.yml",
-      "bytes": 9017,
+      "bytes": 9056,
       "mode": "0644",
-      "sha256": "4a68a2cd61a8109251f8a4b15f05f01d31926cb14b65a3a480574e73b573b8a3"
+      "sha256": "1db512fea051c26eb129e1801d138165ba809316cfc2398359ebbf57db18d4d9"
     },
     {
       "path": ".github/actions/build-summary/action.yml",
-      "bytes": 5182,
+      "bytes": 5296,
       "mode": "0644",
-      "sha256": "c13d3630b92ba8963aba367f40c6b17903d558029c007c13e5062d80b8fcbf98"
+      "sha256": "ebe385bec7884312848d5c143079428185467b05cc2f5b37c24fdfe6206be224"
     },
     {
       "path": ".github/actions/bypass-kernel/action.yml",
@@ -247,6 +298,12 @@
       "sha256": "a0eb51a7772b7b7eb51a9cca06bab31931dbc267a7962a5918266c92726a91d7"
     },
     {
+      "path": ".github/actions/networking-config/action.yml",
+      "bytes": 2741,
+      "mode": "0644",
+      "sha256": "2216362bd92dcc451204de009c62ffa2b19e8f7089a911354e61866d8621df5c"
+    },
+    {
       "path": ".github/actions/networking/action.yml",
       "bytes": 1107,
       "mode": "0644",
@@ -271,22 +328,22 @@
       "sha256": "b3dfeec06287dc32372d88f141f5e377d40f019ddc59a9d2bf6395ff4b5ad308"
     },
     {
-      "path": ".github/actions/networking-config/action.yml",
-      "bytes": 2741,
+      "path": ".github/actions/nomount-metamodule/action.yml",
+      "bytes": 3097,
       "mode": "0644",
-      "sha256": "2216362bd92dcc451204de009c62ffa2b19e8f7089a911354e61866d8621df5c"
+      "sha256": "8984043e82deb8b6841d80061f6ac6b9bfafb3ce55bc5f663a203fe0e878bd81"
+    },
+    {
+      "path": ".github/actions/nomount-metamodule/build-userspace.sh",
+      "bytes": 2950,
+      "mode": "0755",
+      "sha256": "cfdb22ad0c31b8b2be8f29c75b5b3ce99ff9d46c45adc0812c859714148a55e5"
     },
     {
       "path": ".github/actions/nomount/action.yml",
       "bytes": 3680,
       "mode": "0644",
       "sha256": "5b0acb5cce942c705d398d45aa33a5dec6e6f3d18a6670288107879c35056fec"
-    },
-    {
-      "path": ".github/actions/nomount-metamodule/action.yml",
-      "bytes": 3362,
-      "mode": "0644",
-      "sha256": "4a9bff30d421835b264358628d06ae5f9e13865e20aa4f09a9cd2f650c0f83f5"
     },
     {
       "path": ".github/actions/ntsync/action.yml",
@@ -314,9 +371,9 @@
     },
     {
       "path": ".github/actions/performance/action.yml",
-      "bytes": 11652,
+      "bytes": 11783,
       "mode": "0644",
-      "sha256": "24f9e6802841177703842ac519535f8004731e0ec9a94f8cf1f77154f557334c"
+      "sha256": "42fcef1e983c8d4bca19f08a0ae9b34dc9875aef9107be3b00eeabcdd4345464"
     },
     {
       "path": ".github/actions/ptrace/action.yml",
@@ -391,6 +448,24 @@
       "sha256": "68534395286df731f8e59cef16c86b24a17755c43791322b8ec58d70c5484a8e"
     },
     {
+      "path": ".github/actions/susfs-config/action.yml",
+      "bytes": 911,
+      "mode": "0644",
+      "sha256": "8f4b8e4ac3227e100956054ef1bdc143eadccc4443bf0e5fac95d5be73822fe1"
+    },
+    {
+      "path": ".github/actions/susfs-patches/action.yml",
+      "bytes": 15548,
+      "mode": "0644",
+      "sha256": "563a43d3c6024bbe8d51bc4a7016a11490639b0f60cd3ba38888e923118c4de7"
+    },
+    {
+      "path": ".github/actions/susfs-setup/action.yml",
+      "bytes": 6668,
+      "mode": "0644",
+      "sha256": "b5405f897dcb6af91b09a47e67f7c77911e63c06c024fcc7805ce18a89cf698a"
+    },
+    {
       "path": ".github/actions/susfs/action.yml",
       "bytes": 14719,
       "mode": "0644",
@@ -433,24 +508,6 @@
       "sha256": "cb441cb566d009bce20c1f4ce43fa10ce3472daafd0f37e144cdf1be87b3f88e"
     },
     {
-      "path": ".github/actions/susfs-config/action.yml",
-      "bytes": 911,
-      "mode": "0644",
-      "sha256": "8f4b8e4ac3227e100956054ef1bdc143eadccc4443bf0e5fac95d5be73822fe1"
-    },
-    {
-      "path": ".github/actions/susfs-patches/action.yml",
-      "bytes": 15548,
-      "mode": "0644",
-      "sha256": "563a43d3c6024bbe8d51bc4a7016a11490639b0f60cd3ba38888e923118c4de7"
-    },
-    {
-      "path": ".github/actions/susfs-setup/action.yml",
-      "bytes": 6668,
-      "mode": "0644",
-      "sha256": "b5405f897dcb6af91b09a47e67f7c77911e63c06c024fcc7805ce18a89cf698a"
-    },
-    {
       "path": ".github/actions/unicode-fix/action.yml",
       "bytes": 877,
       "mode": "0644",
@@ -467,54 +524,6 @@
       "bytes": 5013,
       "mode": "0644",
       "sha256": "be978e7d181b8343982fdd954a3057c829770bad5c690d10f03a2131e3f6b7a3"
-    },
-    {
-      "path": ".github/apply_susfs_compat.py",
-      "bytes": 4125,
-      "mode": "0644",
-      "sha256": "90d47f33127fcaf2617ed796c69b48a8a29d4898d1d90e693a78577ec692ec88"
-    },
-    {
-      "path": ".github/assemble_digest_input.py",
-      "bytes": 5910,
-      "mode": "0644",
-      "sha256": "3bc6db3cdd923947d71354e1518e595c0e3f027cf45763e15886364107f721b1"
-    },
-    {
-      "path": ".github/bbg_618_compat.py",
-      "bytes": 4630,
-      "mode": "0644",
-      "sha256": "4b9763980b1fb9bc024e4bcdcdbc47bcc7e8913ccaff190272e51177934fc1fe"
-    },
-    {
-      "path": ".github/bbrv3_kabi_hide.py",
-      "bytes": 4229,
-      "mode": "0644",
-      "sha256": "7ee2911279fc6e1043c294610a9cbabd6b24c72adf7026be182168f7f5ce8d00"
-    },
-    {
-      "path": ".github/binder_ipc_ns_exports.py",
-      "bytes": 3224,
-      "mode": "0644",
-      "sha256": "cce185649886fcec37cf031863a471060de96589f07e3b5a8048097ee4ed3a79"
-    },
-    {
-      "path": ".github/build_summary.py",
-      "bytes": 12450,
-      "mode": "0644",
-      "sha256": "14f40241ae1b002ddda10343430397b82ce7fc6e2b159637f28f10196530c56b"
-    },
-    {
-      "path": ".github/cifs_modules_fix.py",
-      "bytes": 2219,
-      "mode": "0644",
-      "sha256": "cf939fda96f96b3662f0cc0242a2f9b3f3945ec2c8138a6e72cabd8314bdbd4e"
-    },
-    {
-      "path": ".github/close_fd_compat.sh",
-      "bytes": 1026,
-      "mode": "0644",
-      "sha256": "aaebe62a249661b623be21717798aead46d4312865781af300359066860ed34d"
     },
     {
       "path": ".github/config/android12-5.10.json",
@@ -565,46 +574,22 @@
       "sha256": "a060cce43d33cfc09e4a7221358bcd347d0815e87cb5a1f6adb990b5a7aa9fa4"
     },
     {
+      "path": ".github/device-kmi-policy.json",
+      "bytes": 1387,
+      "mode": "0644",
+      "sha256": "627be81d73fc8710e7472930e32fb5eaa455f9173009892ab94d1344e4279f7a"
+    },
+    {
       "path": ".github/device.json",
       "bytes": 701,
       "mode": "0644",
       "sha256": "a85e5435ff9fafe21a583c62ced603d3a62144353cc6cce5d3a13ed1ac439da9"
     },
     {
-      "path": ".github/device_evidence.py",
-      "bytes": 5479,
-      "mode": "0644",
-      "sha256": "9cec31c42c6c27449f32100a214e2f4744bf35edaf46611feab8d47f2f65d90e"
-    },
-    {
-      "path": ".github/extract-ikconfig",
-      "bytes": 1779,
-      "mode": "0644",
-      "sha256": "070020a9c5a0b9e6f7e24f5728073e8e62155be49133a9f3f37e8fc19230a9b1"
-    },
-    {
-      "path": ".github/gki_enable_autofdo.py",
-      "bytes": 2007,
-      "mode": "0644",
-      "sha256": "5264d4c7697773fede32827fc37f07a75ce1a117cb8f04065bddb8285ceb570c"
-    },
-    {
-      "path": ".github/kmi_crc_guard.py",
-      "bytes": 6084,
-      "mode": "0644",
-      "sha256": "980ec75442f8c35a609084c08eea728c8832266e67c57ca80fb1b69a4560acf5"
-    },
-    {
       "path": ".github/known-good.json",
-      "bytes": 4417,
+      "bytes": 4604,
       "mode": "0644",
-      "sha256": "9462c2e8288cdd1f2dc7a17b65098974801d0295bec80b6cae7dfe9de0b2126b"
-    },
-    {
-      "path": ".github/new_patches.py",
-      "bytes": 8483,
-      "mode": "0644",
-      "sha256": "1bd2da272f929cf4bc7cd6eb1c46276fdc9a0feffde0c6503f8737c39594c27d"
+      "sha256": "5d5b392c5fa6f418abad211cd7fb1036609c973033af3eb85fe82d762783f448"
     },
     {
       "path": ".github/patch-allowlist.txt",
@@ -644,9 +629,9 @@
     },
     {
       "path": ".github/performance-patch-policy.json",
-      "bytes": 5771,
+      "bytes": 5855,
       "mode": "0644",
-      "sha256": "d5fbb6c7d7911bc9ccaf3d85056aefc27b31e59b9b6547c8d90c1fc1801914b6"
+      "sha256": "3e0e49158da42cb9f043675a39e5d637cd1c3224b6f7eda75211ef06141c12cc"
     },
     {
       "path": ".github/pins/history/2026-09-03T032000Z.json",
@@ -661,28 +646,10 @@
       "sha256": "31329e3f112167305130e341061f6e13bef18186e8b8e636347d948363b243b4"
     },
     {
-      "path": ".github/rebrand_anykernel.py",
-      "bytes": 3375,
+      "path": ".github/scripts/adios_apply.sh",
+      "bytes": 1577,
       "mode": "0644",
-      "sha256": "c2bab5c4b5dbbd7656020f308284c2c4910bd5102370418696b89b07623efd62"
-    },
-    {
-      "path": ".github/render_kernel_notes.py",
-      "bytes": 8704,
-      "mode": "0644",
-      "sha256": "d2cdaab836f1447dd4cf2be92a2e9eb9e341336233279e153c18d206c653c40f"
-    },
-    {
-      "path": ".github/render_manager_notes.py",
-      "bytes": 1775,
-      "mode": "0644",
-      "sha256": "840a5e67951fb164421f3abcc7358331515e76917669e67ffaa57013d421051f"
-    },
-    {
-      "path": ".github/resolve_source_and_known_good.sh",
-      "bytes": 6627,
-      "mode": "0644",
-      "sha256": "e58d9d0b31ae81c68fd8bd80eb82b7e61b58962db23b80907d7ea138b56cc59c"
+      "sha256": "ef4aa04e1af584a1f409ec1553045eb345fb6bc0cbcd168a0631626d4842bf91"
     },
     {
       "path": ".github/scripts/apply_susfs_compat.py",
@@ -735,7 +702,7 @@
     {
       "path": ".github/scripts/bore_apply.sh",
       "bytes": 2683,
-      "mode": "0755",
+      "mode": "0644",
       "sha256": "efb34b44ce69592b8cb573f3f98c9d2f48ba697e9b68888e6290da169676ef8d"
     },
     {
@@ -758,9 +725,9 @@
     },
     {
       "path": ".github/scripts/build_summary.py",
-      "bytes": 43977,
+      "bytes": 45668,
       "mode": "0644",
-      "sha256": "15c17f9f100cbf3bf8d6f610c3d03015a88e56c1438f842a82504ea2028e42ab"
+      "sha256": "9b84fd3365284e9a3496ec5382c1b9aa5dc817e47c818bf62a32f5ce67744d5d"
     },
     {
       "path": ".github/scripts/cifs_modules_fix.py",
@@ -783,7 +750,7 @@
     {
       "path": ".github/scripts/extract-ikconfig",
       "bytes": 1779,
-      "mode": "0644",
+      "mode": "0755",
       "sha256": "070020a9c5a0b9e6f7e24f5728073e8e62155be49133a9f3f37e8fc19230a9b1"
     },
     {
@@ -797,6 +764,12 @@
       "bytes": 16431,
       "mode": "0644",
       "sha256": "4e974ef289171993bbd293b53efb9e6075c47e59802ae3a68a76e95d1c2d4990"
+    },
+    {
+      "path": ".github/scripts/kmi_compatibility.py",
+      "bytes": 3932,
+      "mode": "0644",
+      "sha256": "a89be743a88ac428cb6c731acc13220ad952d68f9e15b6debf25fc742956b344"
     },
     {
       "path": ".github/scripts/kmi_crc_guard.py",
@@ -836,21 +809,27 @@
     },
     {
       "path": ".github/scripts/op15_config_guard.py",
-      "bytes": 3350,
+      "bytes": 3456,
       "mode": "0644",
-      "sha256": "0750e4ced16b528b5110d93849e35171e9f167624830d54dbf7cf1a10ab5cfd7"
+      "sha256": "a5167d00da5958ef894d31d27c7fe37b615edc24035207fed132271dad70fb7b"
+    },
+    {
+      "path": ".github/scripts/patch_applicability.py",
+      "bytes": 6545,
+      "mode": "0644",
+      "sha256": "ce4e7684e30f0cea9e008197ead329577c9cb51675bd616f0df9c7d008f35768"
     },
     {
       "path": ".github/scripts/performance_patch_policy.py",
-      "bytes": 3145,
+      "bytes": 3272,
       "mode": "0644",
-      "sha256": "df35a9f6b624f67c96ed2b2cdd03f16fcb4054d04af8b3ab2295a0fcdc05ba56"
+      "sha256": "07f4d5f6b4130bf78a6a41583b6f3c64f81ed8b86a2480ce8204c1fba6eca95d"
     },
     {
       "path": ".github/scripts/render_kernel_notes.py",
-      "bytes": 8704,
+      "bytes": 11293,
       "mode": "0644",
-      "sha256": "d2cdaab836f1447dd4cf2be92a2e9eb9e341336233279e153c18d206c653c40f"
+      "sha256": "c92d529d20c77c84544b67e6971aabc07791473c1e9ac0a5d93808b19511a718"
     },
     {
       "path": ".github/scripts/render_manager_notes.py",
@@ -860,15 +839,21 @@
     },
     {
       "path": ".github/scripts/resolve_source_and_known_good.sh",
-      "bytes": 6944,
+      "bytes": 9046,
       "mode": "0644",
-      "sha256": "35b4de35ad6b8ea9f486ee77ed8a5a4c9b36d3f0e35090fbef7ec8da589ffc7d"
+      "sha256": "2b2943f72619bad18cb7c7d678098e196c04c0b6fbbada791063f4f538a831f9"
+    },
+    {
+      "path": ".github/scripts/scheduler_ab_evidence.py",
+      "bytes": 3598,
+      "mode": "0644",
+      "sha256": "cc9e83727f1f94e3259367fd740db456df840cdc99d8df30ae2117c93da91439"
     },
     {
       "path": ".github/scripts/source_provenance.py",
-      "bytes": 6906,
+      "bytes": 8486,
       "mode": "0644",
-      "sha256": "a8e5088ca1a07efcfb94cee1c51bcc5b6525df2ac30d04271207f89e19eab294"
+      "sha256": "af334e6bbc1b5e67c6f548467a6a8d4939c9643cfba59f4ecff5270691ba07f5"
     },
     {
       "path": ".github/scripts/stock_config_guard.py",
@@ -950,9 +935,9 @@
     },
     {
       "path": ".github/scripts/update_check.py",
-      "bytes": 12658,
+      "bytes": 25667,
       "mode": "0644",
-      "sha256": "073c889ff0c622a023c7811d6ded5a18c3fe13e6bbb180280267071bd5ee0b2d"
+      "sha256": "1012815ff1e919fa3ab5acb6bda34a4cefcecf19d78911268f746575dee98186"
     },
     {
       "path": ".github/scripts/update_kernel_matrix.py",
@@ -997,142 +982,10 @@
       "sha256": "48ee396ac917fb4a698674f1485fdd36fa63d2c0a56ae4a9688c45f44470d2d7"
     },
     {
-      "path": ".github/source_provenance.py",
-      "bytes": 6906,
-      "mode": "0644",
-      "sha256": "a8e5088ca1a07efcfb94cee1c51bcc5b6525df2ac30d04271207f89e19eab294"
-    },
-    {
-      "path": ".github/stock_config_guard.py",
-      "bytes": 2753,
-      "mode": "0644",
-      "sha256": "0c9576753d1fc4d67ca2c187dc177238e51248218f057ce5f26cf86af1231376"
-    },
-    {
-      "path": ".github/susfs_618_compile_fixes.py",
-      "bytes": 11289,
-      "mode": "0644",
-      "sha256": "873e8376c5b5fd7ad486341bb85aa24cefc573e834cf1078029056e9759199ff"
-    },
-    {
-      "path": ".github/susfs_618_prototypes.py",
-      "bytes": 6524,
-      "mode": "0644",
-      "sha256": "3a0e02d04cab787d707ed1ceb1f48208f28fcfec9dba8413cd84ac0656ae3ca0"
-    },
-    {
-      "path": ".github/susfs_618_task_mmu.py",
-      "bytes": 6435,
-      "mode": "0644",
-      "sha256": "e0bd3071f396e9ce803e555daf2308adf240c650edbc71de0805dc98e15ca96b"
-    },
-    {
-      "path": ".github/susfs_fake_612.py",
-      "bytes": 5990,
-      "mode": "0644",
-      "sha256": "0cde67baa70c923838293e8a61d3735d2dacf45d3ea9177011605d9f707c918d"
-    },
-    {
-      "path": ".github/susfs_fake_66_smaps.py",
-      "bytes": 2412,
-      "mode": "0644",
-      "sha256": "ed84da27ad1272da2be356d0bf06ffa2e7c7860ca94a864f7ec119dc8d17032b"
-    },
-    {
-      "path": ".github/susfs_fake_fdinfo.py",
-      "bytes": 5029,
-      "mode": "0644",
-      "sha256": "0953d7734639766eeaf475f17fffe9a57b397b9e35beb47c63c3326226327f07"
-    },
-    {
-      "path": ".github/susfs_fdinfo_fanotify_arity.py",
-      "bytes": 3367,
-      "mode": "0644",
-      "sha256": "1a58f8f288942d054bd1551872cd0b9937d9e69a1ffbb5c4361dc47eada9c893"
-    },
-    {
-      "path": ".github/susfs_guard_priority_helpers.py",
-      "bytes": 3576,
-      "mode": "0644",
-      "sha256": "04f8748309b6c7cb636bc7a9daf5bc972b458f2d0539ad3b8312c6fc8f1b8308"
-    },
-    {
-      "path": ".github/susfs_idmap_compat.py",
-      "bytes": 1834,
-      "mode": "0644",
-      "sha256": "70a8874e18dc828a53354473e361d6a260d5493cda647605c1907363212f1c29"
-    },
-    {
-      "path": ".github/susfs_restore_context.py",
-      "bytes": 4962,
-      "mode": "0644",
-      "sha256": "35074c977283f67c865298224ebbcae614bd49281368c0290917868ab26f3678"
-    },
-    {
-      "path": ".github/telegram_digest.py",
-      "bytes": 29862,
-      "mode": "0644",
-      "sha256": "8de11a7e11f74bb2fcff9b5f070a38990c148cf9249e30d2f6d35d5d52fd6262"
-    },
-    {
-      "path": ".github/trim_sukisu_managers.py",
-      "bytes": 4576,
-      "mode": "0644",
-      "sha256": "e5c22f6e68097ce02a8c51a6259cd5a7271eb4e51adabd1739595752d137140b"
-    },
-    {
-      "path": ".github/update_check.py",
-      "bytes": 12587,
-      "mode": "0644",
-      "sha256": "ee75de016d6432732e0625f95e28108da7756bd661d251f0cf7951e2076c4de9"
-    },
-    {
-      "path": ".github/update_kernel_matrix.py",
-      "bytes": 6405,
-      "mode": "0644",
-      "sha256": "8b855b212684fefa5fca2fd0a4acadc51aff7b4fa8c311bfe79652095c8b7185"
-    },
-    {
-      "path": ".github/update_verified_pins.py",
-      "bytes": 5704,
-      "mode": "0644",
-      "sha256": "26d1ec18034389b3cc2a368fffe1a3a10fbfe11f4fc752a02fc0d6fab4199f5a"
-    },
-    {
-      "path": ".github/usb_arsenal_already_present.py",
-      "bytes": 1832,
-      "mode": "0644",
-      "sha256": "21e6bc61acc5f5728e698317f190afcbb0faae64c271c15fc7d5696c04aa34ee"
-    },
-    {
-      "path": ".github/validate_python.py",
-      "bytes": 1249,
-      "mode": "0644",
-      "sha256": "a8874891d62cc8ff7488bba5b268aef86331889543811beae2347fa5e99bc5fd"
-    },
-    {
-      "path": ".github/validate_shell.py",
-      "bytes": 1091,
-      "mode": "0644",
-      "sha256": "1ce889e9441512417912abed4fe09997b96d9c368df35a6fa91a7d0629263a88"
-    },
-    {
-      "path": ".github/validate_workflows.py",
-      "bytes": 5273,
-      "mode": "0644",
-      "sha256": "42e1780305315d8fe7bb211c319ba33cce8fc3f2d96275ce29767fd456784f86"
-    },
-    {
-      "path": ".github/vpnhide_integrate.py",
-      "bytes": 2361,
-      "mode": "0644",
-      "sha256": "48ee396ac917fb4a698674f1485fdd36fa63d2c0a56ae4a9688c45f44470d2d7"
-    },
-    {
       "path": ".github/workflows/build.yml",
-      "bytes": 36529,
+      "bytes": 39309,
       "mode": "0644",
-      "sha256": "a10087381502d0b63fba68313c76aa0c936cb46c4e930e6384d997cddc422293"
+      "sha256": "13880787a26491109cdd65fe381f78400d4aab8c4eb5983e63cd20558a6512a7"
     },
     {
       "path": ".github/workflows/clear-cache.yml",
@@ -1148,9 +1001,9 @@
     },
     {
       "path": ".github/workflows/main.yml",
-      "bytes": 122911,
+      "bytes": 125924,
       "mode": "0644",
-      "sha256": "2b1273b148fdf21e230777b84d406f8427687ce9700b44b1d526dc2d08195b95"
+      "sha256": "ff8c3ddc54b8eac7e447e6f64f8b7fec2ab2a45260f97e29f9c1e89084f0d27d"
     },
     {
       "path": ".github/workflows/managers.yml",
@@ -1190,15 +1043,15 @@
     },
     {
       "path": ".github/workflows/update-check.yml",
-      "bytes": 3712,
+      "bytes": 5777,
       "mode": "0644",
-      "sha256": "a62b745c153522224fe0a2bfa6c44639258b16e01876ddf9d281b3e89be99cef"
+      "sha256": "65c9d06dbe8a668e79ea6691cf1843a6c532586476094576a563d39e73802695"
     },
     {
       "path": ".github/workflows/validate.yml",
-      "bytes": 867,
+      "bytes": 2219,
       "mode": "0644",
-      "sha256": "2bf7064c38f47623f83be50541e3abd66681b3cdc86958c87cdcb9bbc9745a26"
+      "sha256": "c80d8707adbb7625360dc57effae324f41ae5b878dafde0afef46fb4b530b626"
     },
     {
       "path": ".gitignore",
@@ -1214,9 +1067,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 13088,
+      "bytes": 13844,
       "mode": "0644",
-      "sha256": "f59b19ce893e9837fb936e475b5d97e4ab8df6a5f057a2b55fac897489a2810f"
+      "sha256": "7eeb9611753edfe10f1286539e0f626f12c6a975410445304da3dedff05a6bb8"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -1226,21 +1079,21 @@
     },
     {
       "path": "docs/KRILIKD.md",
-      "bytes": 28709,
+      "bytes": 33030,
       "mode": "0644",
-      "sha256": "0cb58b0f4a849f4e5b73ee9fd363dfb2e00b70582e2cae8d868459a30122168b"
+      "sha256": "cc869decc92c495ac2effd7aed9d6f0f39fcfd23dc6f9152a771d0d46c0c0eb5"
     },
     {
       "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
-      "bytes": 6372,
+      "bytes": 9061,
       "mode": "0644",
-      "sha256": "ec66d41ce702d26639f12b4f5e302557c4412dd1b9bf35aae18f2cdc7d5b5700"
+      "sha256": "ceaf55e82a0a9c7c13e6c3261f874e7adc508cde9450a5e6e672802b071693af"
     },
     {
       "path": "docs/KRILIKD_PROFILES.md",
-      "bytes": 1400,
+      "bytes": 1629,
       "mode": "0644",
-      "sha256": "24cb89e508ca6fbeb5d2be1fbffe05039f4c52fccf58e169e777c9eadeea4d82"
+      "sha256": "7b0557a6771d703aa6ad181d80dab0b4ab3afac6eb95bd551cd7fa9f72a86524"
     },
     {
       "path": "docs/build-from-fork.md",
@@ -1285,10 +1138,16 @@
       "sha256": "e62b96d69a75673c7407a954d560b6af9400a1677d88605d9311d7f6dbf688df"
     },
     {
-      "path": "tests/test_bore.py",
-      "bytes": 11213,
+      "path": "tests/test_adios.py",
+      "bytes": 3216,
       "mode": "0644",
-      "sha256": "57b6aeb1e08e250263cbc3bc370339076bed95553a5884ec3174e78e9c1886d3"
+      "sha256": "cc59864881d95fa350790be4c625cceea0c979e74a2db8bd054eb821916bda72"
+    },
+    {
+      "path": "tests/test_bore.py",
+      "bytes": 11370,
+      "mode": "0644",
+      "sha256": "327fd8f80d9564e855db0b06a888dd855b43a1eb53dcb969736f998f63ae6325"
     },
     {
       "path": "tests/test_build_delta.py",
@@ -1298,16 +1157,39 @@
     },
     {
       "path": "tests/test_build_evidence.py",
-      "bytes": 95287,
+      "bytes": 96228,
       "mode": "0644",
-      "sha256": "7eafe6d3460e8c169b4ac4599a45749a9a6cd31a81b18c59c397386f3b585d46"
+      "sha256": "a099be2c304bf5351df067f393b768d4e8509b7c11aebed9c83fd5c0ffec13cb"
     },
     {
       "path": "tests/test_next_susfs_guard.py",
       "bytes": 19096,
       "mode": "0644",
       "sha256": "a2c43af33660cc718574c27407eaac319da5691a314358903b1e1a53f8557e5f"
+    },
+    {
+      "path": "tests/test_nomount_userspace.py",
+      "bytes": 2803,
+      "mode": "0644",
+      "sha256": "e12086139ab081370f3e643f9c71f2e94a42e67e8d6ecfb005de89abf23f3ad0"
+    },
+    {
+      "path": "tests/test_presentation_versions.py",
+      "bytes": 4929,
+      "mode": "0644",
+      "sha256": "065f85ba7b5cccd90c904cddb09db26361ae78e650c1d1b024f99747090eecc9"
+    },
+    {
+      "path": "tests/test_source_policy.py",
+      "bytes": 12412,
+      "mode": "0644",
+      "sha256": "c7aa82e255e6f46bd966676422d424a4275715c9488b35f8298fb0b349f41337"
+    },
+    {
+      "path": "tests/test_update_check.py",
+      "bytes": 11413,
+      "mode": "0644",
+      "sha256": "ed923e59ed1abe6f028aa3944a4b12dad7ea69bbfef4a9c37b9602cafc2076a0"
     }
-  ],
-  "evidence_scope": "Source/host verification only. This manifest is not a compiled-kernel, physical-boot, runtime-scheduler, battery or performance attestation."
+  ]
 }

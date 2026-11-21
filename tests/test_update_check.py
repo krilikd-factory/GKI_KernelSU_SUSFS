@@ -131,8 +131,10 @@ class UpdateCheckFeatureInheritanceTest(unittest.TestCase):
         self.assertNotEqual(update_check.candidate_fingerprint(tips, BASE, full),
                             update_check.candidate_fingerprint(tips, BASE, modules))
 
-    def test_actual_known_good_gets_an_explicit_unattested_bore_candidate(self):
-        kg_all = json.loads((ROOT / ".github/known-good.json").read_text())
+    def test_known_good_without_bore_gets_an_explicit_unattested_bore_candidate(self):
+        # A fixture, not the live known-good.json: once a BORE+ADIOS build is
+        # promoted, the live entry already carries both tokens.
+        kg_all = {"android16-6.12-2026-03/KernelSU-Next": {"feature_set": BASE}}
         before = json.dumps(kg_all, sort_keys=True)
         key, candidate, inputs = update_check.select_automatic_candidate_composition(kg_all)
         self.assertEqual(key, "android16-6.12-2026-03/KernelSU-Next")
@@ -141,7 +143,16 @@ class UpdateCheckFeatureInheritanceTest(unittest.TestCase):
         self.assertIn("ADIOS", candidate.split("+"))
         self.assertEqual(inputs["use_perf"], "bore_adios")
         self.assertNotIn("BORE", kg_all[key]["feature_set"].split("+"))
-        self.assertNotIn("ADIOS", kg_all[key]["feature_set"].split("+"))
+        self.assertEqual(json.dumps(kg_all, sort_keys=True), before)
+
+    def test_live_known_good_keeps_bore_adios_and_is_not_rewritten(self):
+        kg_all = json.loads((ROOT / ".github/known-good.json").read_text())
+        before = json.dumps(kg_all, sort_keys=True)
+        key, candidate, inputs = update_check.select_automatic_candidate_composition(kg_all)
+        self.assertEqual(key, "android16-6.12-2026-03/KernelSU-Next")
+        self.assertIn("BORE", candidate.split("+"))
+        self.assertIn("ADIOS", candidate.split("+"))
+        self.assertEqual(inputs["use_perf"], "bore_adios")
         self.assertEqual(json.dumps(kg_all, sort_keys=True), before)
 
     def test_automatic_bore_policy_fails_closed_without_perf_or_supported_family(self):

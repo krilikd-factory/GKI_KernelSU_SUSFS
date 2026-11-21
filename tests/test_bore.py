@@ -114,10 +114,12 @@ class BoreWiring(unittest.TestCase):
         self.assertIn('"BORE"', summary)
         self.assertIn("No battery or frame-rate gain is claimed", summary)
         for name in ("render_kernel_notes.py",):
-            for path in (ROOT / ".github" / name, SCRIPTS / name):
-                text = path.read_text()
-                self.assertIn('in ("true","bore")', text)
-                self.assertIn("BORE scheduler (experimental; android16-6.12 only)", text)
+            # The workflows run .github/scripts only; a stale second copy at
+            # .github/ root is what left old notes behind, so it must not return.
+            self.assertFalse((ROOT / ".github" / name).exists())
+            text = (SCRIPTS / name).read_text()
+            self.assertIn('in ("true","bore")', text)
+            self.assertIn("BORE scheduler (experimental; android16-6.12 only)", text)
 
     def test_scripts_parse(self):
         for name in ("bore_gki612_fixups.py", "bore_kabi_612.py", "bore12_state.py", "bore12_flat.py"):

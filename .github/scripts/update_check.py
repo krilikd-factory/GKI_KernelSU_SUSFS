@@ -311,6 +311,10 @@ def main() -> int:
             ("AnyKernel3", "https://github.com/WildKernels/AnyKernel3.git", "refs/heads/gki-2.0", "anykernel3_commit"),
             ("USB-Arsenal", "https://github.com/ravindu644/USB-Arsenal.git", "refs/heads/main", "usb_arsenal_commit"),
         ]
+        # Build Kernels resolves Re-Kernel from its main branch tip, so a new
+        # upstream commit has to be able to start a candidate too.
+        if "RK" in kg.get("feature_set", "").split("+"):
+            comps.append(("Re-Kernel", "https://github.com/Sakion-Team/Re-Kernel.git", "refs/heads/main", "rekernel_commit"))
         if oneplus:
             comps.append(("Kernel source (OnePlus)", kg.get("oem_repo", ""), f"refs/heads/{kg.get('oem_branch', '')}", "kernel_source_commit"))
         elif opl and opl != "lts":

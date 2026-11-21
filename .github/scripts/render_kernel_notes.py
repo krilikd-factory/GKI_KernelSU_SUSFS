@@ -18,10 +18,74 @@ if env("USE_BPF","true")=="true": feats.append("BTF / eBPF / FUSE-BPF")
 if env("USE_PERF","false") in ("true","bore"): feats.append("Performance Tuning")
 if env("USE_BORE","false")=="true": feats.append("BORE scheduler (experimental; android16-6.12 only)")
 if env("USE_ADIOS","false")=="true": feats.append("ADIOS 3.3.0 I/O scheduler (built-in; runtime-selectable, not default)")
+_fs=set(t for t in env("FEATURE_SET","").split("+") if t)
+if "VPN" in _fs: feats.append("VPN Hide (built-in)")
+if "USB" in _fs: feats.append("USB Arsenal")
+if "RK" in _fs: feats.append("Re-Kernel")
+if "AWL" in _fs: feats.append("ASB wakeup blocker (empty by default)")
+if "SDP900" in _fs: feats.append("OnePlus SDP 900 mA")
 if env("PAGE_SIZE","4k")=="16k": feats.append("16 KB page size (ARM64)")
+
+def _read_prop(path, key):
+    try:
+        for ln in open(path, encoding="utf-8", errors="replace"):
+            if ln.startswith(key + "="):
+                return ln.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+def _find(root, name):
+    if not root or not os.path.isdir(root):
+        return []
+    out = []
+    for d, _, files in os.walk(root):
+        if name in files:
+            out.append(os.path.join(d, name))
+    return sorted(out)
+
+_pins = {}
+for _pf in _find(env("PINS_DIR", ""), "known-good-candidate.json"):
+    try:
+        for _k, _v in json.load(open(_pf, encoding="utf-8")).items():
+            if isinstance(_v, dict):
+                _pins[_k] = _v
+    except Exception:
+        pass
+
+_mod_versions = {}
+for _mp in _find(env("MODULES_DIR", ""), "module.prop"):
+    _id = _read_prop(_mp, "id")
+    _ver = _read_prop(_mp, "version")
+    if _id and _ver:
+        _mod_versions[_id] = _ver
+
+def _root_label(v):
+    ver = (v.get("root_version") or "").removesuffix("-dirty")
+    code = v.get("root_version_code") or ""
+    if ver and code:
+        return f"{ver} (version code {code})"
+    return ver or (f"version code {code}" if code else "")
+
+def _root_version(commit):
+    for _v in _pins.values():
+        if commit and _v.get("root_commit") == commit:
+            return _root_label(_v)
+    return ""
+
+brand = env("BRAND_NAME", "")
 lines=[]
-lines.append("# Wild Kernels for GKI2 Devices")
+lines.append(f"# {brand} kernel for GKI2 devices" if brand else "# GKI2 kernel build")
 lines.append("")
+if _pins:
+    lines.append("## Builds in this run")
+    lines.append("")
+    lines.append("| Build | Kernel version string | Root | Features |")
+    lines.append("|---|---|---|---|")
+    for _k in sorted(_pins):
+        _v = _pins[_k]
+        lines.append(f"| `{_v.get('file', _k)}` | `{_v.get('kernel_version_string') or 'see BuildInfo'}` | {_root_label(_v) or '-'} | {_v.get('feature_set') or '-'} |")
+    lines.append("")
 lines.append("## Root")
 lines.append("")
 ksun_branch=env("KSUN_BRANCH","dev-susfs")
@@ -52,16 +116,24 @@ _labels0={"next":"KernelSU-Next","kernelsu":"KernelSU","bakasu":"BakaSU","sukisu
 _rc=[]
 for _fl0 in _flavors0:
     _c=_root_commits.get(_fl0,"")
-    if _c and len(_c)==40: _rc.append(f"{_labels0.get(_fl0,_fl0)} [`{_c[:7]}`]({_root_urls[_fl0]}{_c})")
+    _rv=_root_version(_c)
+    _rvs=f" {_rv}" if _rv else ""
+    if _c and len(_c)==40: _rc.append(f"{_labels0.get(_fl0,_fl0)}{_rvs} [`{_c[:7]}`]({_root_urls[_fl0]}{_c})")
     elif _c: _rc.append(f"{_labels0.get(_fl0,_fl0)} `{_c}`")
 for _r in _rc: lines.append(f"- {_r}")
 lines.append("")
 lines.append("## Features")
 lines.append("")
 _kp_url="https://github.com/WildKernels/kernel_patches/commit/"
-_feat_commit={"NoMount":("https://github.com/maxsteeel/nomount/commit/",nm),"Baseband Guard":(_kp_url,kp),"DroidSpaces-OSS":("https://github.com/ravindu644/Droidspaces-OSS/commit/",ds)}
+_feat_commit={"NoMount":("https://github.com/maxsteeel/nomount/commit/",nm),"Baseband Guard":(_kp_url,kp),"DroidSpaces-OSS":("https://github.com/ravindu644/Droidspaces-OSS/commit/",ds),
+    "VPN Hide (built-in)":("https://github.com/okhsunrog/vpnhide/commit/",env("VPNHIDE_COMMIT","")),
+    "USB Arsenal":("https://github.com/ravindu644/USB-Arsenal/commit/",env("USB_ARSENAL_COMMIT","")),
+    "Re-Kernel":("https://github.com/Sakion-Team/Re-Kernel/commit/",next((v.get("rekernel_commit","") for v in _pins.values() if v.get("rekernel_commit")),""))}
+_feat_version={"NoMount":_mod_versions.get("nomount",""),"VPN Hide (built-in)":_mod_versions.get("vpnhide_builtin","")}
 for f in feats:
     _u,_c=_feat_commit.get(f,("",""))
+    _fv=_feat_version.get(f,"")
+    if _fv: f=f"{f} {_fv}"
     if _c and len(_c)==40: lines.append(f"- {f} [`{_c[:7]}`]({_u}{_c})")
     elif _c: lines.append(f"- {f} `{_c}`")
     else: lines.append(f"- {f}")
@@ -104,33 +176,32 @@ for v in variants:
 lines.append("")
 lines.append("")
 # --- build availability -----------------------------------------------------
-# Config rows carry "disabled": true when the same kernel version is also built
-# from another month (temporary trim). Say so in the notes so a missing month
-# does not look like a failed build, and give people a way to ask for it back.
+# Only an "All" run spans the matrix; a single-family run says nothing about
+# the other families, so the section is left out there.
 _disabled={}
-try:
-    import glob as _glob
-    _root=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    for _p in sorted(_glob.glob(os.path.join(_root,".github","config","*.json")) or _glob.glob(".github/config/*.json")):
-        try: _cfg=json.load(open(_p))
-        except Exception: continue
-        _rows=sorted(e.get("date","") for e in _cfg.get("include",[]) if e.get("disabled") is True)
-        if _rows: _disabled[_cfg.get("version","")]=_rows
-except Exception:
-    _disabled={}
-lines.append("## Build availability")
-lines.append("")
+if not _sel:
+    try:
+        import glob as _glob
+        _root=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        for _p in sorted(_glob.glob(os.path.join(_root,".github","config","*.json")) or _glob.glob(".github/config/*.json")):
+            try: _cfg=json.load(open(_p))
+            except Exception: continue
+            _rows=sorted(e.get("date","") for e in _cfg.get("include",[]) if e.get("disabled") is True)
+            if _rows: _disabled[_cfg.get("version","")]=_rows
+    except Exception:
+        _disabled={}
 if _disabled:
+    lines.append("## Build availability")
+    lines.append("")
     _total=sum(len(v) for v in _disabled.values())
-    lines.append(f"**{_total} matrix rows are currently switched off.** Each of them duplicates a kernel version that is also built from another month, so the version ships once — from the newest month whose upstream branch still exists — instead of once per month:")
+    lines.append(f"**{_total} matrix rows are switched off** because the same kernel version is built from another month:")
     lines.append("")
     for _fam in sorted(_disabled):
         lines.append(f"- `{_fam}`: {', '.join(_disabled[_fam])}")
     lines.append("")
-    lines.append("The list lives in `.github/config/*.json` as `\"disabled\": true`, so it is easy to restore. **If you need one of these month snapshots, open an issue and it will be re-enabled:** https://github.com/WildKernels/GKI_KernelSU_SUSFS/issues")
-else:
-    lines.append("Every configured matrix row is built in this release.")
-lines.append("")
+    _repo=env("GITHUB_REPOSITORY","")
+    lines.append("They are marked `\"disabled\": true` in `.github/config/*.json`" + (f"; ask in https://github.com/{_repo}/issues to re-enable one." if _repo else "."))
+    lines.append("")
 output="\n".join(lines)+"\n"
 print(output,end="")
 s=os.environ.get("GITHUB_STEP_SUMMARY")

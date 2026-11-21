@@ -86,6 +86,20 @@ runs:
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh -j"$(nproc)"
         else
+          # Kleaf evaluates build.config.gki.aarch64 in its own environment, so the
+          # job-wide SOURCE_DATE_EPOCH / KBUILD_BUILD_TIMESTAMP never reach the
+          # kernel and the build date in Settings reads 1 Jan 1970. Exporting them
+          # from the build config does (upstream WildKernels, sarreos PR #354).
+          BUILD_CONFIG_FILE="common/build.config.gki.aarch64"
+          if [ -f "$BUILD_CONFIG_FILE" ]; then
+            if ! grep -q 'Reproducible timestamp injected by the CI workflow' "$BUILD_CONFIG_FILE"; then
+              printf '\n# Reproducible timestamp injected by the CI workflow.\nexport SOURCE_DATE_EPOCH=%q\nexport KBUILD_BUILD_TIMESTAMP=%q\n' \
+                "${SOURCE_DATE_EPOCH:-0}" "${KBUILD_BUILD_TIMESTAMP:-@0}" >> "$BUILD_CONFIG_FILE"
+              echo "[*] build.config.gki.aarch64: exported SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-0}"
+            fi
+          else
+            echo "::warning title=build timestamp::$BUILD_CONFIG_FILE not present - Kleaf will stamp the build itself"
+          fi
           sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
           PAGE_SIZE_FLAGS=()
           if [ "$PAGE_SIZE" = "16k" ]; then
