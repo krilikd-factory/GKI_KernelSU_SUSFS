@@ -65,8 +65,9 @@ class BuildPresentationWiringTest(unittest.TestCase):
 
     def test_kleaf_build_date_is_not_unix_zero(self):
         action = (ROOT / ".github/actions/build-kernel/action.yml").read_text()
-        self.assertIn("Reproducible timestamp injected by the CI workflow", action)
-        self.assertIn("export SOURCE_DATE_EPOCH=%q", action)
+        self.assertIn("TS_LINE='build-timestamp = $(or $(KBUILD_BUILD_TIMESTAMP), $(build-timestamp-auto))'", action)
+        self.assertIn('"build-timestamp = ${KBUILD_BUILD_TIMESTAMP}"', action)
+        self.assertNotIn("Reproducible timestamp injected by the CI workflow", action)
 
     def test_build_summary_reads_the_packaged_image(self):
         action = (ROOT / ".github/actions/build-summary/action.yml").read_text()
@@ -78,6 +79,8 @@ class BuildPresentationWiringTest(unittest.TestCase):
         self.assertIn("name: ${{ steps.vhver.outputs.artifact || 'VPNHide-Builtin-Module' }}", main)
         self.assertNotIn('pattern: "*NoMount-Metamodule"\n', main)
         self.assertNotIn("release-assets/NoMount-Metamodule.zip", main)
+        self.assertIn("path: notes-input/modules/nomount", main)
+        self.assertIn("path: notes-input/modules/vpnhide", main)
         meta = (ROOT / ".github/actions/build-metadata/action.yml").read_text()
         self.assertIn('startswith($name + "-")', meta)
 

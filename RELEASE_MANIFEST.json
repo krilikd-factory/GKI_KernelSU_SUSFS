@@ -215,9 +215,9 @@
     },
     {
       "path": ".github/actions/build-kernel/action.yml",
-      "bytes": 17521,
+      "bytes": 17780,
       "mode": "0644",
-      "sha256": "1d1358a5dd39dcd32fcf0acb541b089ff1b730cb578747af204d14bbe85f455c"
+      "sha256": "b18674225bc9425b4fd93a6c0d54c06250f0299175c9d2e1eb35748283c5a281"
     },
     {
       "path": ".github/actions/build-metadata/action.yml",
@@ -1001,9 +1001,9 @@
     },
     {
       "path": ".github/workflows/main.yml",
-      "bytes": 125924,
+      "bytes": 126094,
       "mode": "0644",
-      "sha256": "ff8c3ddc54b8eac7e447e6f64f8b7fec2ab2a45260f97e29f9c1e89084f0d27d"
+      "sha256": "9b68c1cabdf7a19dc2c2186e655281c853c98fb70dca2b8756ece2cf3bdac5f3"
     },
     {
       "path": ".github/workflows/managers.yml",
@@ -1079,9 +1079,9 @@
     },
     {
       "path": "docs/KRILIKD.md",
-      "bytes": 33030,
+      "bytes": 33636,
       "mode": "0644",
-      "sha256": "cc869decc92c495ac2effd7aed9d6f0f39fcfd23dc6f9152a771d0d46c0c0eb5"
+      "sha256": "bbe77887c0c32b62f3cbaae4d73464c92a53cafc611d255c538e20bfdfea4b15"
     },
     {
       "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
@@ -1175,9 +1175,9 @@
     },
     {
       "path": "tests/test_presentation_versions.py",
-      "bytes": 4929,
+      "bytes": 5198,
       "mode": "0644",
-      "sha256": "065f85ba7b5cccd90c904cddb09db26361ae78e650c1d1b024f99747090eecc9"
+      "sha256": "40a48342ce5e88395fab91f6fbd8f330c01752c039fbc9cf7a8844b592788f41"
     },
     {
       "path": "tests/test_source_policy.py",

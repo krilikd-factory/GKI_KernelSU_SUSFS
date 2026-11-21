@@ -2184,14 +2184,16 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v7
         with:
-          path: notes-input/modules
+          # Separate paths: a single matching artifact is extracted straight
+          # into its path, so two of them in one path overwrite module.prop.
+          path: notes-input/modules/nomount
           pattern: '*NoMount-Metamodule*'
           merge-multiple: false
       - name: Download VPN Hide module for the notes
         continue-on-error: true
         uses: actions/download-artifact@v7
         with:
-          path: notes-input/modules
+          path: notes-input/modules/vpnhide
           pattern: 'VPNHide-Builtin-Module*'
           merge-multiple: false
       - name: Render release notes preview (always)

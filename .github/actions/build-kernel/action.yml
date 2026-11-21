@@ -86,19 +86,20 @@ runs:
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh -j"$(nproc)"
         else
-          # Kleaf evaluates build.config.gki.aarch64 in its own environment, so the
-          # job-wide SOURCE_DATE_EPOCH / KBUILD_BUILD_TIMESTAMP never reach the
-          # kernel and the build date in Settings reads 1 Jan 1970. Exporting them
-          # from the build config does (upstream WildKernels, sarreos PR #354).
-          BUILD_CONFIG_FILE="common/build.config.gki.aarch64"
-          if [ -f "$BUILD_CONFIG_FILE" ]; then
-            if ! grep -q 'Reproducible timestamp injected by the CI workflow' "$BUILD_CONFIG_FILE"; then
-              printf '\n# Reproducible timestamp injected by the CI workflow.\nexport SOURCE_DATE_EPOCH=%q\nexport KBUILD_BUILD_TIMESTAMP=%q\n' \
-                "${SOURCE_DATE_EPOCH:-0}" "${KBUILD_BUILD_TIMESTAMP:-@0}" >> "$BUILD_CONFIG_FILE"
-              echo "[*] build.config.gki.aarch64: exported SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-0}"
-            fi
+          # Kleaf without --config=stamp exports SOURCE_DATE_EPOCH=0 and derives
+          # KBUILD_BUILD_TIMESTAMP from it after the build config is sourced, so
+          # neither the job environment nor build.config can set the date: the
+          # image read "Thu Jan 1 00:00:00 UTC 1970" (run 44924584180). The date
+          # only feeds UTS_VERSION through init/Makefile, so pin it there. This
+          # changes no symbol, no CRC and no config; the release string stays.
+          INIT_MK="common/init/Makefile"
+          TS_LINE='build-timestamp = $(or $(KBUILD_BUILD_TIMESTAMP), $(build-timestamp-auto))'
+          if [ -n "${KBUILD_BUILD_TIMESTAMP:-}" ] && grep -qxF "$TS_LINE" "$INIT_MK"; then
+            python3 -I -c 'import sys; p, o, n = sys.argv[1:4]; t = open(p, encoding="utf-8").read(); assert t.count(o + "\n") == 1, "build-timestamp line is not unique"; open(p, "w", encoding="utf-8").write(t.replace(o + "\n", n + "\n"))' \
+              "$INIT_MK" "$TS_LINE" "build-timestamp = ${KBUILD_BUILD_TIMESTAMP}"
+            echo "[*] init/Makefile: $(grep -m1 '^build-timestamp = ' "$INIT_MK")"
           else
-            echo "::warning title=build timestamp::$BUILD_CONFIG_FILE not present - Kleaf will stamp the build itself"
+            echo "::warning title=build timestamp::init/Makefile build-timestamp line not found or KBUILD_BUILD_TIMESTAMP empty - the image keeps Kleaf's 1970 date"
           fi
           sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
           PAGE_SIZE_FLAGS=()
