@@ -8,7 +8,8 @@
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Third-party notices](https://img.shields.io/badge/upstream-attribution-lightgrey.svg)](THIRD_PARTY_NOTICES.md)
 [![Primary target](https://img.shields.io/badge/OnePlus_15-SM8850-7c3aed.svg)](docs/KRILIKD.md)
-[![Primary branch](https://img.shields.io/badge/android16-6.12-TOP-059669.svg)](docs/KRILIKD.md)
+[![Kernel family](https://img.shields.io/badge/android16--6.12-TOP-059669.svg)](docs/KRILIKD.md)
+[![Known-good](https://img.shields.io/badge/known--good-6.12.69_boot--attested-0ea5e9.svg)](.github/known-good.json)
 
 </div>
 
@@ -38,8 +39,21 @@ KRILIKD is an independent fork built on the Wild Kernels build framework and its
 | 📌 Verified baseline in project config | `6.12.69`, patch level `2026-03` |
 | 📄 ARM64 pages | `4k` |
 | 👑 Root implementation | KernelSU-Next + SUSFS |
+| 🧠 Schedulers | BORE (CPU, on top of EEVDF) + ADIOS (block I/O, selectable at runtime) |
 | ⚙️ Mode | **TOP** — one curated mode, not a hidden overclock preset |
 | 🌱 Source choice | AOSP GKI or compatible OnePlus source, subject to provenance checks |
+
+### ✅ Current known-good build
+
+| Item | Value |
+|---|---|
+| `uname -r` | `6.12.69-android16-6-KRILIKD` |
+| Feature set | SUSFS, NoMount, BBG, NET, DroidSpaces, NTSync, Ptrace, Unicode, BPF, Perf, BORE, ADIOS, VPN Hide, USB Arsenal, Re-Kernel, AWL, SDP900 |
+| KernelSU-Next | `v3.4.2`, version code `33555` |
+| Source | AOSP GKI, LTO off |
+| Status | `boot_attested_only`, 21 Nov 2026 ([run 44927495170](https://github.com/krilikd-factory/GKI_KernelSU_SUSFS/actions/runs/44927495170)) |
+
+“Boot attested” means the phone booted with this image. Vendor modules, display, network, camera, audio, storage, thermal behavior and ASB were not separately attested. The live record is [`.github/known-good.json`](.github/known-good.json).
 
 The target matrix evolves with upstream and stock kernels. The authoritative values for a particular run are its **Pins** and **BuildInfo**, not this README snapshot.
 
@@ -60,6 +74,7 @@ Feature availability depends on the selected family and `feature_set`. The table
 | 🎮 **Compatibility** | NTSync, DroidSpaces-OSS | Synchronization primitives and container runtime support |
 | 📊 **Tracing** | BTF, eBPF, FUSE-BPF | Build support is not proof that a particular BPF program will load or run |
 | 🧠 **Memory / pressure** | PSI, MGLRU, zram/zsmalloc discovery | ASB must discover live interfaces; config presence alone does not prove runtime state |
+| 🧠 **Schedulers** | BORE 7.0.0 CPU scheduler, ADIOS 3.3.0 block-I/O scheduler | Both opt-in through `use_perf=bore_adios` on `android16-6.12`; `/proc/sys/kernel/sched_bore=0` returns to plain EEVDF and ADIOS never replaces the stock default I/O scheduler by itself |
 | 🚀 **Performance pass** | Reviewed memory, scheduler, wakeup, filesystem and logging patches | Dry-run and policy gates first; skipped or held patches remain visible in BuildInfo |
 | 🔋 **Power controls** | Power-efficient workqueues, KFENCE sampling disabled by default, optional ASB exact-name wakeup blocker | `AWL` starts with an empty root-only policy; no automatic block rules or fixed battery-saving percentage |
 | 🔧 **Additional fixes** | Ptrace and Unicode fixes, family-specific compatibility work | Applied only where the version and source tree match |
@@ -79,13 +94,9 @@ The kernel project publishes evidence; ASB owns userspace policy. The current co
 | `kernel_sched_autogroup` | `/proc/sys/kernel/sched_autogroup_enabled` | `stock`, `off`, `on` | Exact `0/1` readback; config presence is not runtime proof |
 | `kernel_sched_child_runs_first` | `/proc/sys/kernel/sched_child_runs_first` | `stock`, `off`, `on` | Exact `0/1` readback |
 
-For every control: **discover → check access → capture baseline → write allowlisted value → read back → restore exactly on Stock/uninstall**. The debugfs migration interface can remain unavailable or inaccessible even in a successful kernel build; the report deliberately keeps `runtime_state=unknown` and `writable=unknown`. No autogroup config policy is changed merely to make its ASB card available. Android does not mount debugfs on user builds, so ASB mounts it on a private root-only directory for each migration-batch read or write and unmounts it straight away (`runtime_access=asb_private_debugfs_mount_per_access`); autogroup is marked `build_policy=not_enabled_kmi_signal_struct`.
+For every control: **discover → check access → capture baseline → write allowlisted value → read back → restore exactly on Stock/uninstall**. There is no arbitrary path/value writer and no broad `/sys/kernel/krilikd/*` ABI, and vendor thermal limits are not bypassed.
 
-Before any kernel source is downloaded, `next_susfs_api_guard` checks that the selected KernelSU-Next commit only calls `susfs_*` functions the android16-6.12 SUSFS checkout provides. A mismatch switches to the newest boot-attested known-good KernelSU-Next root that passes the same check (with a warning), or stops the run immediately with the missing function names; a network failure only warns.
-
-The optional `AWL` feature adds one deliberately narrow ASB ABI: `/sys/kernel/asb_wakeup/blocklist` accepts only root-issued `add NAME`, `del NAME` and `clear` commands for at most 16 exact wakeup-source names. Its policy is empty by default; `/sys/kernel/asb_wakeup/blocked_events` is a read-only counter. There are no patterns, arbitrary path/value writes, automatic block rules or force-release of locks already held. The final-config gate rejects a selected AWL build without this capability. ASB still has to verify the interface and apply only the user's explicit policy on device.
-
-There is deliberately no arbitrary path/value writer and no broad `/sys/kernel/krilikd/*` ABI. VPN Hide retains its own app/companion owner, network policy remains with the existing ASB network runtime, and vendor thermal limits are not bypassed. No OPlus SDP 900 mA writer is included because no confirmed control/readback ABI was found in the reviewed source and diagnostics.
+The optional `AWL` wakeup blocker, the debugfs access rule, the SUSFS API guard and what is deliberately left out are described in **[docs/asb-integration.md](docs/asb-integration.md)**.
 
 ## 🏗️ Build your own
 
@@ -119,6 +130,17 @@ The BuildInfo report separates **requested features**, **final-config capabiliti
 
 After a successful personal boot check, open **Actions → Mark build as known-good** and paste only the stable Build Kernels run URL. This records `boot_attested_only`, not a claim that every device function was tested. For broader attestation, optionally paste the completed Pins checklist covering vendor modules, display/touch, Wi-Fi, cellular, camera, audio, storage, thermal behavior and ASB. If the device does not boot, restore the saved kernel and preserve `console-ramoops` evidence where available.
 
+## 📚 Documentation
+
+| Topic | Page |
+|---|---|
+| OnePlus 15 / TOP build, change log and boundaries (Russian) | [docs/KRILIKD.md](docs/KRILIKD.md) |
+| Implementation status by subsystem | [docs/KRILIKD_IMPLEMENTATION_STATUS.md](docs/KRILIKD_IMPLEMENTATION_STATUS.md) |
+| ASB integration details | [docs/asb-integration.md](docs/asb-integration.md) |
+| Feature reference | [docs/features.md](docs/features.md) |
+| Building from a fork | [docs/build-from-fork.md](docs/build-from-fork.md) |
+| Installing and first boot | [docs/installation.md](docs/installation.md), [docs/post-install.md](docs/post-install.md) |
+
 ## 🔬 Release discipline
 
 - New upstream patches are **observed, not auto-applied**.
@@ -140,6 +162,7 @@ KRILIKD retains the projects and attribution that make the fork possible, includ
 - [Re-Kernel](https://github.com/Sakion-Team/Re-Kernel) by the Sakion Team
 - [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal)
 - [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches) and the upstream build-framework lineage
+- [BORE](https://github.com/firelzrd/bore-scheduler) and [ADIOS](https://github.com/firelzrd/adios) by **Masahito Suzuki (firelzrd)**
 - [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by **osm0sis**
 
 See **[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)** for attribution and licensing. Issues and pull requests should contain build IDs, BuildInfo and non-sensitive device evidence rather than serial numbers, IMEI, account data or network identifiers.

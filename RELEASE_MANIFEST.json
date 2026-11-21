@@ -4,7 +4,7 @@
   "base": "GKI_KernelSU_SUSFS-IO-Schedulers-source.zip",
   "hash_algorithm": "SHA-256",
   "manifest_coverage": "Every regular file except RELEASE_MANIFEST.json itself; no symlinks or other non-regular entries are present.",
-  "file_count_excluding_manifest": 186,
+  "file_count_excluding_manifest": 187,
   "inventory_vs_base": {
     "changed": [
       ".github/actions/build-kernel/action.yml",
@@ -77,9 +77,9 @@
   "files": [
     {
       "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
-      "bytes": 3114,
+      "bytes": 2194,
       "mode": "0644",
-      "sha256": "161966d0b45c06baa9a5cd86faeb32ecae50c499b8837d90cccdaf7cf73dd8d8"
+      "sha256": "4f06e34b00b7a72ba923f4196f3570de569bf20b756da98d4916ebcb73704d18"
     },
     {
       "path": ".github/ISSUE_TEMPLATE/config.yml",
@@ -1067,9 +1067,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 13844,
+      "bytes": 14207,
       "mode": "0644",
-      "sha256": "7eeb9611753edfe10f1286539e0f626f12c6a975410445304da3dedff05a6bb8"
+      "sha256": "1d91a5a58ee7b368b30ba3a44ee514b735c7dfee0245785daf54385cff11ef1a"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -1079,21 +1079,27 @@
     },
     {
       "path": "docs/KRILIKD.md",
-      "bytes": 33636,
+      "bytes": 33619,
       "mode": "0644",
-      "sha256": "eb903e8603c303955d5299ca95f741ea729a8ea47db74d60759a7aef901a5e23"
+      "sha256": "fac080fae99a91debe66c20f9fc034b6e7b21ef1faf45dda9de0b585452d6536"
     },
     {
       "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
-      "bytes": 9061,
+      "bytes": 9051,
       "mode": "0644",
-      "sha256": "ceaf55e82a0a9c7c13e6c3261f874e7adc508cde9450a5e6e672802b071693af"
+      "sha256": "5273e68bc6a91419de0bc0a2deec9b8a50736a65eca0baad8dc99bbd93f129cf"
     },
     {
       "path": "docs/KRILIKD_PROFILES.md",
       "bytes": 1629,
       "mode": "0644",
       "sha256": "7b0557a6771d703aa6ad181d80dab0b4ab3afac6eb95bd551cd7fa9f72a86524"
+    },
+    {
+      "path": "docs/asb-integration.md",
+      "bytes": 2220,
+      "mode": "0644",
+      "sha256": "e4c69d2cb69920683b30d0268fd066c3dfd42cbccb5fc60c52b75d73ebd3d01f"
     },
     {
       "path": "docs/build-from-fork.md",
@@ -1103,9 +1109,9 @@
     },
     {
       "path": "docs/features.md",
-      "bytes": 6326,
+      "bytes": 6796,
       "mode": "0644",
-      "sha256": "c72670d3b52e72f023c043143b65bdbd5d922b020e1daf8828b4c850641a55b7"
+      "sha256": "058e53aaf1c60e7e133e58691b9640241d498f03f67c60ea156c19016e912772"
     },
     {
       "path": "docs/installation.md",

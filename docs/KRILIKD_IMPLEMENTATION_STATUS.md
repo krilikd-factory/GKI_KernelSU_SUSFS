@@ -112,7 +112,7 @@ switch.
 - **Switching it off at runtime:** BORE exposes `/proc/sys/kernel/sched_bore` (0 = plain EEVDF),
   so a boot that works can be compared against stock behaviour without reflashing.
 
-## ADIOS 3.3.0 with BORE (kernel dev66 buildfix2)
+## ADIOS 3.3.0 with BORE (kernel dev66)
 
 `use_perf=bore_adios` composes BORE and ADIOS on `android16-6.12`; `use_perf=bore` remains the
 exact BORE-only composition for reproducing older known-good builds. Scheduled candidates request

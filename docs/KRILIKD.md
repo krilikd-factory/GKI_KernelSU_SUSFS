@@ -12,7 +12,7 @@
 - **Чистка.** Удалены устаревшие копии скриптов в корне `.github/` (workflows используют только `.github/scripts/`). `build-userspace.sh` снова исполняемый, из-за этого падал Validate. Тест Update Check переведён на фикстуру, т. к. живой known-good уже содержит BORE+ADIOS.
 - Физическая загрузка этой ревизией не заявляется: изменены упаковка, отчёты и метка времени, а не код ядра.
 
-## dev66 buildfix3: NoMount Update Check использует ветку Build
+## NoMount Update Check использует ветку Build
 
 В журналах run 43905804756 фактический `nomount_commit` загруженного и отмеченного known-good
 ядра сохранён корректно. Последующий Update Check ошибочно сравнивал этот pin с `refs/heads/dev`,

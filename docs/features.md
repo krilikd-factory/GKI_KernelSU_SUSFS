@@ -96,6 +96,8 @@ Final config presence does not prove freezer compatibility, safe blocking of a p
 | Feature | Description | Source |
 |---------|-------------|--------|
 | NTSync | High-performance synchronization primitives compatible with Windows NT kernel API. | [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches/tree/main/common/ntsync) |
+| BORE | Burst-Oriented Response Enhancer on top of EEVDF; runtime switch `/proc/sys/kernel/sched_bore`. `android16-6.12` only, through `use_perf=bore` or `bore_adios`. | [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler) |
+| ADIOS | Adaptive Deadline I/O Scheduler for block devices; built in but not made the default, selected at runtime. `android16-6.12` only, through `use_perf=bore_adios`. | [firelzrd/adios](https://github.com/firelzrd/adios) |
 | Performance Tuning | Kernel configuration and tuning options | [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches/tree/main/common) |
 
 ---

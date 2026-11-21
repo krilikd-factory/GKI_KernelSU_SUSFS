@@ -1,116 +1,69 @@
-name: Bug Report
-description: Create a bug report
-labels: [Bug]
-
+name: Bug report
+description: A KRILIKD build fails to build, boot or behave as documented
+labels: [bug]
 body:
-  - type: input
+  - type: markdown
     attributes:
-        label: Device Model
-        description: Your device model
-        placeholder: "e.g., Google Pixel 8"
-    validations:
-        required: true
-
+      value: |
+        Please do not paste serial numbers, IMEI, account data or network identifiers.
+        If the phone does not boot, flash your saved boot image first, then report.
   - type: input
+    id: device
     attributes:
-        label: Android Version
-        description: Your Android version
-        placeholder: "e.g., Android 16"
+      label: Device and firmware
+      placeholder: "e.g., OnePlus 15 (CPH2745), ColorOS 17.0, patch level 2026-03"
     validations:
-        required: true
-
+      required: true
   - type: input
+    id: run
     attributes:
-        label: Stock Kernel Version
-        description: The original kernel version on your device
-        placeholder: "e.g., 6.1.134-android14"
+      label: Build run URL
+      description: The Actions run that produced the kernel you flashed.
+      placeholder: "https://github.com/krilikd-factory/GKI_KernelSU_SUSFS/actions/runs/..."
     validations:
-        required: true
-
+      required: true
   - type: input
+    id: uname
     attributes:
-        label: Kernel Flashed Version
-        description: The kernel version you flashed
-        placeholder: "e.g., 6.1.134-android14"
+      label: Kernel version string
+      description: Output of `uname -r` after boot, or the AnyKernel3 file name if it did not boot.
+      placeholder: "e.g., 6.12.69-android16-6-KRILIKD"
     validations:
-        required: true
-
-  - type: input
-    attributes:
-        label: KSUN Kernel Version
-        description: Your KSUN kernel version number
-        placeholder: "e.g., 13971"
-    validations:
-        required: true
-
+      required: true
   - type: dropdown
+    id: root
     attributes:
-        label: Manager
-        description: Which KernelSU manager you're using
-        options:
-          - Wild KSU
-          - KernelSU Next
-          - KernelSU
-          - MKSU
-          - KowSU
-          - RKSU
-          - SukiSU
+      label: Root implementation
+      options: [KernelSU-Next, KernelSU, SukiSU Ultra, BakaSU, FinaSU, KowSU]
     validations:
-        required: true
-
+      required: true
   - type: input
+    id: manager
     attributes:
-        label: Manager Version
-        description: Your manager version
-        placeholder: "e.g., v0.0.165(13974)"
+      label: Manager version
+      placeholder: "e.g., v3.4.2 (33555)"
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where it fails
+      options: [Build in Actions, Flashing, First boot, After boot, ASB integration]
     validations:
-        required: true
-
+      required: true
   - type: input
+    id: lastgood
     attributes:
-        label: Release Flashed
-        description: Which release version you flashed
-        placeholder: "e.g., v1.5.12-r2"
-    validations:
-        required: true
-
-  - type: input
-    attributes:
-        label: Full File Name
-        description: The complete filename of the kernel you flashed
-        placeholder: "e.g., KSUN-13971-android14-6.1.134-2025-05-AnyKernel3.zip"
-    validations:
-        required: true
-
-  - type: checkboxes
-    attributes:
-        label: Have you tested both build variants?
-        description: You must test both Normal and Module Check Bypass variants before reporting
-        options:
-          - label: "Yes, I have tried both Normal and Module Check Bypass variants"
-            required: true
-    validations:
-        required: true
-
-  - type: input
-    attributes:
-        label: Last Working Release
-        description: The last release version that worked (if any)
-        placeholder: "e.g., v1.5.9-r11"
-    validations:
-        required: false
-
-  - type: input
-    attributes:
-        label: Last Working File Name
-        description: The filename of the last working kernel (if any)
-        placeholder: "e.g., KSUN-13970-android14-6.1.134-2025-05-AnyKernel3.zip"
-    validations:
-        required: false
-
+      label: Last working build
+      description: Run URL or `uname -r` of the last build that worked, if any.
   - type: textarea
+    id: what
     attributes:
-        label: Describe the bug and attach any screenshots*
-        description: A clear and concise description of what the bug is. Please get log from /data/adb/ksu/logs/dmesg.log
+      label: What happened
+      description: Steps, expected result and actual result.
     validations:
-        required: true
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Evidence
+      description: |
+        Attach what applies: the BuildInfo artifact or failing job log, `/data/adb/ksu/logs/dmesg.log`, `console-ramoops` after a failed boot, or an ASB `asbdiag` report.
