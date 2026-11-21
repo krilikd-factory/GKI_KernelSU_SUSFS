@@ -761,9 +761,9 @@
     },
     {
       "path": ".github/scripts/kernel_capability_report.py",
-      "bytes": 16431,
+      "bytes": 16659,
       "mode": "0644",
-      "sha256": "4e974ef289171993bbd293b53efb9e6075c47e59802ae3a68a76e95d1c2d4990"
+      "sha256": "53100f1642a8c8ec251f93bef933d8828ab39a23963024a270cceb9f5df68f5b"
     },
     {
       "path": ".github/scripts/kmi_compatibility.py",
@@ -983,9 +983,9 @@
     },
     {
       "path": ".github/workflows/build.yml",
-      "bytes": 39309,
+      "bytes": 39483,
       "mode": "0644",
-      "sha256": "13880787a26491109cdd65fe381f78400d4aab8c4eb5983e63cd20558a6512a7"
+      "sha256": "d63a7550f0dc4be4316c580b7718926f69ee77bed3365f8776ad4a5a593ab4a5"
     },
     {
       "path": ".github/workflows/clear-cache.yml",
@@ -1067,9 +1067,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 14207,
+      "bytes": 14383,
       "mode": "0644",
-      "sha256": "1d91a5a58ee7b368b30ba3a44ee514b735c7dfee0245785daf54385cff11ef1a"
+      "sha256": "ec9411c6bdd12c605a35e5492f03cf780d34e8730061427481045963ae7d2764"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -1079,9 +1079,9 @@
     },
     {
       "path": "docs/KRILIKD.md",
-      "bytes": 33619,
+      "bytes": 34416,
       "mode": "0644",
-      "sha256": "fac080fae99a91debe66c20f9fc034b6e7b21ef1faf45dda9de0b585452d6536"
+      "sha256": "df13f85a5e4f708ddc25f617d08eac2c5cbc4a4e858e325f8acaf29d9a921525"
     },
     {
       "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
@@ -1163,9 +1163,9 @@
     },
     {
       "path": "tests/test_build_evidence.py",
-      "bytes": 96228,
+      "bytes": 97388,
       "mode": "0644",
-      "sha256": "a099be2c304bf5351df067f393b768d4e8509b7c11aebed9c83fd5c0ffec13cb"
+      "sha256": "f9ac834186bdbbb83b81407bc2394f68cac4bf94e2fea188ee788efe658e329d"
     },
     {
       "path": "tests/test_next_susfs_guard.py",

@@ -690,6 +690,9 @@ jobs:
           if [[ "+${{ inputs.feature_set }}+" == *"+NET+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
             REQUIRE+=(--require network.cake --require network.ip_sets)
           fi
+          if [[ "+${{ inputs.feature_set }}+" == *"+DS+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
+            REQUIRE+=(--require container.macvlan)
+          fi
           if [ "${{ inputs.version }}" = "android16-6.12" ]; then
             if [[ "+${{ inputs.feature_set }}+" == *"+RK+"* ]] || [ "${{ inputs.feature_set }}" = "All" ]; then
               REQUIRE+=(--require app.rekernel)

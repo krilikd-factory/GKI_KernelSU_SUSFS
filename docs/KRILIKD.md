@@ -1,5 +1,10 @@
 # KRILIKD — ядро для OnePlus 15 (ColorOS 17, GKI 6.12.69)
 
+## 22.11.2026: macvlan для DroidSpaces 7
+
+- `CONFIG_MACVLAN=y` уже запрашивался действием DroidSpaces и есть в итоговом `.config` known-good сборки (run 44927495170). Теперь это проверяется: при `DS` в feature set сборка требует capability `container.macvlan` в финальном конфиге и падает, если опция пропала. Режим `--net=macvlan` DroidSpaces 7 работает только с проводным сетевым интерфейсом (USB-Ethernet).
+- `POSIX_MQUEUE` и `DEVTMPFS` для OnePlus 15 по-прежнему выключены политикой устройства; функции DroidSpaces, которым они нужны, недоступны.
+
 ## 21.11.2026: версии и брендинг видны правильно, Re-Kernel в Update Check
 
 - **Дата сборки ядра.** В образе было `#1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 1970` (run 44889845649). Kleaf без `--config=stamp` сам экспортирует `SOURCE_DATE_EPOCH=0` и выводит из него `KBUILD_BUILD_TIMESTAMP` уже после чтения build config, поэтому ни окружение job, ни способ из апстрима (экспорт из `build.config.gki.aarch64`, PR #354) дату не меняют — проверено сборкой run 44924584180. Дата теперь записывается в строку `build-timestamp` в `init/Makefile`; она попадает только в UTS_VERSION, символы, CRC и config не меняются. Дата воспроизводимая: 5-е число месяца patch level, 04:20 UTC.

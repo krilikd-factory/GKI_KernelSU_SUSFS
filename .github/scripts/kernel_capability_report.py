@@ -54,6 +54,11 @@ CAPABILITIES = {
         "runtime_paths": ["/sys/module/ip_set"],
         "asb_use": "netfilter set availability; actual ipset create/add commands still require runtime validation",
     },
+    "container.macvlan": {
+        "configs": ["CONFIG_MACVLAN"],
+        "runtime_paths": ["/sys/module/macvlan"],
+        "asb_use": "DroidSpaces macvlan mode (--net=macvlan) on a wired NIC; ASB does not create links",
+    },
     "app.rekernel": {
         "configs": ["CONFIG_REKERNEL", "CONFIG_REKERNEL_NETWORK"],
         "runtime_paths": [],

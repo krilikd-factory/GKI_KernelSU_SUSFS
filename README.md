@@ -71,7 +71,7 @@ Feature availability depends on the selected family and `feature_set`. The table
 | 🧊 **App events** | Re-Kernel built-in with Generic Netlink and network events | Optional `RK` integration for `android16-6.12`; exact source commit is pinned, third-party freezer compatibility is not assumed |
 | 🕵️ **VPN Hide** | Built-in `CONFIG_VPNHIDE=y`, full or net-only integration | Controlled by its own app and matching built-in companion; **do not install `vpnhide-kmod` on top** |
 | 🔌 **USB gadget** | USB Arsenal integration, ISO/DVD/CD-ROM mode where applicable | HID and NCM availability still depends on the selected kernel baseline |
-| 🎮 **Compatibility** | NTSync, DroidSpaces-OSS | Synchronization primitives and container runtime support |
+| 🎮 **Compatibility** | NTSync, DroidSpaces-OSS (v7, incl. macvlan mode) | Synchronization primitives and container runtime support; a DS build fails if `CONFIG_MACVLAN` is missing from the final config. On the OnePlus 15, `POSIX_MQUEUE` and `DEVTMPFS` stay off by the device policy |
 | 📊 **Tracing** | BTF, eBPF, FUSE-BPF | Build support is not proof that a particular BPF program will load or run |
 | 🧠 **Memory / pressure** | PSI, MGLRU, zram/zsmalloc discovery | ASB must discover live interfaces; config presence alone does not prove runtime state |
 | 🧠 **Schedulers** | BORE 7.0.0 CPU scheduler, ADIOS 3.3.0 block-I/O scheduler | Both opt-in through `use_perf=bore_adios` on `android16-6.12`; `/proc/sys/kernel/sched_bore=0` returns to plain EEVDF and ADIOS never replaces the stock default I/O scheduler by itself |

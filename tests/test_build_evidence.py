@@ -539,7 +539,8 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
         build = (ROOT / ".github/workflows/build.yml").read_text()
         self.assertNotIn('== *",', build)
         for token, capability in (("NET", "network.cake"), ("RK", "app.rekernel"),
-                                  ("AWL", "power.wakeup_blocker"), ("SDP900", "charging.sdp_900ma")):
+                                  ("AWL", "power.wakeup_blocker"), ("SDP900", "charging.sdp_900ma"),
+                                  ("DS", "container.macvlan")):
             self.assertIn(f'[[ "+${{{{ inputs.feature_set }}}}+" == *"+{token}+"* ]]', build)
             self.assertIn(f"--require {capability}", build)
         with tempfile.TemporaryDirectory() as d:
@@ -553,6 +554,21 @@ class KernelFeatureIntegrationTest(unittest.TestCase):
             bad = subprocess.run([sys.executable, "-I", str(ROOT / ".github/scripts/kernel_capability_report.py"),
                                   "--config", str(config), "--feature-set", "SDP900", "--output", str(out),
                                   "--require", "charging.sdp_900ma"], text=True, capture_output=True)
+            self.assertEqual(bad.returncode, 1)
+
+    def test_droidspaces_macvlan_is_requested_and_required_in_final_config(self):
+        action = (ROOT / ".github/actions/droidspaces/action.yml").read_text()
+        self.assertIn("CONFIG_MACVLAN=y", action)
+        with tempfile.TemporaryDirectory() as d:
+            config = Path(d) / "config"; out = Path(d) / "out.json"
+            script = str(ROOT / ".github/scripts/kernel_capability_report.py")
+            config.write_text("CONFIG_MACVLAN=y\n")
+            ok = subprocess.run([sys.executable, "-I", script, "--config", str(config), "--feature-set", "DS",
+                                 "--output", str(out), "--require", "container.macvlan"], text=True, capture_output=True)
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            config.write_text("# CONFIG_MACVLAN is not set\n")
+            bad = subprocess.run([sys.executable, "-I", script, "--config", str(config), "--feature-set", "DS",
+                                  "--output", str(out), "--require", "container.macvlan"], text=True, capture_output=True)
             self.assertEqual(bad.returncode, 1)
 
     def test_sdp_900ma_is_vendored_gated_and_only_touches_the_sdp_limit(self):
