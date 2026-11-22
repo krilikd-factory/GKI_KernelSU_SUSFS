@@ -193,6 +193,11 @@ jobs:
           SIG="$(sed -n 's/^signature=//p' <<< "$OUT")"
           printf '\nReport: %s\n' "$RUN_URL" >> body.md
           TITLE="Upstream review queue: updates, OnePlus source, patches to review"
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .has_issues 2>/dev/null || echo false)" != true ]; then
+            echo "::warning::Issues are disabled in this repository, so the owner is not notified. Enable them in Settings -> General -> Features -> Issues."
+            cat body.md >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           gh label create review-queue --repo "$GITHUB_REPOSITORY" --color 0e8a16 \
             --description "Upstream changes waiting for a decision" >/dev/null 2>&1 || true
           NUM="$(gh issue list --repo "$GITHUB_REPOSITORY" --label review-queue --state open --json number --jq '.[0].number // empty')"

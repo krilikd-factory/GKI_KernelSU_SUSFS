@@ -1639,6 +1639,10 @@ jobs:
         run: |
           set -euo pipefail
           TITLE="Held back: newer upstream components not taken by the build"
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .has_issues 2>/dev/null || echo false)" != true ]; then
+            echo "::warning::Issues are disabled in this repository, so the owner is not notified. Enable them in Settings -> General -> Features -> Issues."
+            exit 0
+          fi
           gh label create held-back --repo "$GITHUB_REPOSITORY" --color d93f0b \
             --description "A guard swapped a newer upstream commit for an older one" >/dev/null 2>&1 || true
           NUM="$(gh issue list --repo "$GITHUB_REPOSITORY" --label held-back --state open --json number --jq '.[0].number // empty')"
