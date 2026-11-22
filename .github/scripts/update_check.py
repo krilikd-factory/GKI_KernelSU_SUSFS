@@ -417,8 +417,15 @@ def main() -> int:
     if repo:
         pat = device.get("oneplus_branch_match", "")
         rx = "^" + re.escape(pat).replace(r"\*", ".*") + "$"
-        heads = sorted(r[len("refs/heads/"):] for r in ls_remote(repo, opts=("--heads",)) if re.match(rx, r[len("refs/heads/"):]))
+        all_heads = sorted(r[len("refs/heads/"):] for r in ls_remote(repo, opts=("--heads",)))
+        heads = [h for h in all_heads if re.match(rx, h)]
         md += ["## OnePlus kernel source", ""]
+        # A renamed branch scheme (say one branch for 15 and 15T) must not hide a
+        # drop: list every other branch of the repository too.
+        others = [h for h in all_heads if h not in heads]
+        if others:
+            md += ["Other branches in the OnePlus repository (not matched by `" + pat + "`): "
+                   + ", ".join(f"`{h}`" for h in others), ""]
         if heads:
             br = heads[-1]
             with tempfile.TemporaryDirectory() as d:
@@ -428,10 +435,32 @@ def main() -> int:
                 sub = (re.search(r"^SUBLEVEL = (\d+)", mk, re.M) or [None, "?"])[1]
             stock = device.get("stock_sublevel")
             ready = sub.isdigit() and stock and int(sub) >= int(stock)
+            tip = ls_remote(repo, f"refs/heads/{br}").get(f"refs/heads/{br}", "")
             md += [f"Newest branch `{br}`: kernel 6.12.{sub}; phone stock 6.12.{stock}.",
                    "**Ready: `kernel_source=oneplus` will build.**" if ready else
                    "Not yet: OnePlus has not published source for your firmware; `kernel_source=oneplus` refuses older trees.", ""]
-            summary["oneplus"] = {"branch": br, "sublevel": sub, "ready": bool(ready)}
+            summary["oneplus"] = {"branch": br, "sublevel": sub, "ready": bool(ready), "tip": tip,
+                                  "branches": heads, "other_branches": others}
+        else:
+            md += ["No OnePlus 15 branch matches `" + pat + "` yet.", ""]
+            summary["oneplus"] = {"branch": "", "sublevel": "", "ready": False, "tip": "", "branches": [],
+                                  "other_branches": others}
+        # The device manifests (kernel_manifest, branch oneplus/<soc>) are where
+        # OnePlus announces a full kernel_platform drop; WildKernels'
+        # OnePlus_KernelSU_SUSFS builds from them. List the OnePlus 15 ones so a
+        # new firmware drop is visible even before the common branch moves.
+        soc = device.get("soc", "")
+        if soc:
+            with tempfile.TemporaryDirectory() as d:
+                git("init", "-q", d)
+                if subprocess.run(["git", "-C", d, "fetch", "-q", "--depth=1", "--filter=blob:none",
+                                   "https://github.com/OnePlusOSS/kernel_manifest.git",
+                                   f"refs/heads/oneplus/{soc}"]).returncode == 0:
+                    files = [f for f in git("-C", d, "ls-tree", "--name-only", "FETCH_HEAD", check=False).splitlines()
+                             if re.search(r"oneplus_?15(?![0-9a-z])", f.lower())]
+                    summary["oneplus"]["manifests"] = files
+                    md += ["OnePlus 15 device manifests (OnePlusOSS/kernel_manifest `oneplus/" + soc + "`): "
+                           + (", ".join(f"`{f}`" for f in files) or "none"), ""]
 
     # Upstream workflow repo you forked
     up = "https://github.com/WildKernels/GKI_KernelSU_SUSFS.git"

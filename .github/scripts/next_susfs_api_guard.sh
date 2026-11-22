@@ -42,6 +42,9 @@ if [ "$NG_APPLIES" = 1 ]; then
         echo "Selected \`${NEXT_COMMIT:0:12}\` calls \`${NG_MISSING}\`, which SUSFS \`${NG_SUSFS:0:12}\` does not provide."
         echo "Built with known-good \`${NG_COMMIT:0:12}\` instead."
       } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+      if declare -F held_back >/dev/null; then
+        held_back "KernelSU-Next (dev-susfs)" "$NEXT_COMMIT" "$NG_COMMIT" "SUSFS API: missing ${NG_MISSING:-unknown}"
+      fi
       NEXT_COMMIT="$NG_COMMIT"
       ;;
     unverified|"")

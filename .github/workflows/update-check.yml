@@ -28,6 +28,7 @@ on:
 permissions:
   contents: read
   actions: write
+  issues: write
 
 concurrency:
   group: update-check
@@ -124,3 +125,88 @@ jobs:
         with:
           path: update-summary.json
           key: latest-candidate-${{ steps.check.outputs.fingerprint }}
+
+      # OnePlus published kernel source the phone's firmware can use: start one
+      # kernel_source=oneplus candidate per OnePlus tip, with the same inherited
+      # feature composition, so the switch from AOSP to OnePlus source never
+      # waits for someone to read a report.
+      - name: Was a OnePlus-source candidate already built for this tip?
+        id: opseen
+        if: github.event_name == 'schedule' || inputs.build_latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ready=$(jq -r '.oneplus.ready // false' update-summary.json)" >> "$GITHUB_OUTPUT"
+          echo "tip=$(jq -r '.oneplus.tip // ""' update-summary.json)" >> "$GITHUB_OUTPUT"
+          echo "branch=$(jq -r '.oneplus.branch // ""' update-summary.json)" >> "$GITHUB_OUTPUT"
+
+      - name: OnePlus candidate cache lookup
+        id: opcache
+        if: steps.opseen.outputs.ready == 'true' && steps.opseen.outputs.tip != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: update-summary.json
+          key: oneplus-candidate-${{ steps.opseen.outputs.tip }}
+          lookup-only: true
+
+      - name: Start a OnePlus-source candidate
+        id: opstart
+        if: steps.opseen.outputs.ready == 'true' && steps.opseen.outputs.tip != '' && steps.opcache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_INPUTS: ${{ steps.check.outputs.build_inputs }}
+          OP_BRANCH: ${{ steps.opseen.outputs.branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_args=()
+          while IFS=$'\t' read -r name value; do
+            [ -n "$name" ] && [ -n "$value" ] || continue
+            case "$name" in kernel_source|oneplus_branch|release_type|kernel_build_version|commit_mode) continue ;; esac
+            build_args+=("-f" "$name=$value")
+          done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' <<< "${BUILD_INPUTS:-{\}}")
+          gh workflow run main.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" \
+            -f commit_mode=latest -f release_type=CI -f kernel_source=oneplus \
+            -f kernel_build_version=6.12.x-android16 -f oneplus_branch="$OP_BRANCH" "${build_args[@]}"
+          echo "Started a kernel_source=oneplus candidate from \`$OP_BRANCH\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remember the OnePlus candidate
+        if: steps.opstart.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: update-summary.json
+          key: oneplus-candidate-${{ steps.opseen.outputs.tip }}
+
+      # Everything waiting for a decision - newer components, OnePlus source,
+      # unreviewed kernel_patches - goes into one issue, so GitHub notifies the
+      # owner instead of the list living only in a run summary.
+      - name: Upstream review queue issue
+        if: always() && steps.check.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$(python3 -I .github/scripts/review_queue.py update-summary.json body.md)"
+          STATE="$(sed -n 's/^state=//p' <<< "$OUT")"
+          SIG="$(sed -n 's/^signature=//p' <<< "$OUT")"
+          printf '\nReport: %s\n' "$RUN_URL" >> body.md
+          TITLE="Upstream review queue: updates, OnePlus source, patches to review"
+          gh label create review-queue --repo "$GITHUB_REPOSITORY" --color 0e8a16 \
+            --description "Upstream changes waiting for a decision" >/dev/null 2>&1 || true
+          NUM="$(gh issue list --repo "$GITHUB_REPOSITORY" --label review-queue --state open --json number --jq '.[0].number // empty')"
+          if [ "$STATE" = close ]; then
+            if [ -n "$NUM" ]; then
+              gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "Nothing is waiting any more ($RUN_URL). Closing."
+              gh issue close "$NUM" --repo "$GITHUB_REPOSITORY"
+            fi
+            exit 0
+          fi
+          if [ -z "$NUM" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label review-queue --body-file body.md
+          else
+            OLD="$(gh issue view "$NUM" --repo "$GITHUB_REPOSITORY" --json body --jq .body | sed -n 's/.*review-queue-signature:\([0-9a-f]*\).*/\1/p' | head -n1)"
+            gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
+            [ "$OLD" = "$SIG" ] || gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          fi

@@ -226,6 +226,8 @@ jobs:
       pin_kernel_common: ${{ steps.resolve.outputs.pin_kernel_common }}
       pin_bbg_commit: ${{ steps.resolve.outputs.pin_bbg_commit }}
       known_good_key: ${{ steps.resolve.outputs.known_good_key }}
+      held_back: ${{ steps.resolve.outputs.held_back }}
+      commit_mode: ${{ steps.resolve.outputs.commit_mode }}
       manager_list: ${{ steps.manager.outputs.manager_list }}
     steps:
       - uses: actions/checkout@v7
@@ -1612,6 +1614,66 @@ jobs:
             echo "combined release card skipped (RELEASE_TYPE='${RELEASE_TYPE:-}' - release-only group)"
           fi
           echo "announced ${sent} message(s)"
+
+  held-back-issue:
+    # One GitHub issue lists every component a guard swapped for an older commit
+    # in this run (see resolve_source_and_known_good.sh: held_back). GitHub
+    # notifies the owner of a new issue and of each new comment, so a newer
+    # upstream that the build quietly did not take can no longer go unnoticed.
+    # A run with nothing held back closes the issue. Known-good rollbacks and
+    # audited verified pins are deliberate and are not reported.
+    name: Held-back components
+    if: ${{ !cancelled() && needs.resolve-sources.result == 'success' && needs.resolve-sources.outputs.commit_mode == 'latest' && inputs.release_type != 'Modules' }}
+    needs: resolve-sources
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HELD_BACK: ${{ needs.resolve-sources.outputs.held_back }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the held-back issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE="Held back: newer upstream components not taken by the build"
+          gh label create held-back --repo "$GITHUB_REPOSITORY" --color d93f0b \
+            --description "A guard swapped a newer upstream commit for an older one" >/dev/null 2>&1 || true
+          NUM="$(gh issue list --repo "$GITHUB_REPOSITORY" --label held-back --state open --json number --jq '.[0].number // empty')"
+          if [ -z "${HELD_BACK//[[:space:]]/}" ]; then
+            if [ -n "$NUM" ]; then
+              gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "Run $RUN_URL took every component at its upstream tip. Closing."
+              gh issue close "$NUM" --repo "$GITHUB_REPOSITORY"
+            fi
+            echo "Nothing held back." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "Run: $RUN_URL"
+            echo
+            echo "| Component | Upstream wanted | Built with | Reason |"
+            echo "|---|---|---|---|"
+            printf '%s\n' "$HELD_BACK" | while IFS=$'\t' read -r c w u r; do
+              [ -n "$c" ] || continue
+              echo "| $c | \`${w:0:12}\` | \`${u:0:12}\` | $r |"
+            done
+            echo
+            echo "The build stayed green because a guard chose an older commit. Check the guard against the new upstream; a wrong verdict here is how KernelSU-Next stayed on an old commit unnoticed."
+          } > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+          SIG="$(printf '%s' "$HELD_BACK" | sha256sum | cut -c1-16)"
+          printf '\n<!-- held-back-signature:%s -->\n' "$SIG" >> body.md
+          if [ -z "$NUM" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label held-back --body-file body.md
+          else
+            OLD="$(gh issue view "$NUM" --repo "$GITHUB_REPOSITORY" --json body --jq .body | sed -n 's/.*held-back-signature:\([0-9a-f]*\).*/\1/p' | head -n1)"
+            gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
+            if [ "$OLD" != "$SIG" ]; then
+              gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
+            fi
+          fi
 
   rej:
     if: "github.event_name == 'workflow_dispatch' && inputs.release_type != 'Modules' && !inputs.test_release_notes && always()"

@@ -11,6 +11,20 @@
 # Explicit oneplus is fail-closed. Auto uses OnePlus only after the remote branch,
 # Makefile identity, stock minima, patch-level matrix and Kleaf files all check out;
 # otherwise it selects AOSP and exports a stable, non-secret fallback reason.
+# ---- Held-back components ----
+# A guard that swaps a newer upstream commit for an older one keeps a build
+# green, so the swap alone went unnoticed: KernelSU-Next sat on an old commit
+# for days while its guard misread a new dev-susfs. Every such swap is listed
+# here (component, wanted, used, reason) and published as the held_back output;
+# the held-back-issue job turns it into a GitHub issue that notifies the owner.
+HELD_BACK_FILE="${RUNNER_TEMP:-/tmp}/krilikd_held_back.tsv"
+true > "$HELD_BACK_FILE"
+held_back() { # component wanted used reason
+  printf '%s\t%s\t%s\t%s\n' "$1" "${2:-?}" "${3:-?}" "${4:-unknown}" >> "$HELD_BACK_FILE"
+  { echo "held_back<<HELD_BACK_EOF"; cat "$HELD_BACK_FILE"; echo "HELD_BACK_EOF"; } >> "$GITHUB_OUTPUT"
+}
+echo "commit_mode=${COMMIT_MODE:-}" >> "$GITHUB_OUTPUT"
+
 oem_retry() { local i; for i in 1 2 3 4 5; do "$@" && return 0; sleep $((i*3)); done; return 1; }
 REQUESTED_KERNEL_SOURCE="${IN_KERNEL_SOURCE:-aosp}"
 case "$REQUESTED_KERNEL_SOURCE" in auto|aosp|oneplus) ;; *) echo "::error::invalid kernel_source '$REQUESTED_KERNEL_SOURCE'"; exit 1 ;; esac
@@ -89,6 +103,13 @@ elif [ "$REQUESTED_KERNEL_SOURCE" != aosp ]; then
       EFFECTIVE_OPL="${IN_OS_PATCH_LEVEL:-}"
       OEM_REPO=""; OEM_BRANCH=""; OEM_TIP=""; OEM_SUBLEVEL=""
       echo "::warning::kernel_source=auto fallback to AOSP: $KERNEL_SOURCE_FALLBACK_REASON"
+      # Waiting for OnePlus (no branch yet, or older than the phone's kernel) is
+      # the normal state, not a hold. Anything else means OnePlus published a
+      # usable-looking tree that this workflow failed to take.
+      case "$KERNEL_SOURCE_FALLBACK_REASON" in
+        oneplus_branch_unavailable|oneplus_source_older_than_stock|oneplus_patch_level_older_than_stock|family_not_oneplus15_stock) ;;
+        *) held_back "Kernel source (OnePlus)" "oneplus" "aosp" "$KERNEL_SOURCE_FALLBACK_REASON" ;;
+      esac
     else
       echo "::error::kernel_source=oneplus refused: ${OEM_FAILURE_REASON:-oneplus_preflight_failed}. Use auto for a recorded AOSP fallback." >&2
       exit 1
