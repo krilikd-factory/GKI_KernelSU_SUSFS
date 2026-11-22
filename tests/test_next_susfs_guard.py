@@ -177,6 +177,43 @@ class NextSusfsGuardTest(unittest.TestCase):
         self.assertEqual(out["commit"], self.good)
         self.assertEqual(out["known_good_key"], "android16-6.12-2026-03/KernelSU-Next")
 
+    def test_lkm_coexistence_trampolines_and_slots_are_kernelsu_next_own(self):
+        # pershoot dev-susfs 38b873ca8526 (Nov 2026): hook trampolines in kernel/susfs/*.S and
+        # function-pointer slots such as susfs_reboot_orig are defined by KernelSU-Next itself.
+        lkm = commit(self.ksu, {
+            "kernel/manager/throne_tracker.h": KSU_GOOD,
+            "kernel/susfs/susfs_lookup_stub.S": textwrap.dedent("""
+                /* susfs_not_defined_here: a comment */
+                .globl susfs_uname_stub
+                susfs_uname_stub:
+                    ret
+                SYM_FUNC_START(susfs_vfs_open_stub)
+                    ret
+                SYM_FUNC_END(susfs_vfs_open_stub)
+            """),
+            "kernel/susfs/susfs_data.h": "typedef long (*susfs_syscall_fn_t)(void *);\nextern susfs_syscall_fn_t susfs_reboot_orig;\n",
+            "kernel/susfs/susfs_data.c": "#include <linux/susfs.h>\nsusfs_syscall_fn_t susfs_reboot_orig;\n",
+            "kernel/susfs/susfs_hooks.c": textwrap.dedent("""
+                #include <linux/susfs.h>
+                extern void susfs_uname_stub(void);
+                extern void susfs_vfs_open_stub(void);
+                long hook(void *regs)
+                {
+                    susfs_uname_stub();
+                    susfs_vfs_open_stub();
+                    return susfs_reboot_orig ? susfs_reboot_orig(regs) : -1;
+                }
+            """)}, "lkm coexistence")
+        rc, out, proc = self.run_guard(lkm)
+        self.assertEqual(rc, 0, proc.stderr)
+        self.assertEqual(out["result"], "compatible", proc.stdout)
+        self.assertEqual(out["commit"], lkm)
+        # A genuinely missing SUSFS call next to them is still caught.
+        bad = commit(self.ksu, {"kernel/susfs/extra.c": "#include <linux/susfs.h>\nvoid g(void){ susfs_really_missing(); }\n"},
+                     "missing beside lkm")
+        rc, out, _ = self.run_guard(bad)
+        self.assertEqual(out.get("missing"), "susfs_really_missing")
+
     def test_a_root_without_susfs_integration_is_never_a_fallback(self):
         kg = {"android16-6.12-2026-03/KernelSU-Next": {"root_commit": self.nosusfs, "marked_at": "2026-11-13T09:00:16Z"}}
         rc, out, _ = self.run_guard(self.bad, kg)

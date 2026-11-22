@@ -55,6 +55,17 @@ IDENT = re.compile(r"\bsusfs_[a-z0-9_]+\b")
 NAME_PAREN = re.compile(r"(?<![\w.])(susfs_[a-z0-9_]+)\s*\(")
 FN_POINTER = re.compile(r"\(\s*\*\s*(susfs_[a-z0-9_]+)\s*\)")
 MACRO = re.compile(r"(?m)^\s*#\s*define\s+(susfs_[a-z0-9_]+)\b")
+# A susfs_* object at file scope: a function-pointer slot such as
+# "susfs_syscall_fn_t susfs_reboot_orig;" (or its extern declaration) is called like a
+# function but is KernelSU-Next's own variable, not a SUSFS export.
+VARIABLE = re.compile(r"(?m)^[ \t]*(?:(?:extern|static|const|volatile|__[a-z_]+)\s+)*"
+                      r"[A-Za-z_]\w*(?:\s*\*+\s*|\s+)(susfs_[a-z0-9_]+)\s*(?:=|;|\[)")
+# Symbols an assembly file defines: the LKM-coexistence SUSFS in pershoot's dev-susfs
+# (Nov 2026) implements its hook trampolines (susfs_uname_stub, susfs_vfs_open_stub, ...) in
+# kernel/susfs/*.S. Scanning only .c/.h called them missing and dropped every build back to
+# the known-good root - the manager stayed at 33555 while upstream was at 33646.
+ASM_SYMBOL = re.compile(r"(?m)^\s*(?:\.globl|\.global|SYM_FUNC_START(?:_LOCAL)?\s*\(|SYM_CODE_START\s*\(|ENTRY\s*\()\s*(susfs_[a-z0-9_]+)"
+                        r"|^(susfs_[a-z0-9_]+)\s*:")
 
 
 class FetchError(Exception):
@@ -201,7 +212,7 @@ def active_text(text: str) -> str:
 def scan(text: str) -> tuple[set[str], set[str]]:
     """(called, defined) susfs_* names in one translation unit's active text."""
     called: set[str] = set()
-    defined: set[str] = set(MACRO.findall(text)) | set(FN_POINTER.findall(text))
+    defined: set[str] = set(MACRO.findall(text)) | set(FN_POINTER.findall(text)) | set(VARIABLE.findall(text))
     for m in NAME_PAREN.finditer(text):
         name, start = m.group(1), m.start(1)
         if text[max(0, start - 2):start] == "->":
@@ -233,6 +244,7 @@ def ksu_surface(repo: Path, commit: str, handled=()) -> tuple[set[str], set[str]
     KCONFIG.clear()
     KCONFIG.update(kconfig_defaults(kconfig, WORKFLOW_SET))
     files = [f for f in tree if f.endswith((".c", ".h"))]
+    asm = [f for f in tree if f.endswith((".S", ".s"))]
     calls: set[str] = set()
     defined: set[str] = set()
     sites: dict[str, list[str]] = {}
@@ -247,6 +259,9 @@ def ksu_surface(repo: Path, commit: str, handled=()) -> tuple[set[str], set[str]
         defined |= d
         for sym, n in call_sites(active, set(handled) & c).items():
             sites.setdefault(sym, []).extend([name] * n)
+    for name in asm:
+        for a, b in ASM_SYMBOL.findall(strip_comments(git(repo, "show", f"{commit}:{name}"))):
+            defined.add(a or b)
     return calls, defined, integrated, sites
 
 
