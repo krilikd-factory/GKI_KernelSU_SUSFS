@@ -421,8 +421,8 @@ def main() -> int:
         heads = [h for h in all_heads if re.match(rx, h)]
         md += ["## OnePlus kernel source", ""]
         # A renamed branch scheme (say one branch for 15 and 15T) must not hide a
-        # drop: list every other branch of the repository too.
-        others = [h for h in all_heads if h not in heads]
+        # drop: list every other branch that names the OnePlus 15 too.
+        others = [h for h in all_heads if h not in heads and re.search(r"oneplus_?15(?![0-9a-z])", h.lower())]
         if others:
             md += ["Other branches in the OnePlus repository (not matched by `" + pat + "`): "
                    + ", ".join(f"`{h}`" for h in others), ""]
