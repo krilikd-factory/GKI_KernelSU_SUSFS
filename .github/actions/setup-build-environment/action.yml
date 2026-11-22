@@ -100,11 +100,24 @@ runs:
 
         PROMO_BEGIN = 'ui_print "WildKernels Telegram Channel:"'
         PROMO_END = 'ui_print "Thank you for using Wild Kernels! - TheWildJames"'
+        RULE = "  " + "-" * 34
+        # Upstream compares an unset $magisk_patched with -eq when no_magisk_check=1 and the
+        # boot image has no ramdisk (flash_boot path), which busybox ash prints as
+        # "ash: bad number". A string compare keeps the same branch without the error.
+        CORE_FIXES = (
+            ('if [ "$magisk_patched" -eq 1 ]; then', 'if [ "$magisk_patched" = 1 ]; then'),
+            ('[ "$magisk_patched" -eq 1 ] && magiskboot', '[ "$magisk_patched" = 1 ] && magiskboot'),
+        )
 
 
         def shell_text(value: str) -> str:
             """Escape a value placed inside an installer's double-quoted ui_print string."""
             return value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+
+
+        def plain(value: str) -> str:
+            """Keep a value printable in a property line and a recovery banner."""
+            return re.sub(r"[^A-Za-z0-9._+/ -]", "", value).strip() or "-"
 
 
         def rebrand(root: Path, release: str, feature_set: str, source: str, page_size: str) -> None:
@@ -115,12 +128,13 @@ runs:
                 if marker not in text:
                     raise ValueError(f"AnyKernel3 layout changed; required marker is absent: {marker}")
 
-            text, count = re.subn(r"(?m)^kernel\.string=.*$", "kernel.string=KRILIKD TOP — evidence-first kernel build", text)
+            rel, feat, src, pages = plain(release), plain(feature_set), plain(source), plain(page_size)
+            text, count = re.subn(r"(?m)^kernel\.string=.*$", f"kernel.string=KRILIKD TOP | {rel}", text)
             if count != 1:
                 raise ValueError("AnyKernel3 must contain exactly one kernel.string property")
             text, count = re.subn(
                 r'(?m)^ui_print " " "  -> Wild Kernels Supported: \$ksu_supported"$',
-                'ui_print " " "  -> KRILIKD GKI compatibility check: $ksu_supported"',
+                '$ksu_supported && ui_print " " "  [ OK ] GKI check passed, running kernel: $kernel_version"',
                 text,
             )
             if count != 1:
@@ -129,23 +143,37 @@ runs:
             start = text.index(PROMO_BEGIN)
             end = text.index(PROMO_END, start) + len(PROMO_END)
             replacement = "\n".join([
-                'ui_print " "',
-                f'ui_print "KRILIKD | {shell_text(release)}"',
-                f'ui_print "Mode: TOP | Feature set: {shell_text(feature_set)}"',
-                f'ui_print "Source: {shell_text(source)} | ARM64 pages: {shell_text(page_size)}"',
-                'ui_print "Build verified only: validate boot and device functions after reboot."',
-                'ui_print "Kernel patches and component pins are listed in the BuildInfo artifact."',
-                'ui_print "AnyKernel3 packaging by osm0sis @ xda-developers"',
-                'ui_print " "',
+                f'ui_print "{RULE}"',
+                'ui_print "  [ OK ] KRILIKD TOP is installed"',
+                f'ui_print "         Kernel : {shell_text(rel)}"',
+                f'ui_print "         Build  : {shell_text(feat)}"',
+                f'ui_print "         Source : {shell_text(src)}, {shell_text(pages)} pages"',
+                f'ui_print "{RULE}"',
+                'ui_print "  Next: reboot and check boot, Wi-Fi,"',
+                'ui_print "  calls, camera and root access."',
+                'ui_print "  Build verified only, not boot-tested"',
+                'ui_print "  on every device. Patches and pins:"',
+                'ui_print "  BuildInfo artifact."',
+                f'ui_print "{RULE}"',
             ])
             text = text[:start] + replacement + text[end:]
             script_path.write_text(text, encoding="utf-8")
+
+            core_path = root / "tools" / "ak3-core.sh"
+            if core_path.is_file():
+                core = core_path.read_text(encoding="utf-8")
+                for old, fixed in CORE_FIXES:
+                    core = core.replace(old, fixed)
+                core_path.write_text(core, encoding="utf-8")
+
             banner_path.write_text(
                 "\n"
-                "==================================================\n"
-                "  K R I L I K D   //   T O P\n"
-                "  Evidence-first Android kernel build\n"
-                "==================================================\n\n",
+                f"{RULE}\n"
+                "     K R I L I K D   //   T O P\n"
+                f"{RULE}\n"
+                f"     GKI | {rel}\n"
+                f"     {feat}\n"
+                f"{RULE}\n",
                 encoding="utf-8",
             )
 

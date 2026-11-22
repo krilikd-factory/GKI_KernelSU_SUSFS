@@ -1229,10 +1229,37 @@ ui_print "Thank you for using Wild Kernels! - TheWildJames"
                 self.assertNotIn(forbidden, script + banner)
             self.assertIn(". tools/ak3-core.sh", script)
             self.assertIn("split_boot", script)
-            self.assertIn("KRILIKD GKI compatibility check", script)
+            self.assertIn("[ OK ] GKI check passed", script)
+            self.assertIn("$ksu_supported && ui_print", script)
             self.assertIn("Build verified only", script)
-            self.assertIn("osm0sis", script)
+            self.assertIn("kernel.string=KRILIKD TOP | android16-6.12.69", script)
             self.assertIn("K R I L I K D", banner)
+            self.assertIn("android16-6.12.69", banner)
+            self.assertIn("SUSFS+VPN+USB", banner)
+
+    def test_anykernel_rebrand_silences_unset_magisk_patched_compare(self):
+        """Regression: no_magisk_check=1 on a ramdisk-less boot left $magisk_patched empty and
+        upstream's `-eq 1` printed "ash: bad number" in the install log."""
+        sample = (
+            "kernel.string=Wild Kernels by TheWildJames\n"
+            ". tools/ak3-core.sh\n"
+            'ui_print " " "  -> Wild Kernels Supported: $ksu_supported"\n'
+            'ui_print "WildKernels Telegram Channel:"\n'
+            'ui_print "Thank you for using Wild Kernels! - TheWildJames"\n')
+        core = ('  [ "$magisk_patched" -eq 1 ] && magiskboot cpio ramdisk-new.cpio x;\n'
+                '        if [ "$magisk_patched" -eq 1 ]; then\n          true;\n        fi;\n')
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "tools").mkdir()
+            (root / "anykernel.sh").write_text(sample)
+            (root / "tools" / "ak3-core.sh").write_text(core)
+            rebrand.rebrand(root, "android16-6.12.69", "SUSFS", "aosp", "4k")
+            fixed = (root / "tools" / "ak3-core.sh").read_text()
+            self.assertNotIn("-eq 1", fixed)
+            self.assertEqual(fixed.count('"$magisk_patched" = 1'), 2)
+            run = subprocess.run(["sh", "-c", 'magisk_patched=; if [ "$magisk_patched" = 1 ]; then echo y; fi'],
+                                 text=True, capture_output=True, check=False)
+            self.assertEqual(run.stderr, "")
 
     def test_anykernel_unknown_layout_fails_instead_of_shipping_old_branding(self):
         with tempfile.TemporaryDirectory() as d:
