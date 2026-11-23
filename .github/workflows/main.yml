@@ -2505,8 +2505,8 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # The owner's own copy: when a run produced kernel or module artifacts, the
-  # bot sends them to the owner as a private Telegram message (files up to the
+  # The owner's own copy: send the build result and available kernel or module
+  # artifacts to the owner as private Telegram messages (files up to the
   # Bot API's 50 MB, a link for anything larger). Kernel images, NoMount and
   # VPN Hide modules and manager APKs; build info, pins and review reports are
   # left in the run. Needs the bot token (KRILIKD_TG_TOKEN, or the existing
@@ -2514,12 +2514,13 @@ jobs:
   # with that bot; the owner id comes from KRILIKD_TG_OWNER or, without it, is
   # the creator of the AutoSystemBoost group. Never fails a build.
   notify-owner:
-    name: Send artifacts to the owner
-    if: ${{ !cancelled() && !inputs.test_release_notes && needs.resolve-sources.result == 'success' }}
+    name: Notify the owner about the build
+    if: ${{ !cancelled() && !inputs.test_release_notes }}
     needs:
       - resolve-sources
       - build-nomount-module
       - build-vpnhide-module
+      - list-manager-apks
       - publish-manager-artifacts
       - build-android12-5-10
       - build-android13-5-10
@@ -2529,6 +2530,9 @@ jobs:
       - build-android15-6-6
       - build-android16-6-12
       - build-android17-6-18
+      - notes-preview
+      - release
+      - nightly-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -2538,7 +2542,7 @@ jobs:
       TG_OWNER: ${{ secrets.KRILIKD_TG_OWNER }}
       TG_GROUP: "@AutoSystemBoost"
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      RELEASE_TYPE: ${{ inputs.release_type }}
+      RELEASE_TYPE: ${{ github.event_name == 'schedule' && 'Nightly' || inputs.release_type }}
       COMMIT_MODE: ${{ needs.resolve-sources.outputs.commit_mode }}
       NEEDS_JSON: ${{ toJSON(needs) }}
     steps:
@@ -2584,10 +2588,6 @@ jobs:
             fi
           done
           set -- out/*
-          if [ "$#" -eq 0 ]; then
-            echo "No deliverable artifacts in this run; nothing sent."
-            exit 0
-          fi
 
           telegram() {
             local method="$1" response
@@ -2601,6 +2601,7 @@ jobs:
             Modules) title='Сборка модулей' ;;
             Release) title='Релизная сборка' ;;
             Pre-Release) title='Предрелизная сборка' ;;
+            Nightly) title='Ночная сборка' ;;
             *) title='Сборка CI' ;;
           esac
           case "$COMMIT_MODE" in
@@ -2611,12 +2612,17 @@ jobs:
           esac
           if ! results="$(jq -r '
             to_entries[] | select(.value.result != "skipped")
+            | select(.value.result != "success" or (.key != "list-manager-apks" and .key != "notes-preview"))
             | .key as $job
             | ({
                 "resolve-sources": "Исходники",
                 "build-nomount-module": "NoMount",
                 "build-vpnhide-module": "VPN Hide",
-                "publish-manager-artifacts": "APK менеджеров"
+                "list-manager-apks": "Подготовка APK менеджеров",
+                "notes-preview": "Подготовка заметок к релизу",
+                "publish-manager-artifacts": "APK менеджеров",
+                "release": "Публикация релиза",
+                "nightly-release": "Публикация nightly"
               }[$job] // ($job | sub("^build-android(?<os>[0-9]+)-(?<major>[0-9]+)-(?<minor>[0-9]+)$";
                                      "Ядро Android \(.os) · \(.major).\(.minor)"))) as $label
             | ({"success": "✅", "failure": "❌", "cancelled": "🚫"}[.value.result] // "⚪️") as $icon
@@ -2624,8 +2630,20 @@ jobs:
           ' <<< "$NEEDS_JSON")"; then
             results=''
           fi
-          printf -v summary '<b>📦 KRILIKD · %s</b>\nЗапуск #%s · Файлов: %s' \
-            "$title" "${RUN_URL##*/}" "$#"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' \
+              >/dev/null 2>&1 <<< "$NEEDS_JSON"; then
+            if [ "$#" -gt 0 ]; then
+              status='⚠️ Есть ошибки · часть файлов доступна'
+            else
+              status='❌ Есть ошибки · файлов для отправки нет'
+            fi
+          elif [ "$#" -eq 0 ]; then
+            status='ℹ️ Файлов для отправки нет'
+          else
+            status='✅ Сборка завершена'
+          fi
+          printf -v summary '<b>📦 KRILIKD · %s</b>\n%s\nЗапуск #%s · Файлов: %s' \
+            "$title" "$status" "${RUN_URL##*/}" "$#"
           if [ -n "$mode" ]; then
             summary+=$'\n'"${mode}"
           fi
@@ -2635,7 +2653,7 @@ jobs:
           run_button="$(jq -cn --arg url "$RUN_URL" \
             '{inline_keyboard: [[{text: "Открыть сборку на GitHub", url: $url}]]}')"
           artifact_button="$(jq -cn --arg url "${RUN_URL}#artifacts" \
-            '{inline_keyboard: [[{text: "Скачать из GitHub Actions", url: $url}]]}')"
+            '{inline_keyboard: [[{text: "Открыть артефакты на GitHub", url: $url}]]}')"
           telegram sendMessage --form-string text="$summary" --form-string reply_markup="$run_button" \
             || echo '::warning::Telegram rejected the build summary.'
 
