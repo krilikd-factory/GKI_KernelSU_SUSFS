@@ -1645,11 +1645,22 @@ jobs:
           fi
           gh label create held-back --repo "$GITHUB_REPOSITORY" --color d93f0b \
             --description "A guard swapped a newer upstream commit for an older one" >/dev/null 2>&1 || true
-          NUM="$(gh issue list --repo "$GITHUB_REPOSITORY" --label held-back --state open --json number --jq '.[0].number // empty')"
+          ghr() {
+            local i
+            for i in 1 2 3 4; do
+              if "$@"; then return 0; fi
+              sleep $((i * 15))
+            done
+            echo "::warning::GitHub API kept failing for: $*. The report is in this run's summary; the next run retries."
+            cat body.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+            exit 0
+          }
+          ghr gh issue list --repo "$GITHUB_REPOSITORY" --label held-back --state open --json number --jq '.[0].number // empty' > issue_num.txt
+          NUM="$(cat issue_num.txt)"
           if [ -z "${HELD_BACK//[[:space:]]/}" ]; then
             if [ -n "$NUM" ]; then
-              gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "Run $RUN_URL took every component at its upstream tip. Closing."
-              gh issue close "$NUM" --repo "$GITHUB_REPOSITORY"
+              ghr gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "Run $RUN_URL took every component at its upstream tip. Closing."
+              ghr gh issue close "$NUM" --repo "$GITHUB_REPOSITORY"
             fi
             echo "Nothing held back." >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -1670,12 +1681,12 @@ jobs:
           SIG="$(printf '%s' "$HELD_BACK" | sha256sum | cut -c1-16)"
           printf '\n<!-- held-back-signature:%s -->\n' "$SIG" >> body.md
           if [ -z "$NUM" ]; then
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label held-back --body-file body.md
+            ghr gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label held-back --body-file body.md
           else
-            OLD="$(gh issue view "$NUM" --repo "$GITHUB_REPOSITORY" --json body --jq .body | sed -n 's/.*held-back-signature:\([0-9a-f]*\).*/\1/p' | head -n1)"
-            gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
+            OLD="$(ghr gh issue view "$NUM" --repo "$GITHUB_REPOSITORY" --json body --jq .body | sed -n 's/.*held-back-signature:\([0-9a-f]*\).*/\1/p' | head -n1)"
+            ghr gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
             if [ "$OLD" != "$SIG" ]; then
-              gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
+              ghr gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body-file body.md
             fi
           fi
 
