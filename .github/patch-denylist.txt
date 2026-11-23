@@ -10,3 +10,4 @@ force_tcp_nodelay                    # rewrites every TCP setsockopt into TCP_NO
 IPv6_NAT_FIX                         # only hides IP6_NF_NAT from /proc/config.gz
 fake_config                          # spoofs /proc/config.gz; not a kernel improvement
 hide_adb_jdwp_sockets                # blocks every app from @jdwp-control and /dev/socket/adbd: hides USB debugging, but breaks debugging apps from Android Studio
+increase_ext4_default_commit_age     # jbd2 commit age 5 s -> 30 s: on this phone /data is f2fs, ext4 is /metadata and other small partitions, so no write saving to speak of, only a 6x longer window to lose metadata (encryption checkpoints) on a crash or panic
