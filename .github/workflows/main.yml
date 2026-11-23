@@ -2583,28 +2583,91 @@ jobs:
               (cd "$d" && zip -qr9 "$GITHUB_WORKSPACE/out/$n.zip" .)
             fi
           done
-          results="$(jq -r 'to_entries[] | select(.value.result != "skipped") | "\(.key): \(.value.result)"' <<< "$NEEDS_JSON")"
-          failed="$(jq -r '[to_entries[] | select(.value.result == "failure")] | length' <<< "$NEEDS_JSON")"
           set -- out/*
           if [ "$#" -eq 0 ]; then
             echo "No deliverable artifacts in this run; nothing sent."
             exit 0
           fi
-          head="KRILIKD: новая сборка (${RELEASE_TYPE:-CI}, ${COMMIT_MODE:-?})"
-          [ "$failed" != 0 ] && head="$head · с ошибками: $failed"
-          curl -s --retry 3 -o /dev/null --form-string chat_id="$owner" \
-            --form-string text="$(printf '%s\n%s\n\n%s' "$head" "$RUN_URL" "$results")" \
-            --form-string disable_web_page_preview=true "$api/sendMessage"
-          for f in out/*; do
+
+          telegram() {
+            local method="$1" response
+            shift
+            response="$(curl -s --retry 3 --form-string chat_id="$owner" \
+              --form-string parse_mode=HTML "$@" "$api/$method")" || return 1
+            jq -e '.ok == true' >/dev/null 2>&1 <<< "$response"
+          }
+
+          case "${RELEASE_TYPE:-CI}" in
+            Modules) title='Сборка модулей' ;;
+            Release) title='Релизная сборка' ;;
+            Pre-Release) title='Предрелизная сборка' ;;
+            *) title='Сборка CI' ;;
+          esac
+          case "$COMMIT_MODE" in
+            latest) mode='Свежие исходники' ;;
+            known-good) mode='Последняя рабочая конфигурация' ;;
+            verified) mode='Проверенные ревизии' ;;
+            *) mode='' ;;
+          esac
+          if ! results="$(jq -r '
+            to_entries[] | select(.value.result != "skipped")
+            | .key as $job
+            | ({
+                "resolve-sources": "Исходники",
+                "build-nomount-module": "NoMount",
+                "build-vpnhide-module": "VPN Hide",
+                "publish-manager-artifacts": "APK менеджеров"
+              }[$job] // ($job | sub("^build-android(?<os>[0-9]+)-(?<major>[0-9]+)-(?<minor>[0-9]+)$";
+                                     "Ядро Android \(.os) · \(.major).\(.minor)"))) as $label
+            | ({"success": "✅", "failure": "❌", "cancelled": "🚫"}[.value.result] // "⚪️") as $icon
+            | "\($icon) \($label | @html)"
+          ' <<< "$NEEDS_JSON")"; then
+            results=''
+          fi
+          printf -v summary '<b>📦 KRILIKD · %s</b>\nЗапуск #%s · Файлов: %s' \
+            "$title" "${RUN_URL##*/}" "$#"
+          if [ -n "$mode" ]; then
+            summary+=$'\n'"${mode}"
+          fi
+          if [ -n "$results" ]; then
+            summary+=$'\n\n'"$results"
+          fi
+          run_button="$(jq -cn --arg url "$RUN_URL" \
+            '{inline_keyboard: [[{text: "Открыть сборку на GitHub", url: $url}]]}')"
+          artifact_button="$(jq -cn --arg url "${RUN_URL}#artifacts" \
+            '{inline_keyboard: [[{text: "Скачать из GitHub Actions", url: $url}]]}')"
+          telegram sendMessage --form-string text="$summary" --form-string reply_markup="$run_button" \
+            || echo '::warning::Telegram rejected the build summary.'
+
+          sent=0
+          linked=0
+          for f in "$@"; do
+            name="${f##*/}"
+            case "$name" in
+              *AnyKernel3*) caption='📦 Ядро · AnyKernel3' ;;
+              NoMount*) caption='🧩 Модуль · NoMount' ;;
+              VPNHide*) caption='🧩 Модуль · VPN Hide' ;;
+              *spoofed*.apk) caption='📱 Менеджер · APK (spoofed)' ;;
+              *.apk) caption='📱 Менеджер · APK' ;;
+              *) caption='📎 Файл сборки' ;;
+            esac
             sz="$(stat -c %s "$f")"
+            reason='Файл превышает лимит загрузки Telegram.'
             if [ "$sz" -le 49000000 ]; then
-              r="$(curl -s --retry 3 --form-string chat_id="$owner" -F document=@"$f" \
-                --form-string caption="$(basename "$f")" "$api/sendDocument")"
-              jq -e .ok >/dev/null 2>&1 <<< "$r" || echo "::warning::Not sent: $(basename "$f"): $(jq -r .description <<< "$r" 2>/dev/null)"
+              if telegram sendDocument --form "document=@\"$f\"" \
+                  --form-string caption="<b>$caption</b>"; then
+                sent=$((sent + 1))
+                continue
+              fi
+              reason='Telegram не принял вложение.'
+              echo "::warning::Telegram rejected attachment: $name"
+            fi
+            name_html="$(jq -rn --arg name "$name" '$name | @html')"
+            printf -v fallback '<b>%s</b>\n<code>%s</code>\n%s' "$caption" "$name_html" "$reason"
+            if telegram sendMessage --form-string text="$fallback" --form-string reply_markup="$artifact_button"; then
+              linked=$((linked + 1))
             else
-              curl -s --retry 3 -o /dev/null --form-string chat_id="$owner" \
-                --form-string text="$(basename "$f") ($((sz / 1048576)) MB) больше лимита бота, скачайте из запуска: $RUN_URL" \
-                "$api/sendMessage"
+              echo "::warning::Telegram rejected the download link for: $name"
             fi
           done
-          echo "Sent $# file(s) to the owner."
+          echo "Telegram delivery: $sent attachment(s), $linked download link(s), $(( $# - sent - linked )) undelivered."
