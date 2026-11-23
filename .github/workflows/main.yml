@@ -2534,10 +2534,15 @@ jobs:
       - release
       - nightly-release
     runs-on: ubuntu-latest
+    concurrency:
+      group: telegram-owner-delivery-${{ github.ref }}
+      queue: max
     permissions:
       contents: read
       actions: read
     env:
+      GH_TOKEN: ${{ github.token }}
+      REF_NAME: ${{ github.ref_name }}
       TG_TOKEN: ${{ secrets.KRILIKD_TG_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       TG_OWNER: ${{ secrets.KRILIKD_TG_OWNER }}
       TG_GROUP: "@AutoSystemBoost"
@@ -2552,6 +2557,35 @@ jobs:
         continue-on-error: true
         with:
           path: art
+
+      - name: Restore last delivered artifact fingerprints
+        if: ${{ env.TG_TOKEN != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?name=telegram-owner-delivery&per_page=100" |
+            jq -rs --arg branch "$REF_NAME" '
+              [.[].artifacts[] | select(.expired == false and
+                .workflow_run.head_branch == $branch)]
+              | max_by(.id) | .id // empty
+            ' > previous-delivery-id
+          previous="$(cat previous-delivery-id)"
+          if [[ -n "$previous" ]]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$previous/zip" > previous-delivery.zip
+            unzip -p previous-delivery.zip delivery.json > previous-delivery.json
+            jq -e 'type == "object"' previous-delivery.json > /dev/null
+          fi
+          touch delivery-ready
+
+      - name: Resolve direct artifact links
+        if: ${{ env.TG_TOKEN != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" |
+            jq -s '[.[].artifacts[] | {key: .name, value: .id}] | from_entries' > artifact-ids.json
 
       - name: Send to the owner
         if: ${{ env.TG_TOKEN != '' }}
@@ -2570,6 +2604,14 @@ jobs:
             exit 0
           fi
           mkdir -p out
+          if ! jq -e 'type == "object"' previous-delivery.json >/dev/null 2>&1; then
+            printf '{}\n' > previous-delivery.json
+          fi
+          if [ -f delivery-ready ]; then
+            cp previous-delivery.json delivery.json
+          fi
+          declare -A artifact_names fingerprints previous_fingerprints
+          unchanged=0
           shopt -s nullglob
           for d in art/*/; do
             n="$(basename "$d")"
@@ -2580,12 +2622,27 @@ jobs:
               *AnyKernel3*|NoMount*|VPNHide*|*.apk) ;;
               *) continue ;;
             esac
+            # Hash paths, modes and contents before ZIP creation so ZIP metadata
+            # from a fresh runner cannot create a false update.
+            digest="$(cd "$d" && tar --sort=name --format=gnu --mtime=@0 \
+              --owner=0 --group=0 --numeric-owner -cf - . | sha256sum)" || continue
+            digest="${digest%% *}"
+            previous="$(jq -r --arg name "$n" '.[$name] // empty' previous-delivery.json)"
+            if [ "$digest" = "$previous" ]; then
+              unchanged=$((unchanged + 1))
+              continue
+            fi
             files=("$d"*)
             if [ "${#files[@]}" -eq 1 ] && [ -f "${files[0]}" ]; then
-              cp "${files[0]}" "out/$(basename "${files[0]}")"
+              output="out/$(basename "${files[0]}")"
+              cp "${files[0]}" "$output" || continue
             else
-              (cd "$d" && zip -qr9 "$GITHUB_WORKSPACE/out/$n.zip" .)
+              output="out/$n.zip"
+              (cd "$d" && zip -qr9 "$GITHUB_WORKSPACE/$output" .) || continue
             fi
+            artifact_names["$output"]="$n"
+            fingerprints["$output"]="$digest"
+            previous_fingerprints["$output"]="$previous"
           done
           set -- out/*
 
@@ -2638,12 +2695,35 @@ jobs:
               status='❌ Есть ошибки · файлов для отправки нет'
             fi
           elif [ "$#" -eq 0 ]; then
-            status='ℹ️ Файлов для отправки нет'
+            if [ "$unchanged" -gt 0 ]; then
+              status='ℹ️ Уже отправленные файлы совпадают'
+            else
+              status='ℹ️ Файлов для отправки нет'
+            fi
           else
             status='✅ Сборка завершена'
           fi
           printf -v summary '<b>📦 KRILIKD · %s</b>\n%s\nЗапуск #%s · Файлов: %s' \
-            "$title" "$status" "${RUN_URL##*/}" "$#"
+            "$title" "$status" "${GITHUB_RUN_NUMBER:-${RUN_URL##*/}}" "$#"
+          if [ "$unchanged" -gt 0 ]; then
+            summary+=$'\n'"Совпало с ранее отправленными: $unchanged"
+          fi
+          for f in "$@"; do
+            [ -n "${fingerprints[$f]:-}" ] || continue
+            name_html="$(jq -rn --arg name "${f##*/}" '$name | @html')"
+            previous="${previous_fingerprints[$f]}"
+            if [ -n "$previous" ]; then
+              change="${previous:0:12} → ${fingerprints[$f]:0:12}"
+            else
+              change="${fingerprints[$f]:0:12} · впервые в списке отправок"
+            fi
+            line=$'\n'"• <code>$name_html</code> · SHA-256 $change"
+            if (( ${#summary} + ${#line} > 2900 )); then
+              summary+=$'\n'"+ остальные файлы в артефактах запуска"
+              break
+            fi
+            summary+="$line"
+          done
           if [ -n "$mode" ]; then
             summary+=$'\n'"${mode}"
           fi
@@ -2657,10 +2737,23 @@ jobs:
           telegram sendMessage --form-string text="$summary" --form-string reply_markup="$run_button" \
             || echo '::warning::Telegram rejected the build summary.'
 
+          record_delivery() {
+            [ -f delivery-ready ] || return 0
+            jq --arg name "$1" --arg digest "$2" '.[$name] = $digest' delivery.json \
+              > delivery.tmp && mv delivery.tmp delivery.json
+          }
           sent=0
           linked=0
           for f in "$@"; do
+            [ -n "${fingerprints[$f]:-}" ] || continue
             name="${f##*/}"
+            artifact_name="${artifact_names[$f]}"
+            artifact_id="$(jq -r --arg name "$artifact_name" '.[$name] // empty' artifact-ids.json 2>/dev/null)"
+            file_button="$artifact_button"
+            if [[ "$artifact_id" =~ ^[0-9]+$ ]]; then
+              file_button="$(jq -cn --arg url "$RUN_URL/artifacts/$artifact_id" \
+                '{inline_keyboard: [[{text: "Скачать артефакт", url: $url}]]}')"
+            fi
             case "$name" in
               *AnyKernel3*) caption='📦 Ядро · AnyKernel3' ;;
               NoMount*) caption='🧩 Модуль · NoMount' ;;
@@ -2673,7 +2766,8 @@ jobs:
             reason='Файл превышает лимит загрузки Telegram.'
             if [ "$sz" -le 49000000 ]; then
               if telegram sendDocument --form "document=@\"$f\"" \
-                  --form-string caption="<b>$caption</b>"; then
+                  --form-string caption="<b>$caption</b>" --form-string reply_markup="$file_button"; then
+                record_delivery "$artifact_name" "${fingerprints[$f]}"
                 sent=$((sent + 1))
                 continue
               fi
@@ -2682,10 +2776,21 @@ jobs:
             fi
             name_html="$(jq -rn --arg name "$name" '$name | @html')"
             printf -v fallback '<b>%s</b>\n<code>%s</code>\n%s' "$caption" "$name_html" "$reason"
-            if telegram sendMessage --form-string text="$fallback" --form-string reply_markup="$artifact_button"; then
+            if telegram sendMessage --form-string text="$fallback" --form-string reply_markup="$file_button"; then
+              record_delivery "$artifact_name" "${fingerprints[$f]}"
               linked=$((linked + 1))
             else
               echo "::warning::Telegram rejected the download link for: $name"
             fi
           done
           echo "Telegram delivery: $sent attachment(s), $linked download link(s), $(( $# - sent - linked )) undelivered."
+
+      - name: Record successfully delivered files
+        if: ${{ env.TG_TOKEN != '' && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: telegram-owner-delivery
+          path: delivery.json
+          if-no-files-found: ignore
+          overwrite: true
