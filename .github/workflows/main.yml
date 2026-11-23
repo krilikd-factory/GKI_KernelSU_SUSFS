@@ -2504,3 +2504,107 @@ jobs:
               echo "- failed uploads: $failed (see job log)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The owner's own copy: when a run produced kernel or module artifacts, the
+  # bot sends them to the owner as a private Telegram message (files up to the
+  # Bot API's 50 MB, a link for anything larger). Kernel images, NoMount and
+  # VPN Hide modules and manager APKs; build info, pins and review reports are
+  # left in the run. Needs the bot token (KRILIKD_TG_TOKEN, or the existing
+  # TELEGRAM_BOT_TOKEN) and the owner having pressed Start in a private chat
+  # with that bot; the owner id comes from KRILIKD_TG_OWNER or, without it, is
+  # the creator of the AutoSystemBoost group. Never fails a build.
+  notify-owner:
+    name: Send artifacts to the owner
+    if: ${{ !cancelled() && !inputs.test_release_notes && needs.resolve-sources.result == 'success' }}
+    needs:
+      - resolve-sources
+      - build-nomount-module
+      - build-vpnhide-module
+      - publish-manager-artifacts
+      - build-android12-5-10
+      - build-android13-5-10
+      - build-android13-5-15
+      - build-android14-5-15
+      - build-android14-6-1
+      - build-android15-6-6
+      - build-android16-6-12
+      - build-android17-6-18
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      TG_TOKEN: ${{ secrets.KRILIKD_TG_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      TG_OWNER: ${{ secrets.KRILIKD_TG_OWNER }}
+      TG_GROUP: "@AutoSystemBoost"
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RELEASE_TYPE: ${{ inputs.release_type }}
+      COMMIT_MODE: ${{ needs.resolve-sources.outputs.commit_mode }}
+      NEEDS_JSON: ${{ toJSON(needs) }}
+    steps:
+      - name: Download artifacts
+        if: ${{ env.TG_TOKEN != '' }}
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          path: art
+
+      - name: Send to the owner
+        if: ${{ env.TG_TOKEN != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          api="https://api.telegram.org/bot${TG_TOKEN}"
+          owner="$TG_OWNER"
+          if [ -z "$owner" ]; then
+            owner="$(curl -s --retry 3 --form-string chat_id="$TG_GROUP" "$api/getChatAdministrators" \
+              | jq -r '.result[]? | select(.status == "creator") | .user.id' | head -n 1)"
+          fi
+          if [ -z "$owner" ] || [ "$owner" = null ]; then
+            echo "::warning::No owner chat id (set KRILIKD_TG_OWNER, or make the bot an admin of $TG_GROUP)."
+            exit 0
+          fi
+          mkdir -p out
+          shopt -s nullglob
+          for d in art/*/; do
+            n="$(basename "$d")"
+            case "$n" in
+              *BuildInfo*|*Pins*|*review*|*stock-configs*|release-notes*|manager-apks|*rej*|update-report) continue ;;
+            esac
+            case "$n" in
+              *AnyKernel3*|NoMount*|VPNHide*|*.apk) ;;
+              *) continue ;;
+            esac
+            files=("$d"*)
+            if [ "${#files[@]}" -eq 1 ] && [ -f "${files[0]}" ]; then
+              cp "${files[0]}" "out/$(basename "${files[0]}")"
+            else
+              (cd "$d" && zip -qr9 "$GITHUB_WORKSPACE/out/$n.zip" .)
+            fi
+          done
+          results="$(jq -r 'to_entries[] | select(.value.result != "skipped") | "\(.key): \(.value.result)"' <<< "$NEEDS_JSON")"
+          failed="$(jq -r '[to_entries[] | select(.value.result == "failure")] | length' <<< "$NEEDS_JSON")"
+          set -- out/*
+          if [ "$#" -eq 0 ]; then
+            echo "No deliverable artifacts in this run; nothing sent."
+            exit 0
+          fi
+          head="KRILIKD: новая сборка (${RELEASE_TYPE:-CI}, ${COMMIT_MODE:-?})"
+          [ "$failed" != 0 ] && head="$head · с ошибками: $failed"
+          curl -s --retry 3 -o /dev/null --form-string chat_id="$owner" \
+            --form-string text="$(printf '%s\n%s\n\n%s' "$head" "$RUN_URL" "$results")" \
+            --form-string disable_web_page_preview=true "$api/sendMessage"
+          for f in out/*; do
+            sz="$(stat -c %s "$f")"
+            if [ "$sz" -le 49000000 ]; then
+              r="$(curl -s --retry 3 --form-string chat_id="$owner" -F document=@"$f" \
+                --form-string caption="$(basename "$f")" "$api/sendDocument")"
+              jq -e .ok >/dev/null 2>&1 <<< "$r" || echo "::warning::Not sent: $(basename "$f"): $(jq -r .description <<< "$r" 2>/dev/null)"
+            else
+              curl -s --retry 3 -o /dev/null --form-string chat_id="$owner" \
+                --form-string text="$(basename "$f") ($((sz / 1048576)) MB) больше лимита бота, скачайте из запуска: $RUN_URL" \
+                "$api/sendMessage"
+            fi
+          done
+          echo "Sent $# file(s) to the owner."

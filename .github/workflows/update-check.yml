@@ -5,7 +5,7 @@ name: KRILIKD Update Check
 # new commits: KernelSU-Next, SUSFS, NoMount, Baseband-guard, DroidSpaces,
 # kernel_patches, AnyKernel3, USB-Arsenal, VPN Hide releases, the kernel
 # source itself, plus OnePlus source availability and upstream workflow news.
-# The daily scheduled run starts a commit_mode=latest candidate by itself when
+# The hourly scheduled run starts a commit_mode=latest candidate by itself when
 # something is newer (once per set of updates); a manual run does so only with
 # build_latest ticked. Proven companion-only diffs dispatch release_type=Modules;
 # kernel, mixed, unknown or unreachable evidence still requires a full build.
@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "17 4 * * *"
+    - cron: "23 * * * *"
 
 permissions:
   contents: read
