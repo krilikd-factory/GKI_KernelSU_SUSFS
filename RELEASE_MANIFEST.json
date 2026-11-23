@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "release": "KRILIKD-2026-11-23-telegram-build-results-source",
-  "base": "krilikd-factory/KRILIKD-kernel@8c36b6ae7e32d4e60bd16e842702df67b301b9e5",
+  "release": "KRILIKD-2026-11-23-telegram-dedup-source",
+  "base": "krilikd-factory/KRILIKD-kernel@7a0a1145d913942b1ed9e2a80f8775d04cb7d27a",
   "hash_algorithm": "SHA-256",
   "manifest_coverage": "Every regular file except RELEASE_MANIFEST.json itself; no symlinks or other non-regular entries are present.",
   "file_count_excluding_manifest": 185,
@@ -941,9 +941,9 @@
     },
     {
       "path": ".github/workflows/main.yml",
-      "bytes": 138791,
+      "bytes": 143767,
       "mode": "0644",
-      "sha256": "92e5f8e4c5fe3782ef7a63fe7ba2652d867d02fce6990ffe73de17145c4a7e9f"
+      "sha256": "5b2705c7add38c39a496242dd7f606d857a8ffcd8eeca5f911abd361ee27c6d9"
     },
     {
       "path": ".github/workflows/managers.yml",
@@ -1007,9 +1007,9 @@
     },
     {
       "path": "docs/KRILIKD.md",
-      "bytes": 40731,
+      "bytes": 42057,
       "mode": "0644",
-      "sha256": "ebffff2bb96db2ca13089e8a52ab6983cf16ee3d0456524cb1a4442dae66b5e9"
+      "sha256": "0edd4b54360fd523a31aec1f1ce1a1a2bfd0592a0706c0b0df7a88c3ba9e2117"
     },
     {
       "path": "docs/KRILIKD_IMPLEMENTATION_STATUS.md",
