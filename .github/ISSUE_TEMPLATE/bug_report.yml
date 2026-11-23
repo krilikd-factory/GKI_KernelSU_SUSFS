@@ -19,7 +19,7 @@ body:
     attributes:
       label: Build run URL
       description: The Actions run that produced the kernel you flashed.
-      placeholder: "https://github.com/krilikd-factory/GKI_KernelSU_SUSFS/actions/runs/..."
+      placeholder: "https://github.com/krilikd-factory/KRILIKD-kernel/actions/runs/..."
     validations:
       required: true
   - type: input

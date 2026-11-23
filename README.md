@@ -51,7 +51,7 @@ KRILIKD is an independent fork built on the Wild Kernels build framework and its
 | Feature set | SUSFS, NoMount, BBG, NET, DroidSpaces, NTSync, Ptrace, Unicode, BPF, Perf, BORE, ADIOS, VPN Hide, USB Arsenal, Re-Kernel, AWL, SDP900 |
 | KernelSU-Next | `v3.4.2`, version code `33555` |
 | Source | AOSP GKI, LTO off |
-| Status | `boot_attested_only`, 21 Nov 2026 ([run 44927495170](https://github.com/krilikd-factory/GKI_KernelSU_SUSFS/actions/runs/44927495170)) |
+| Status | `boot_attested_only`, 21 Nov 2026 ([run 44927495170](https://github.com/krilikd-factory/KRILIKD-kernel/actions/runs/44927495170)) |
 
 “Boot attested” means the phone booted with this image. Vendor modules, display, network, camera, audio, storage, thermal behavior and ASB were not separately attested. The live record is [`.github/known-good.json`](.github/known-good.json).
 
