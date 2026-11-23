@@ -22,6 +22,10 @@ on:
         description: "If anything is newer, start Build Kernels with commit_mode=latest"
         type: boolean
         default: false
+      as_schedule:
+        description: "Behave as the scheduled run (an external timer: build once per update set)"
+        type: boolean
+        default: false
   schedule:
     - cron: "23 * * * *"
 
@@ -84,7 +88,7 @@ jobs:
         id: start
         if: >-
           steps.check.outputs.updates != '0' &&
-          (inputs.build_latest || (github.event_name == 'schedule' && steps.seen.outputs.cache-hit != 'true'))
+          (inputs.build_latest || ((github.event_name == 'schedule' || inputs.as_schedule) && steps.seen.outputs.cache-hit != 'true'))
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_INPUTS: ${{ steps.check.outputs.build_inputs }}
@@ -132,7 +136,7 @@ jobs:
       # waits for someone to read a report.
       - name: Was a OnePlus-source candidate already built for this tip?
         id: opseen
-        if: github.event_name == 'schedule' || inputs.build_latest
+        if: github.event_name == 'schedule' || inputs.as_schedule || inputs.build_latest
         shell: bash
         run: |
           set -euo pipefail
