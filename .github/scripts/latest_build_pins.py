@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Find matching pins from the latest successful complete kernel workflow."""
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,10 @@ def main():
                 except (ValueError, KeyError, TypeError):
                     continue
                 if not isinstance(pins, dict) or pins.get("feature_set") != features:
+                    continue
+                required = [field for field, value in known[key].items()
+                            if field.endswith("_commit") and re.fullmatch(r"[0-9a-f]{40}", str(value))]
+                if any(not re.fullmatch(r"[0-9a-f]{40}", str(pins.get(field, ""))) for field in required):
                     continue
                 Path("latest-built-pins.json").write_text(json.dumps({key: pins}))
                 print(f"Matched successful build {run_id}")

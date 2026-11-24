@@ -21,7 +21,7 @@ class LatestPinsTest(unittest.TestCase):
             os.chdir(directory)
             try:
                 Path(".github").mkdir()
-                Path(".github/known-good.json").write_text("{}")
+                Path(".github/known-good.json").write_text(json.dumps({"key": {"bbg_commit": "a" * 40}}))
                 runs = [
                     {"databaseId": 3, "status": "completed", "conclusion": "failure"},
                     {"databaseId": 2, "status": "completed", "conclusion": "success"},
