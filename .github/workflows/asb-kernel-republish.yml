@@ -1,0 +1,37 @@
+name: KRILIKD · Publish existing ASB builds
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: 'Completed ASB group build run ID'
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          case "$SOURCE_RUN" in ''|*[!0-9]*) exit 1;; esac
+          gh run view "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --json workflowName,status --jq 'select(.workflowName == "KRILIKD · ASB group build" and .status == "completed")' | grep -q .
+      - uses: actions/download-artifact@v7
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run }}
+          pattern: asb-build-reference-*
+          path: build-references
+      - name: Publish compiled files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.KRILIKD_TG_TOKEN }}
+          TG_CHAT: '@AutoSystemBoost'
+          TG_TOPIC: ${{ secrets.ASB_KERNEL_TOPIC_ID }}
+        run: python3 -I .github/scripts/asb_group_build.py publish-group

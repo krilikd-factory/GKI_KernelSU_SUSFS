@@ -195,22 +195,43 @@ def publish_group():
                 "🔑 KernelSU Next · 4K\n"
                 "Проверьте совместимость с прошивкой и устройством.\n"
                 f'🔗 <a href="https://github.com/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}">Сборка на GitHub</a>')
-        media = []
-        cmd = ["curl", "--silent", "--show-error", "--fail-with-body", "--max-time", "300",
-               "--form-string", "chat_id=" + os.environ["TG_CHAT"],
-               "--form-string", "message_thread_id=" + topic]
-        for index, path in enumerate(attachments):
-            item = {"type": "document", "media": "attach://file" + str(index)}
-            if index == 0:
-                item.update(caption=text, parse_mode="HTML")
-            media.append(item)
-            cmd += ["--form", f"file{index}=@{path}"]
-        cmd += ["--form-string", "media=" + json.dumps(media, ensure_ascii=False),
-                "https://api.telegram.org/bot" + token + "/sendMediaGroup"]
-        result = json.loads(run(*cmd))
-        if not result.get("ok") or len(result.get("result", [])) != len(attachments):
-            raise RuntimeError("Telegram did not confirm all files")
-        print("Published one media group with", len(attachments), "files")
+        # Telegram limits the entire multipart request, not only each document. Split at
+        # 40 MB to leave room for encoding; every file is still sent exactly once.
+        groups, current, size = [], [], 0
+        for path in attachments:
+            n = path.stat().st_size
+            if current and size + n > 40_000_000:
+                groups.append(current)
+                current, size = [], 0
+            current.append(path)
+            size += n
+        if current:
+            groups.append(current)
+        for group_index, group in enumerate(groups):
+            cmd = ["curl", "--silent", "--show-error", "--fail-with-body", "--max-time", "300",
+                   "--form-string", "chat_id=" + os.environ["TG_CHAT"],
+                   "--form-string", "message_thread_id=" + topic]
+            caption = text if group_index == 0 else "📦 Остальные файлы сборки KRILIKD"
+            if len(group) == 1:
+                cmd += ["--form", f"document=@{group[0]}", "--form-string", "caption=" + caption,
+                        "--form-string", "parse_mode=HTML",
+                        "https://api.telegram.org/bot" + token + "/sendDocument"]
+            else:
+                media = []
+                for index, path in enumerate(group):
+                    item = {"type": "document", "media": "attach://file" + str(index)}
+                    if index == 0:
+                        item.update(caption=caption, parse_mode="HTML")
+                    media.append(item)
+                    cmd += ["--form", f"file{index}=@{path}"]
+                cmd += ["--form-string", "media=" + json.dumps(media, ensure_ascii=False),
+                        "https://api.telegram.org/bot" + token + "/sendMediaGroup"]
+            result = json.loads(run(*cmd))
+            delivered = result.get("result")
+            if not result.get("ok") or (len(group) > 1 and (not isinstance(delivered, list) or len(delivered) != len(group))):
+                raise RuntimeError("Telegram did not confirm all files in group " + str(group_index + 1))
+            print("Published group", group_index + 1, "of", len(groups), "with", len(group), "files", flush=True)
+
 
 
 if __name__ == "__main__":
