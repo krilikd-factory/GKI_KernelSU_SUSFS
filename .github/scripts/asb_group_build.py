@@ -17,7 +17,20 @@ TARGETS = {
 
 
 def run(*args):
-    return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout
+    attempts = 3 if args and args[0] == "gh" else 1
+    for attempt in range(attempts):
+        try:
+            return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout
+        except subprocess.CalledProcessError as error:
+            if attempt + 1 == attempts:
+                if args and args[0] == "gh":
+                    raise RuntimeError("GitHub API or artifact download failed after retries") from None
+                try:
+                    details = json.loads(error.stdout or "{}").get("description", "")
+                except ValueError:
+                    details = ""
+                raise RuntimeError("Telegram request failed" + (": " + str(details)[:200] if details else "")) from None
+            time.sleep(5 * (attempt + 1))
 
 
 def telegram(method, *fields):
@@ -69,6 +82,13 @@ def main():
     else:
         raise RuntimeError(f"Kernel build did not finish in time: {run_id or request}")
 
+    publish(run_id, target, page)
+
+
+def publish(run_id, target, page):
+    repo = os.environ["GITHUB_REPOSITORY"]
+    token = os.environ["TG_TOKEN"]
+    topic = os.environ["TG_TOPIC"]
     url = f"https://github.com/{repo}/actions/runs/{run_id}"
     artifacts = json.loads(run("gh", "api", f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100"))["artifacts"]
     names = [a["name"] for a in artifacts if not a["expired"]]
@@ -86,11 +106,14 @@ def main():
               "Сборка основана на выбранной ветке GKI. Совместимость с конкретной прошивкой "
               "и успешная загрузка требуют проверки на устройстве.\n"
               f'🔗 <a href="{url}">Сборка и сведения на GitHub</a>')
+    print("Publishing build", run_id, "for", target, flush=True)
     telegram("sendMessage", chat, thread, "parse_mode=HTML", "text=" + header)
+    print("Published build summary", flush=True)
     for name in kernel + managers + modules:
         with tempfile.TemporaryDirectory() as temporary:
             folder = str(Path(temporary) / "contents")
             Path(folder).mkdir()
+            print("Downloading artifact", name, flush=True)
             run("gh", "run", "download", str(run_id), "--repo", repo, "--name", name, "--dir", folder)
             files = list(Path(folder).rglob("*"))
             files = [path for path in files if path.is_file()]
@@ -113,9 +136,11 @@ def main():
                        "--form-string", chat, "--form-string", thread,
                        "--form-string", "caption=" + name, "--form", "document=@" + str(file),
                        "https://api.telegram.org/bot" + token + "/sendDocument"]
+            print("Sending artifact", name, flush=True)
             response = json.loads(run(*command))
             if not response.get("ok"):
                 raise RuntimeError("Telegram did not accept " + name)
+            print("Sent artifact", name, flush=True)
     print("Published kernel and companion artifacts to the configured ASB topic.")
 
 
