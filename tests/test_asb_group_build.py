@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -20,6 +21,21 @@ class GroupBuildTests(unittest.TestCase):
         })
         self.env.start()
         self.addCleanup(self.env.stop)
+
+    def test_github_read_retry_does_not_repeat_telegram_sends(self):
+        error = subprocess.CalledProcessError(1, ["gh"])
+        good = subprocess.CompletedProcess(["gh"], 0, stdout="ok", stderr="")
+        with patch.object(subject.subprocess, "run", side_effect=[error, error, good]) as command, \
+             patch.object(subject.time, "sleep"):
+            self.assertEqual(subject.run("gh", "api", "example"), "ok")
+            self.assertEqual(command.call_count, 3)
+        failed_send = subprocess.CalledProcessError(22, ["curl", "secret-url"],
+                                                    output='{"description":"Bad Request"}')
+        with patch.object(subject.subprocess, "run", side_effect=failed_send) as command:
+            with self.assertRaisesRegex(RuntimeError, "Bad Request") as failure:
+                subject.run("curl", "secret-url")
+            self.assertNotIn("secret-url", str(failure.exception))
+            self.assertEqual(command.call_count, 1)
 
     def test_missing_topic_fails_before_dispatch(self):
         os.environ["TG_TOPIC"] = ""
