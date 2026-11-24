@@ -335,7 +335,8 @@ def main() -> int:
                     aname = a.get("name", "")
                     if "id" not in a:
                         continue
-                    if aname == art_name or (pat and fnmatch.fnmatch(aname, pat)):
+                    normalized_name = aname.removesuffix("-KRILIKD-AnyKernel3") + "-AnyKernel3" if aname.endswith("-KRILIKD-AnyKernel3") else aname
+                    if normalized_name == art_name or (pat and fnmatch.fnmatch(normalized_name, pat)):
                         sub_flav[(s, f)] = f"{art_base}/actions/artifacts/{a['id']}.zip"
                         break
 

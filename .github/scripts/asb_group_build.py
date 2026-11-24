@@ -40,7 +40,7 @@ def main():
         raise RuntimeError("Bot token, valid ASB_KERNEL_TOPIC_ID and page size are required")
 
     repo = os.environ["GITHUB_REPOSITORY"]
-    request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+    request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"] + "-" + family
     args = {"oneplus_branch": request, "kernel_build_version": family, "os_patch_level": patch,
             "page_size": page, "root_flavor": "KernelSU-Next", "release_type": "CI",
             "commit_mode": "latest", "kernel_source": "aosp", "use_perf": "false",

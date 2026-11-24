@@ -29,7 +29,7 @@ class GroupBuildTests(unittest.TestCase):
             dispatch.assert_not_called()
 
     def test_failed_build_never_publishes(self):
-        result = [{"databaseId": 23, "displayTitle": "ASB-group-42-1",
+        result = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
                    "status": "completed", "conclusion": "failure"}]
         with patch.object(subject.subprocess, "run"), \
              patch.object(subject, "run", return_value=json.dumps(result)), \
@@ -39,10 +39,10 @@ class GroupBuildTests(unittest.TestCase):
             send.assert_not_called()
 
     def test_successful_build_publishes_selected_artifacts(self):
-        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1",
+        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
                   "status": "completed", "conclusion": "success"}]
         artifacts = {"artifacts": [
-            {"name": "kernel-AnyKernel3", "expired": False},
+            {"name": "kernel-KRILIKD-AnyKernel3", "expired": False},
             {"name": "KernelSU-Next.apk", "expired": False},
         ]}
         calls = []
@@ -77,7 +77,7 @@ class GroupBuildTests(unittest.TestCase):
         self.assertEqual(sum(args[0] == "curl" for args in calls), 2)
 
     def test_missing_artifacts_never_publishes(self):
-        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1",
+        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
                   "status": "completed", "conclusion": "success"}]
         with patch.object(subject.subprocess, "run"), \
              patch.object(subject, "run", side_effect=[json.dumps(build), '{"artifacts": []}']), \

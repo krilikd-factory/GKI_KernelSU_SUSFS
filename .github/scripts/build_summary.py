@@ -546,7 +546,7 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
 
     lines += ["### 📦 Artifacts and next step", ""]
     artifact_rows = [
-        (f"{a.file_name}-AnyKernel3", "Flashable kernel package"),
+        (f"{a.file_name}-KRILIKD-AnyKernel3", "Flashable kernel package"),
         (f"{a.file_name}-BuildInfo", "This report, final config, source provenance, capabilities and patch inventory"),
         (f"{a.file_name}-Pins", "Exact component pins and manual device-validation template"),
     ]

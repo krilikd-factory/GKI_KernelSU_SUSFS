@@ -135,7 +135,7 @@ def main() -> int:
 
         art_id_m = ARTIFACT_ID.search(str(meta.get("artifact_url", "")))
         if art_id_m:
-            artifacts.append({"name": file_name + "-AnyKernel3",
+            artifacts.append({"name": file_name + "-KRILIKD-AnyKernel3",
                               "id": art_id_m.group(1)})
 
     print(f"assemble-digest: {legs} BuildInfo legs, {bad} unparseable -> "
