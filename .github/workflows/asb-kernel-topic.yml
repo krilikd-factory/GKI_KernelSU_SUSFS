@@ -3,6 +3,11 @@ name: KRILIKD · ASB group build
 on:
   workflow_dispatch:
     inputs:
+      publish_telegram:
+        description: "Publish all kernel files and common modules in the group"
+        type: boolean
+        default: true
+        required: true
       page_size_61:
         description: "OnePlus 12 · kernel page size"
         type: choice
@@ -31,18 +36,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-publish:
+  validate:
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require supported page size
+        env:
+          PAGE_61: ${{ inputs.page_size_61 }}
+          PAGE_66: ${{ inputs.page_size_66 }}
+          PAGE_612: ${{ inputs.page_size_612 }}
+        run: |
+          if [ "$PAGE_61" != 4k ] || [ "$PAGE_66" != 4k ] || [ "$PAGE_612" != 4k ]; then
+            echo "::error::This group build supports 4k only. No kernel build was started."
+            exit 1
+          fi
+
+  build-and-publish:
+    needs: validate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: "OnePlus 12 · android14-6.1.157"
+            id: 61
             page_size: ${{ inputs.page_size_61 }}
           - target: "Ace 6 · android15-6.6.118"
+            id: 66
             page_size: ${{ inputs.page_size_66 }}
           - target: "OnePlus 15/15R · android16-6.12.69"
+            id: 612
             page_size: ${{ inputs.page_size_612 }}
     timeout-minutes: 180
     steps:
@@ -55,4 +78,29 @@ jobs:
           TG_TOPIC: ${{ secrets.ASB_KERNEL_TOPIC_ID }}
           ASB_TARGET: ${{ matrix.target }}
           ASB_PAGE_SIZE: ${{ matrix.page_size }}
+          ASB_DEFER_PUBLISH: "1"
         run: python3 -I .github/scripts/asb_group_build.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: asb-build-reference-${{ matrix.id }}
+          path: asb-build-reference.json
+          if-no-files-found: error
+
+  publish:
+    needs: build-and-publish
+    if: ${{ inputs.publish_telegram }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: asb-build-reference-*
+          path: build-references
+      - name: Publish one group of files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.KRILIKD_TG_TOKEN }}
+          TG_CHAT: "@AutoSystemBoost"
+          TG_TOPIC: ${{ secrets.ASB_KERNEL_TOPIC_ID }}
+        run: python3 -I .github/scripts/asb_group_build.py publish-group

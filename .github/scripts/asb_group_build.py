@@ -49,8 +49,11 @@ def main():
     family, patch = TARGETS[target]
     page = os.environ["ASB_PAGE_SIZE"]
     token, topic = os.environ.get("TG_TOKEN", ""), os.environ.get("TG_TOPIC", "")
-    if not token or not topic.isdecimal() or int(topic) <= 0 or page not in ("4k", "16k"):
-        raise RuntimeError("Bot token, valid ASB_KERNEL_TOPIC_ID and page size are required")
+    deferred = os.environ.get("ASB_DEFER_PUBLISH") == "1"
+    if page != "4k":
+        raise RuntimeError("Only 4k is supported by this group build")
+    if not deferred and (not token or not topic.isdecimal() or int(topic) <= 0):
+        raise RuntimeError("Bot token and valid ASB_KERNEL_TOPIC_ID are required")
 
     repo = os.environ["GITHUB_REPOSITORY"]
     request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"] + "-" + family
@@ -82,7 +85,10 @@ def main():
     else:
         raise RuntimeError(f"Kernel build did not finish in time: {run_id or request}")
 
-    publish(run_id, target, page)
+    if deferred:
+        Path("asb-build-reference.json").write_text(json.dumps({"run_id": run_id, "target": target, "page_size": page}))
+    else:
+        publish(run_id, target, page)
 
 
 def publish(run_id, target, page):
@@ -144,9 +150,75 @@ def publish(run_id, target, page):
     print("Published kernel and companion artifacts to the configured ASB topic.")
 
 
+def publish_group():
+    """Send the three kernels and one copy of the shared files as one album."""
+    repo = os.environ["GITHUB_REPOSITORY"]
+    token, topic = os.environ.get("TG_TOKEN", ""), os.environ.get("TG_TOPIC", "")
+    if not token or not topic.isdecimal() or int(topic) <= 0:
+        raise RuntimeError("Bot token and valid ASB_KERNEL_TOPIC_ID are required")
+    references = [json.loads(path.read_text()) for path in Path("build-references").glob("*/asb-build-reference.json")]
+    if len(references) != 3 or {entry["target"] for entry in references} != set(TARGETS):
+        raise RuntimeError("Missing or duplicate build references")
+    attachments = []
+    common_added = False
+    with tempfile.TemporaryDirectory() as work:
+        for index, entry in enumerate(references):
+            run_id = entry["run_id"]
+            artifacts = json.loads(run("gh", "api", f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100"))["artifacts"]
+            names = [item["name"] for item in artifacts if not item["expired"]]
+            kernels = [name for name in names if name.endswith("-AnyKernel3")]
+            managers = [name for name in names if name.endswith(".apk") and "spoofed" not in name.lower()]
+            modules = [name for name in names if name.startswith(("NoMount-", "VPNHide-"))]
+            if len(kernels) != 1 or not managers:
+                raise RuntimeError(f"Required artifacts missing in build {run_id}")
+            selected = kernels + ([] if common_added else managers[:1] + modules)
+            common_added = True
+            for number, name in enumerate(selected):
+                folder = Path(work) / f"{index}-{number}"
+                folder.mkdir()
+                run("gh", "run", "download", str(run_id), "--repo", repo, "--name", name, "--dir", str(folder))
+                files = [path for path in folder.rglob("*") if path.is_file()]
+                if not files:
+                    raise RuntimeError("Empty artifact: " + name)
+                if name.endswith("-AnyKernel3") or len(files) != 1:
+                    file = Path(work) / (name + ".zip")
+                    subprocess.run(["zip", "-qr", str(file), "."], cwd=folder, check=True)
+                else:
+                    file = files[0]
+                if file.stat().st_size > 49_000_000:
+                    raise RuntimeError("Artifact exceeds Telegram upload limit: " + name)
+                attachments.append(file)
+        if len(attachments) > 10:
+            raise RuntimeError("Too many files for a Telegram media group")
+        text = ("🛠 <b>KRILIKD · тестовые ядра</b>\n"
+                "📱 OnePlus 12 · 6.1.157, Ace 6 · 6.6.118, OnePlus 15/15R · 6.12.69\n"
+                "🔑 KernelSU Next · 4K\n"
+                "Проверьте совместимость с прошивкой и устройством.\n"
+                f'🔗 <a href="https://github.com/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}">Сборка на GitHub</a>')
+        media = []
+        cmd = ["curl", "--silent", "--show-error", "--fail-with-body", "--max-time", "300",
+               "--form-string", "chat_id=" + os.environ["TG_CHAT"],
+               "--form-string", "message_thread_id=" + topic]
+        for index, path in enumerate(attachments):
+            item = {"type": "document", "media": "attach://file" + str(index)}
+            if index == 0:
+                item.update(caption=text, parse_mode="HTML")
+            media.append(item)
+            cmd += ["--form", f"file{index}=@{path}"]
+        cmd += ["--form-string", "media=" + json.dumps(media, ensure_ascii=False),
+                "https://api.telegram.org/bot" + token + "/sendMediaGroup"]
+        result = json.loads(run(*cmd))
+        if not result.get("ok") or len(result.get("result", [])) != len(attachments):
+            raise RuntimeError("Telegram did not confirm all files")
+        print("Published one media group with", len(attachments), "files")
+
+
 if __name__ == "__main__":
     try:
-        main()
+        if sys.argv[1:] == ["publish-group"]:
+            publish_group()
+        else:
+            main()
     except subprocess.CalledProcessError:
         print("ASB group build failed: an external command failed", file=sys.stderr)
         sys.exit(1)

@@ -92,6 +92,52 @@ class GroupBuildTests(unittest.TestCase):
         self.assertIn("kernel_build_version=6.1.x-android14", dispatch_args)
         self.assertEqual(sum(args[0] == "curl" for args in calls), 2)
 
+    def test_group_publishes_three_kernels_and_one_copy_of_common_files(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as work:
+            old = Path.cwd()
+            os.chdir(work)
+            try:
+                for i, target in enumerate(subject.TARGETS):
+                    folder = Path("build-references") / str(i)
+                    folder.mkdir(parents=True)
+                    (folder / "asb-build-reference.json").write_text(
+                        json.dumps({"run_id": i + 1, "target": target, "page_size": "4k"}))
+                artifacts = {"artifacts": [
+                    {"name": "kernel-KRILIKD-AnyKernel3", "expired": False},
+                    {"name": "KernelSU-Next.apk", "expired": False},
+                    {"name": "NoMount-example", "expired": False},
+                    {"name": "VPNHide-example", "expired": False},
+                ]}
+                calls = []
+                def fake_run(*args):
+                    calls.append(args)
+                    if args[:2] == ("gh", "api"):
+                        run_id = args[2].split("/")[-2]
+                        data = json.loads(json.dumps(artifacts))
+                        data["artifacts"][0]["name"] = run_id + "-KRILIKD-AnyKernel3"
+                        return json.dumps(data)
+                    if args[:3] == ("gh", "run", "download"):
+                        folder = Path(args[args.index("--dir") + 1])
+                        (folder / "payload").write_bytes(b"data")
+                        return ""
+                    if args[0] == "curl":
+                        media = json.loads(args[args.index("media=" + next(
+                            item[6:] for item in args if item.startswith("media=")))][6:])
+                        self.assertEqual(len(media), 6)
+                        return json.dumps({"ok": True, "result": [None] * len(media)})
+                    raise AssertionError(args)
+                def fake_subprocess(args, **kwargs):
+                    if args[0] == "zip":
+                        Path(args[2]).write_bytes(b"zip")
+                with patch.object(subject, "run", side_effect=fake_run), \
+                     patch.object(subject.subprocess, "run", side_effect=fake_subprocess):
+                    subject.publish_group()
+                self.assertEqual(sum(args[0] == "curl" for args in calls), 1)
+                self.assertEqual(sum(args[:3] == ("gh", "run", "download") for args in calls), 6)
+            finally:
+                os.chdir(old)
+
     def test_missing_artifacts_never_publishes(self):
         build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
                   "status": "completed", "conclusion": "success"}]
