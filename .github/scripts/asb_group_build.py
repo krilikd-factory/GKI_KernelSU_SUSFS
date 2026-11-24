@@ -16,6 +16,22 @@ TARGETS = {
 }
 
 
+ROOT_FLAVORS = ("KernelSU-Next", "KernelSU", "BakaSU", "SukiSU-Ultra", "KowSU", "FinaSU")
+TARGET_ORDER = ("OnePlus 15/15R · android16-6.12.69", "Ace 6 · android15-6.6.118",
+                "OnePlus 12 · android14-6.1.157")
+TARGET_IDS = dict(zip(TARGET_ORDER, ("612", "66", "61")))
+
+def matrix():
+    selected = os.environ.get("ASB_ROOT_SELECTION", "KernelSU-Next")
+    roots = ROOT_FLAVORS if selected == "All root managers" else (selected,)
+    if any(root not in ROOT_FLAVORS + ("No Root",) for root in roots):
+        raise ValueError("Unknown root implementation")
+    items = [{"target": target, "id": TARGET_IDS[target], "root_flavor": root,
+              "root_id": root.lower().replace(" ", "-")}
+             for target in TARGET_ORDER for root in roots]
+    print("value=" + json.dumps({"include": items}, ensure_ascii=True, separators=(",", ":")))
+
+
 def run(*args):
     attempts = 3 if args and args[0] == "gh" else 1
     for attempt in range(attempts):
@@ -48,6 +64,9 @@ def main():
     target = os.environ["ASB_TARGET"]
     family, patch = TARGETS[target]
     page = os.environ["ASB_PAGE_SIZE"]
+    root = os.environ.get("ASB_ROOT_FLAVOR", "KernelSU-Next")
+    if root not in ROOT_FLAVORS + ("No Root",):
+        raise ValueError("Unknown root implementation")
     token, topic = os.environ.get("TG_TOKEN", ""), os.environ.get("TG_TOPIC", "")
     deferred = os.environ.get("ASB_DEFER_PUBLISH") == "1"
     if page != "4k":
@@ -56,11 +75,12 @@ def main():
         raise RuntimeError("Bot token and valid ASB_KERNEL_TOPIC_ID are required")
 
     repo = os.environ["GITHUB_REPOSITORY"]
-    request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"] + "-" + family
+    request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"] + "-" + family + "-" + root.replace(" ", "-")
     args = {"oneplus_branch": request, "kernel_build_version": family, "os_patch_level": patch,
-            "page_size": page, "root_flavor": "KernelSU-Next", "release_type": "CI",
+            "page_size": page, "root_flavor": root, "release_type": "CI",
             "commit_mode": "latest", "kernel_source": "aosp", "use_perf": "false",
-            "power_app_features": "none", "keep_kmi": "true", "allow_version_mismatch": "false"}
+            "power_app_features": "none", "keep_kmi": "true", "allow_version_mismatch": "false",
+            "use_susfs": "false" if root == "KowSU" else "true"}
     cmd = ["gh", "workflow", "run", "main.yml", "--repo", repo, "--ref", "main"]
     for key, value in args.items():
         cmd += ["-f", key + "=" + value]
@@ -86,7 +106,7 @@ def main():
         raise RuntimeError(f"Kernel build did not finish in time: {run_id or request}")
 
     if deferred:
-        Path("asb-build-reference.json").write_text(json.dumps({"run_id": run_id, "target": target, "page_size": page}))
+        Path("asb-build-reference.json").write_text(json.dumps({"run_id": run_id, "target": target, "page_size": page, "root_flavor": root}))
     else:
         publish(run_id, target, page)
 
@@ -157,10 +177,20 @@ def publish_group():
     if not token or not topic.isdecimal() or int(topic) <= 0:
         raise RuntimeError("Bot token and valid ASB_KERNEL_TOPIC_ID are required")
     references = [json.loads(path.read_text()) for path in Path("build-references").glob("*/asb-build-reference.json")]
-    if len(references) != 3 or {entry["target"] for entry in references} != set(TARGETS):
-        raise RuntimeError("Missing or duplicate build references")
+    for entry in references:
+        entry.setdefault("root_flavor", "KernelSU-Next")  # older saved builds
+    pairs = [(entry["target"], entry["root_flavor"]) for entry in references]
+    roots = {root for _, root in pairs}
+    if (not roots or any(root not in ROOT_FLAVORS + ("No Root",) for root in roots)
+            or len(set(pairs)) != len(pairs)
+            or set(pairs) != {(target, root) for target in TARGET_ORDER for root in roots}
+            or any(entry.get("page_size") != "4k" for entry in references)):
+        raise RuntimeError("Missing, duplicate or unsupported device/root build references")
+    root_order = ROOT_FLAVORS + ("No Root",)
+    references.sort(key=lambda entry: (TARGET_ORDER.index(entry["target"]), root_order.index(entry["root_flavor"])))
     attachments = []
     common_added = False
+    managers_added = set()
     with tempfile.TemporaryDirectory() as work:
         for index, entry in enumerate(references):
             run_id = entry["run_id"]
@@ -169,10 +199,16 @@ def publish_group():
             kernels = [name for name in names if name.endswith("-AnyKernel3")]
             managers = [name for name in names if name.endswith(".apk") and "spoofed" not in name.lower()]
             modules = [name for name in names if name.startswith(("NoMount-", "VPNHide-"))]
-            if len(kernels) != 1 or not managers:
-                raise RuntimeError(f"Required artifacts missing in build {run_id}")
-            selected = kernels + ([] if common_added else managers[:1] + modules)
-            common_added = True
+            root = entry["root_flavor"]
+            if len(kernels) != 1 or (root != "No Root" and not managers):
+                raise RuntimeError(f"Required artifacts missing in build {run_id} ({root})")
+            selected = sorted(kernels)
+            if root != "No Root" and root not in managers_added:
+                selected += sorted(managers)[:1]
+                managers_added.add(root)
+            if not common_added:
+                selected += sorted(modules)
+                common_added = True
             for number, name in enumerate(selected):
                 folder = Path(work) / f"{index}-{number}"
                 folder.mkdir()
@@ -188,11 +224,9 @@ def publish_group():
                 if file.stat().st_size > 49_000_000:
                     raise RuntimeError("Artifact exceeds Telegram upload limit: " + name)
                 attachments.append(file)
-        if len(attachments) > 10:
-            raise RuntimeError("Too many files for a Telegram media group")
         text = ("🛠 <b>KRILIKD · тестовые ядра</b>\n"
-                "📱 OnePlus 12 · 6.1.157, Ace 6 · 6.6.118, OnePlus 15/15R · 6.12.69\n"
-                "🔑 KernelSU Next · 4K\n"
+                "📱 OnePlus 15/15R · 6.12.69, Ace 6 · 6.6.118, OnePlus 12 · 6.1.157\n"
+                f"🔑 {html.escape(", ".join(root for root in root_order if root in roots))} · 4K\n"
                 "Проверьте совместимость с прошивкой и устройством.\n"
                 f'🔗 <a href="https://github.com/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}">Сборка на GitHub</a>')
         # Telegram limits the entire multipart request, not only each document. Split at
@@ -200,7 +234,7 @@ def publish_group():
         groups, current, size = [], [], 0
         for path in attachments:
             n = path.stat().st_size
-            if current and size + n > 40_000_000:
+            if current and (size + n > 40_000_000 or len(current) >= 10):
                 groups.append(current)
                 current, size = [], 0
             current.append(path)
@@ -236,7 +270,9 @@ def publish_group():
 
 if __name__ == "__main__":
     try:
-        if sys.argv[1:] == ["publish-group"]:
+        if sys.argv[1:] == ["matrix"]:
+            matrix()
+        elif sys.argv[1:] == ["publish-group"]:
             publish_group()
         else:
             main()

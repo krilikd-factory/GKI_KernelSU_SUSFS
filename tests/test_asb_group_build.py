@@ -45,7 +45,7 @@ class GroupBuildTests(unittest.TestCase):
             dispatch.assert_not_called()
 
     def test_failed_build_never_publishes(self):
-        result = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
+        result = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14-KernelSU-Next",
                    "status": "completed", "conclusion": "failure"}]
         with patch.object(subject.subprocess, "run"), \
              patch.object(subject, "run", return_value=json.dumps(result)), \
@@ -55,7 +55,7 @@ class GroupBuildTests(unittest.TestCase):
             send.assert_not_called()
 
     def test_successful_build_publishes_selected_artifacts(self):
-        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
+        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14-KernelSU-Next",
                   "status": "completed", "conclusion": "success"}]
         artifacts = {"artifacts": [
             {"name": "kernel-KRILIKD-AnyKernel3", "expired": False},
@@ -133,13 +133,72 @@ class GroupBuildTests(unittest.TestCase):
                 with patch.object(subject, "run", side_effect=fake_run), \
                      patch.object(subject.subprocess, "run", side_effect=fake_subprocess):
                     subject.publish_group()
+                downloads = [args for args in calls if args[:3] == ("gh", "run", "download")]
+                self.assertEqual(downloads[0][3], "3", "OnePlus 15/15R must publish first")
                 self.assertEqual(sum(args[0] == "curl" for args in calls), 1)
                 self.assertEqual(sum(args[:3] == ("gh", "run", "download") for args in calls), 6)
             finally:
                 os.chdir(old)
 
+    def test_multi_root_group_pairs_each_kernel_with_one_manager(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as work:
+            old = Path.cwd(); os.chdir(work)
+            try:
+                roots = ("KernelSU-Next", "KernelSU")
+                lookup = {}
+                for i, (target, root) in enumerate(((t, r) for t in reversed(subject.TARGET_ORDER) for r in roots)):
+                    run_id = str(i + 1); lookup[run_id] = (target, root)
+                    folder = Path("build-references") / run_id; folder.mkdir(parents=True)
+                    (folder / "asb-build-reference.json").write_text(json.dumps({"run_id": run_id, "target": target, "page_size": "4k", "root_flavor": root}))
+                downloads, captions = [], []
+                def fake_run(*args):
+                    if args[:2] == ("gh", "api"):
+                        run_id = args[2].split("/")[-2]; target, root = lookup[run_id]
+                        names = [run_id + "-" + root + "-KRILIKD-AnyKernel3", root + ".apk", "NoMount-example", "VPNHide-example"]
+                        return json.dumps({"artifacts": [{"name": name, "expired": False} for name in names]})
+                    if args[:3] == ("gh", "run", "download"):
+                        downloads.append((args[3], args[args.index("--name") + 1]))
+                        (Path(args[args.index("--dir") + 1]) / "payload").write_bytes(b"data")
+                        return ""
+                    if args[0] == "curl":
+                        raw = next(x[6:] for x in args if x.startswith("media="))
+                        media = json.loads(raw); captions.append(media[0]["caption"])
+                        return json.dumps({"ok": True, "result": [None] * len(media)})
+                    raise AssertionError(args)
+                def fake_subprocess(args, **kwargs):
+                    if args[0] == "zip": Path(args[2]).write_bytes(b"zip")
+                with patch.object(subject, "run", side_effect=fake_run), patch.object(subject.subprocess, "run", side_effect=fake_subprocess):
+                    subject.publish_group()
+                self.assertEqual(lookup[downloads[0][0]][0], subject.TARGET_ORDER[0])
+                self.assertEqual(lookup[downloads[0][0]][1], "KernelSU-Next")
+                names = [n for _, n in downloads]
+                self.assertEqual(sum(n.endswith("-AnyKernel3") for n in names), 6)
+                self.assertEqual(names.count("KernelSU-Next.apk"), 1)
+                self.assertEqual(names.count("KernelSU.apk"), 1)
+                self.assertEqual(names.count("NoMount-example"), 1)
+                self.assertIn("KernelSU-Next, KernelSU", captions[0])
+            finally:
+                os.chdir(old)
+
+    def test_matrix_selects_every_root_and_device_in_priority_order(self):
+        import contextlib, io
+        with patch.dict(os.environ, {"ASB_ROOT_SELECTION": "All root managers"}), contextlib.redirect_stdout(io.StringIO()) as out:
+            subject.matrix()
+        rows = json.loads(out.getvalue().split("=", 1)[1])["include"]
+        self.assertEqual(len(rows), 18)
+        self.assertEqual(rows[0]["target"], subject.TARGET_ORDER[0])
+        self.assertEqual({row["root_flavor"] for row in rows}, set(subject.ROOT_FLAVORS))
+        self.assertEqual(len({(row["target"], row["root_flavor"]) for row in rows}), 18)
+
+    def test_unknown_root_is_rejected_before_dispatch(self):
+        with patch.dict(os.environ, {"ASB_ROOT_FLAVOR": "unknown"}), patch.object(subject.subprocess, "run") as dispatch:
+            with self.assertRaises(ValueError):
+                subject.main()
+            dispatch.assert_not_called()
+
     def test_missing_artifacts_never_publishes(self):
-        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14",
+        build = [{"databaseId": 23, "displayTitle": "ASB-group-42-1-6.1.x-android14-KernelSU-Next",
                   "status": "completed", "conclusion": "success"}]
         with patch.object(subject.subprocess, "run"), \
              patch.object(subject, "run", side_effect=[json.dumps(build), '{"artifacts": []}']), \
