@@ -21,11 +21,33 @@ TARGET_ORDER = ("OnePlus 15/15R · android16-6.12.69", "Ace 6 · android15-6.6.1
                 "OnePlus 12 · android14-6.1.157")
 TARGET_IDS = dict(zip(TARGET_ORDER, ("612", "66", "61")))
 
+FEATURE_INPUTS = {"susfs":"use_susfs", "nomount":"use_nomount", "bbg":"use_bbg", "net":"use_net", "ds":"use_ds", "ntsync":"use_ntsync", "bpf":"use_bpf", "vpnhide":"use_vpnhide", "usb":"use_usb_arsenal"}
+DISABLABLE = set(FEATURE_INPUTS) | {"ptrace", "unicode"}
+
+def feature_settings(root, family):
+    disabled = {x.strip().lower() for x in os.environ.get("ASB_DISABLED_FEATURES", "").split(",") if x.strip()}
+    if disabled - DISABLABLE:
+        raise ValueError("Unknown disabled features: " + ", ".join(sorted(disabled - DISABLABLE)))
+    if root == "FinaSU" and "susfs" in disabled:
+        raise ValueError("FinaSU requires SUSFS")
+    cfg = {arg: ("false" if name in disabled else "true") for name, arg in FEATURE_INPUTS.items()}
+    if root == "KowSU": cfg["use_susfs"] = "false"
+    cfg["compatibility_patches"] = ("none" if {"ptrace", "unicode"} <= disabled else "unicode" if "ptrace" in disabled else "ptrace" if "unicode" in disabled else "both")
+    perf = os.environ.get("ASB_PERF_MODE", "bore_adios")
+    power = os.environ.get("ASB_POWER_FEATURES", "all")
+    if perf not in ("true", "false", "bore", "bore_adios") or power not in ("all", "both", "rekernel", "wakeup-blocker", "sdp-900ma", "none"):
+        raise ValueError("Invalid performance or power feature selection")
+    cfg["use_perf"] = perf if family == "6.12.x-android16" else ("false" if perf == "false" else "true")
+    cfg["power_app_features"] = power if family == "6.12.x-android16" else "none"
+    return cfg
+
 def matrix():
     selected = os.environ.get("ASB_ROOT_SELECTION", "KernelSU-Next")
     roots = ROOT_FLAVORS if selected == "All root managers" else (selected,)
     if any(root not in ROOT_FLAVORS + ("No Root",) for root in roots):
         raise ValueError("Unknown root implementation")
+    for root in roots:
+        for target in TARGET_ORDER: feature_settings(root, TARGETS[target][0])
     items = [{"target": target, "id": TARGET_IDS[target], "root_flavor": root,
               "root_id": root.lower().replace(" ", "-")}
              for target in TARGET_ORDER for root in roots]
@@ -78,9 +100,10 @@ def main():
     request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"] + "-" + family + "-" + root.replace(" ", "-")
     args = {"oneplus_branch": request, "kernel_build_version": family, "os_patch_level": patch,
             "page_size": page, "root_flavor": root, "release_type": "CI",
-            "commit_mode": "latest", "kernel_source": "aosp", "use_perf": "false",
-            "power_app_features": "none", "keep_kmi": "true", "allow_version_mismatch": "false",
-            "use_susfs": "false" if root == "KowSU" else "true"}
+            "commit_mode": "latest", "kernel_source": "aosp",
+            "keep_kmi": "true", "allow_version_mismatch": "false"}
+    features = feature_settings(root, family)
+    args.update(features)
     cmd = ["gh", "workflow", "run", "main.yml", "--repo", repo, "--ref", "main"]
     for key, value in args.items():
         cmd += ["-f", key + "=" + value]
@@ -106,7 +129,7 @@ def main():
         raise RuntimeError(f"Kernel build did not finish in time: {run_id or request}")
 
     if deferred:
-        Path("asb-build-reference.json").write_text(json.dumps({"run_id": run_id, "target": target, "page_size": page, "root_flavor": root}))
+        Path("asb-build-reference.json").write_text(json.dumps({"run_id": run_id, "target": target, "page_size": page, "root_flavor": root, "features": features}))
     else:
         publish(run_id, target, page)
 
@@ -224,11 +247,34 @@ def publish_group():
                 if file.stat().st_size > 49_000_000:
                     raise RuntimeError("Artifact exceeds Telegram upload limit: " + name)
                 attachments.append(file)
+        sample = references[0].get("features")
+        feature_text = "Настройки сборки — в действиях GitHub."
+        if sample:
+            labels = {"use_susfs":"SUSFS", "use_nomount":"NoMount", "use_bbg":"BBG", "use_net":"NET", "use_ds":"DS", "use_ntsync":"NTSync", "use_bpf":"BPF", "use_vpnhide":"VPN", "use_usb_arsenal":"USB"}
+            enabled = [label for key, label in labels.items() if sample.get(key) == "true"]
+            compat = sample.get("compatibility_patches", "none")
+            if compat in ("both", "ptrace"): enabled.append("Ptrace")
+            if compat in ("both", "unicode"): enabled.append("Unicode")
+            perf = sample.get("use_perf")
+            if perf in ("true", "bore", "bore_adios"): enabled.append("Perf/BORE" if perf != "true" else "Perf")
+            if perf == "bore_adios": enabled.append("ADIOS")
+            power = sample.get("power_app_features", "none")
+            if power in ("all", "both", "rekernel"): enabled.append("Re-Kernel")
+            if power in ("all", "both", "wakeup-blocker"): enabled.append("ASB wakeup blocker")
+            if power in ("all", "sdp-900ma"): enabled.append("SDP900")
+            feature_text = "⚙️ Запрошено для 6.12: " + ", ".join(enabled) + ". Для других ядер состав может отличаться."
+        links = []
+        for target in TARGET_ORDER:
+            entry = next(e for e in references if e["target"] == target)
+            label = {TARGET_ORDER[0]:"15/15R", TARGET_ORDER[1]:"Ace 6", TARGET_ORDER[2]:"12 / Ace 5"}[target]
+            links.append(f'<a href="https://github.com/{repo}/actions/runs/{entry["run_id"]}">{label}</a>')
         text = ("🛠 <b>KRILIKD · тестовые ядра</b>\n"
-                "📱 OnePlus 15/15R · 6.12.69, Ace 6 · 6.6.118, OnePlus 12 · 6.1.157\n"
-                f"🔑 {html.escape(", ".join(root for root in root_order if root in roots))} · 4K\n"
-                "Проверьте совместимость с прошивкой и устройством.\n"
-                f'🔗 <a href="https://github.com/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}">Сборка на GitHub</a>')
+                "📱 OnePlus 15/15R · 6.12.69; Ace 6 · 6.6.118; OnePlus 12 / Ace 5 · 6.1.157\n"
+                f"🔑 {html.escape(', '.join(root for root in root_order if root in roots))} · 4K\n"
+                f"{feature_text}\n"
+                "Совместимость с прошивкой и успешная загрузка требуют проверки.\n"
+                "🔗 Сборки и артефакты: " + " · ".join(links))
+
         # Telegram limits the entire multipart request, not only each document. Split at
         # 40 MB to leave room for encoding; every file is still sent exactly once.
         groups, current, size = [], [], 0

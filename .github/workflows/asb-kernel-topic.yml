@@ -22,6 +22,23 @@ on:
           - All root managers
         default: KernelSU-Next
         required: true
+      disable_features:
+        description: 'Comma-separated: susfs,nomount,bbg,net,ds,ntsync,ptrace,unicode,bpf,vpnhide,usb'
+        type: string
+        required: false
+        default: ''
+      perf_mode:
+        description: '6.12: performance / BORE / BORE + ADIOS / none'
+        type: choice
+        options: ['true', bore, bore_adios, 'false']
+        default: bore_adios
+        required: true
+      power_features:
+        description: '6.12: Re-Kernel / ASB wakeup blocker / SDP900'
+        type: choice
+        options: [all, both, rekernel, wakeup-blocker, sdp-900ma, none]
+        default: all
+        required: true
       page_size_61:
         description: "OnePlus 12 · kernel page size"
         type: choice
@@ -71,6 +88,9 @@ jobs:
         id: matrix
         env:
           ASB_ROOT_SELECTION: ${{ inputs.root_flavor }}
+          ASB_DISABLED_FEATURES: ${{ inputs.disable_features }}
+          ASB_PERF_MODE: ${{ inputs.perf_mode }}
+          ASB_POWER_FEATURES: ${{ inputs.power_features }}
         run: python3 .github/scripts/asb_group_build.py matrix >> "$GITHUB_OUTPUT"
 
   build-and-publish:
@@ -92,6 +112,9 @@ jobs:
           ASB_TARGET: ${{ matrix.target }}
           ASB_PAGE_SIZE: "4k"
           ASB_ROOT_FLAVOR: ${{ matrix.root_flavor }}
+          ASB_DISABLED_FEATURES: ${{ inputs.disable_features }}
+          ASB_PERF_MODE: ${{ inputs.perf_mode }}
+          ASB_POWER_FEATURES: ${{ inputs.power_features }}
           ASB_DEFER_PUBLISH: "1"
         run: python3 -I .github/scripts/asb_group_build.py
       - uses: actions/upload-artifact@v7

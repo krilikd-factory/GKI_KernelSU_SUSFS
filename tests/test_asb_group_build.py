@@ -191,6 +191,23 @@ class GroupBuildTests(unittest.TestCase):
         self.assertEqual({row["root_flavor"] for row in rows}, set(subject.ROOT_FLAVORS))
         self.assertEqual(len({(row["target"], row["root_flavor"]) for row in rows}), 18)
 
+    def test_feature_overrides_and_device_scope(self):
+        with patch.dict(os.environ, {"ASB_DISABLED_FEATURES": "nomount,ptrace,bpf", "ASB_PERF_MODE":"bore_adios", "ASB_POWER_FEATURES":"all"}):
+            main = subject.feature_settings("KernelSU-Next", "6.12.x-android16")
+            self.assertEqual(main["use_nomount"], "false")
+            self.assertEqual(main["use_bpf"], "false")
+            self.assertEqual(main["compatibility_patches"], "unicode")
+            self.assertEqual(main["use_perf"], "bore_adios")
+            self.assertEqual(main["power_app_features"], "all")
+            other = subject.feature_settings("KowSU", "6.1.x-android14")
+            self.assertEqual(other["use_susfs"], "false")
+            self.assertEqual(other["use_perf"], "true")
+            self.assertEqual(other["power_app_features"], "none")
+        with patch.dict(os.environ, {"ASB_DISABLED_FEATURES": "unknown"}):
+            with self.assertRaises(ValueError): subject.feature_settings("KernelSU-Next", "6.12.x-android16")
+        with patch.dict(os.environ, {"ASB_DISABLED_FEATURES": "susfs"}):
+            with self.assertRaises(ValueError): subject.feature_settings("FinaSU", "6.12.x-android16")
+
     def test_unknown_root_is_rejected_before_dispatch(self):
         with patch.dict(os.environ, {"ASB_ROOT_FLAVOR": "unknown"}), patch.object(subject.subprocess, "run") as dispatch:
             with self.assertRaises(ValueError):
