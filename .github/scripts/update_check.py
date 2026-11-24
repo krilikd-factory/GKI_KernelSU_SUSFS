@@ -266,6 +266,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-root", default=".")
     ap.add_argument("--key", default="", help="known-good key; empty = every non-@previous key")
+    ap.add_argument("--built-pins", default="", help="pins from a matching successful build")
     ap.add_argument("--report", default="")
     ap.add_argument("--json", default="")
     a = ap.parse_args()
@@ -291,8 +292,13 @@ def main() -> int:
                f"Boot-attested known-good remains `{attested}`; this candidate is not marked as physically booted.", ""]
 
 
+    built_all = json.loads(Path(a.built_pins).read_text()) if a.built_pins else {}
     for key in keys:
         kg = kg_all.get(key)
+        built = built_all.get(key)
+        using_built = bool(composition and key == composition[0] and isinstance(built, dict) and built.get("feature_set") == composition[1])
+        if using_built:
+            kg = built
         if not kg:
             md += [f"Known-good set `{key}` not found.", ""]
             continue
@@ -320,8 +326,9 @@ def main() -> int:
         elif opl and opl != "lts":
             comps.append(("Kernel source (AOSP common)", "https://android.googlesource.com/kernel/common", f"refs/heads/{family}-{opl}", "kernel_source_commit"))
 
-        md += [f"## `{key}`", f"Known-good from {kg.get('from_run', '?')} (features: {kg.get('feature_set', '?')})", "",
-               "| Component | Known-good | Upstream now | New commits |", "|---|---|---|---|"]
+        baseline_label = "Last matching build" if using_built else "Boot-attested known-good"
+        md += [f"## `{key}`", f"Comparison baseline from {kg.get('from_run', '?')} (features: {kg.get('feature_set', '?')})", "",
+               f"| Component | {baseline_label} | Upstream now | New commits |", "|---|---|---|---|"]
         details: list[str] = []
         sets = summary["sets"].setdefault(key, {})
 

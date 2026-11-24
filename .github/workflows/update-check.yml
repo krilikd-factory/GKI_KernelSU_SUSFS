@@ -45,12 +45,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Find last successful matching build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/latest_build_pins.py
+          if [ -f latest-built-pins.json ]; then echo 'available=true' >> "$GITHUB_OUTPUT"; fi
+          active="$(gh run list --workflow main.yml --branch main --limit 100 --json status --jq '[.[] | select(.status != "completed")] | length')"
+          echo "active=$active" >> "$GITHUB_OUTPUT"
+
       - name: Compare known-good with upstream
         id: check
         shell: bash
         run: |
           set -euo pipefail
-          python3 -I .github/scripts/update_check.py \
+          extra=()
+          if [ -f latest-built-pins.json ]; then extra+=(--built-pins latest-built-pins.json); fi
+          python3 -I .github/scripts/update_check.py "${extra[@]}" \
             --repo-root . \
             --key "${{ inputs.known_good_key }}" \
             --report update-report.md \
@@ -88,7 +102,7 @@ jobs:
         id: start
         if: >-
           steps.check.outputs.updates != '0' &&
-          (inputs.build_latest || ((github.event_name == 'schedule' || inputs.as_schedule) && steps.seen.outputs.cache-hit != 'true'))
+          (inputs.build_latest || ((github.event_name == 'schedule' || inputs.as_schedule) && steps.baseline.outputs.active == '0' && (steps.baseline.outputs.available == 'true' || steps.seen.outputs.cache-hit != 'true')))
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_INPUTS: ${{ steps.check.outputs.build_inputs }}
