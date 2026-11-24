@@ -1,0 +1,44 @@
+name: KRILIKD · ASB group build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Observed kernel family and GKI patch level"
+        type: choice
+        options:
+          - "OnePlus 12 · android14-6.1.157"
+          - "Ace 6 · android15-6.6.118"
+          - "OnePlus 15/15R · android16-6.12.69"
+        required: true
+      page_size:
+        description: "Device kernel page size"
+        type: choice
+        options: [4k, 16k]
+        default: 4k
+        required: true
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: asb-group-kernel-build
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dispatch matching build and publish artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.KRILIKD_TG_TOKEN }}
+          TG_CHAT: "@AutoSystemBoost"
+          TG_TOPIC: ${{ secrets.ASB_KERNEL_TOPIC_ID }}
+          ASB_TARGET: ${{ inputs.target }}
+          ASB_PAGE_SIZE: ${{ inputs.page_size }}
+        run: python3 -I .github/scripts/asb_group_build.py

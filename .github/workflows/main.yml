@@ -1,4 +1,5 @@
 name: Build Kernels
+run-name: ${{ inputs.request_id || 'Build Kernels' }}
 
 permissions:
   contents: write
@@ -7,6 +8,11 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      request_id:
+        description: "Optional correlation ID for an ASB group build"
+        type: string
+        required: false
+        default: ""
       release_type:
         description: "Release Type (Modules = only selected companion artifacts, no kernel/release jobs)"
         type: choice
