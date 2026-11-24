@@ -41,7 +41,7 @@ def main():
 
     repo = os.environ["GITHUB_REPOSITORY"]
     request = "ASB-group-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
-    args = {"request_id": request, "kernel_build_version": family, "os_patch_level": patch,
+    args = {"oneplus_branch": request, "kernel_build_version": family, "os_patch_level": patch,
             "page_size": page, "root_flavor": "KernelSU-Next", "release_type": "CI",
             "commit_mode": "latest", "kernel_source": "aosp", "use_perf": "false",
             "power_app_features": "none", "keep_kmi": "true", "allow_version_mismatch": "false"}

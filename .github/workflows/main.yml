@@ -1,5 +1,5 @@
 name: Build Kernels
-run-name: ${{ inputs.request_id || 'Build Kernels' }}
+run-name: ${{ inputs.kernel_source == 'aosp' && startsWith(inputs.oneplus_branch, 'ASB-group-') && inputs.oneplus_branch || 'Build Kernels' }}
 
 permissions:
   contents: write
@@ -8,11 +8,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      request_id:
-        description: "Optional correlation ID for an ASB group build"
-        type: string
-        required: false
-        default: ""
       release_type:
         description: "Release Type (Modules = only selected companion artifacts, no kernel/release jobs)"
         type: choice
