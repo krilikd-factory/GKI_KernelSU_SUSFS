@@ -238,7 +238,11 @@ runs:
         # a stock dependency (e.g. LTO+BTF dropping Rust ashmem/binder): such a
         # kernel compiles but cannot boot Android.
         STOCK_DEF="$(mktemp)"
-        if git -C common show HEAD:arch/arm64/configs/gki_defconfig > "$STOCK_DEF" 2>/dev/null && [ -s "$STOCK_DEF" ]; then
+        # Later build steps commit integration changes to clean the tree, so HEAD
+        # can contain our requested config rather than the original GKI baseline.
+        STOCK_REF="${KERNEL_SOURCE_COMMIT:-HEAD}"
+        if git -C common show "${STOCK_REF}:arch/arm64/configs/gki_defconfig" > "$STOCK_DEF" 2>/dev/null && [ -s "$STOCK_DEF" ]; then
+          echo "Stock config baseline: $STOCK_REF"
           STOCK_ARGS=(
             --stock "$STOCK_DEF"
             --final "$CONFIG_FILE"
@@ -258,7 +262,8 @@ runs:
             exit 1
           fi
         else
-          echo "::warning::stock gki_defconfig not readable from git; stock config guard skipped"
+          echo "::error::stock gki_defconfig not readable from source commit $STOCK_REF"
+          exit 1
         fi
 
     - name: 'KMI CRC guard (stock vendor modules must still load)'
