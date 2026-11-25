@@ -1,7 +1,7 @@
 # Installation
 
 > [!CAUTION]
-> Wild Kernels is not responsible for bricked devices or damage. By flashing, you assume all risk. Back up your data and understand the risks before flashing.
+> A custom kernel can leave a device unbootable. Back up the partitions affected by your installation and prepare a recovery method for your exact device and firmware before flashing.
 
 ## Choose your method
 
@@ -14,7 +14,7 @@
 
 - [ ] GKI 2.0 device with an unlocked bootloader
 - [ ] Full backup (at minimal the `boot` partition or have a stock unmodified `boot.img`)
-- [ ] Correct AnyKernel3 ZIP for your kernel version from [Releases](https://github.com/WildKernels/GKI_KernelSU_SUSFS/releases)
+- [ ] Correct AnyKernel3 ZIP for your kernel version from [kernel build runs](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/asb-kernel-topic.yml)
 
 ### Supported versions
 
@@ -30,7 +30,7 @@ Only GKI 2.0 is supported — check marks show builds provided by this project:
 | 4.19.x | | 6.6.x-android15 ✓ |
 | | | 6.12.x-android16 ✓ |
 
-For Pre-GKI or GKI 1.0 kernels, contact [@TheWildJames](https://t.me/TheWildJames) to discuss possiblities.
+Pre-GKI and GKI 1.0 devices are outside the supported build matrix.
 
 > [!IMPORTANT]
 > Match by the full kernel version (e.g., `6.1.x-androidXX`) — your device's Android version and the `androidXX` in the kernel version are not necessarily the same. For example, as of writing, a Google Pixel 8 is on `6.1.157-android14` while the system Android is 17.
