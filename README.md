@@ -1,91 +1,92 @@
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/🇬🇧%20English-16a34a?style=flat-square" alt="English"></a>
+  <a href="docs/README.ru.md"><img src="https://img.shields.io/badge/🇷🇺%20Русский-1f2937?style=flat-square" alt="Русский"></a>
+</p>
+
 <div align="center">
 
 # ⚡ KRILIKD Kernel
 
-**Кастомное GKI-ядро для OnePlus и Ace**<br>
-KernelSU · SUSFS · современные планировщики · интеграция с AutoSystemBoost
+**Custom GKI kernels for OnePlus and Ace**<br>
+KernelSU · SUSFS · modern schedulers · AutoSystemBoost integration
 
-[![Android GKI](https://img.shields.io/badge/Android-GKI%202.0-3DDC84?logo=android&logoColor=white)](#-совместимость)
+[![Android GKI](https://img.shields.io/badge/Android-GKI%202.0-3DDC84?logo=android&logoColor=white)](#-compatibility)
 [![Builds](https://img.shields.io/badge/GitHub-Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/asb-kernel-topic.yml)
 [![Telegram](https://img.shields.io/badge/Telegram-AutoSystemBoost-26A5E4?logo=telegram&logoColor=white)](https://t.me/AutoSystemBoost)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-[Совместимость](#-совместимость) · [Возможности](#-возможности) · [Скачать и установить](#-скачать-и-установить) · [Собрать своё](#-собрать-своё) · [Документация](#-документация)
+[Compatibility](#-compatibility) · [Features](#-features) · [Download and install](#-download-and-install) · [Build your own](#-build-your-own) · [Documentation](#-documentation)
 
 </div>
 
-> **KRILIKD** — сборочный проект на базе Android GKI и экосистемы Wild Kernels. Он объединяет root-интеграции, патчи совместимости и инструменты для настройки устройства. Состав зависит от семейства ядра и выбранных параметров сборки.
+> **KRILIKD** is a build project based on Android GKI and the Wild Kernels ecosystem. It brings together root integrations, compatibility patches and device-tuning tools. The available features depend on the kernel family and build options.
 
 > [!CAUTION]
-> Неподходящее ядро может привести к невозможности загрузки. До установки проверьте семейство **стокового ядра**, совместимость прошивки и размер страницы памяти; сохраните резервные копии затрагиваемых разделов и подготовьте способ восстановления именно для своей модели. Успешная сборка не означает проверенную загрузку или совместимость устройства.
+> An incompatible kernel can leave your device unable to boot. Before installation, check the **stock kernel family**, firmware compatibility and memory page size; back up the affected partitions and prepare a recovery method for your specific device. A successful build does not prove that a kernel will boot or work correctly on your phone.
 
-## 📱 Совместимость
+## 📱 Compatibility
 
-В групповом workflow сейчас настроены три целевые сборки **4 KB**, по умолчанию с KernelSU-Next:
+The group workflow currently targets three **4 KB** builds, using KernelSU-Next by default:
 
-| Устройство | Семейство и версия ядра | Уровень патча GKI |
+| Device | Kernel family and version | GKI patch level |
 |---|---|---|
 | **OnePlus 12 / OnePlus Ace 5** | `android14-6.1.157` | `2025-12` |
 | **OnePlus Ace 6** | `android15-6.6.118` | `2026-01` |
 | **OnePlus 15 / 15R** | `android16-6.12.69` | `2026-03` |
 
-Для **Ace 5** используется сборка OnePlus 12. Проверяйте её соответствие конкретной прошивке и аппаратной ревизии: одинаковое семейство GKI само по себе не гарантирует загрузку. Число после `android` в имени ядра обозначает ветку GKI и может отличаться от версии Android, установленной на телефоне.
+The **Ace 5** uses the OnePlus 12 build. Check it against your firmware and hardware revision: sharing a GKI family alone does not guarantee a successful boot. The number after `android` in the kernel name identifies the GKI branch and can differ from your phone's Android version.
 
-Посмотреть текущее ядро можно в настройках устройства или командой:
+Find the running kernel in device settings or with:
 
 ```sh
 adb shell uname -r
 ```
 
-Семейство, patch level, размер страницы, root-версию и состав функций **проверяйте у выбранного файла и в BuildInfo конкретного запуска**. Проверки системы сборки не заменяют проверки на телефоне.
+Check the family, patch level, page size, root implementation and feature set **for the chosen file and its BuildInfo**. Build-time checks do not replace testing on your device.
 
-### Подтверждённая загрузка
+## ✨ Features
 
-Для OnePlus 15 в записи [known-good](.github/known-good.json) отмечена сборка `6.12.69-android16-6-KRILIKD`, AOSP GKI, KernelSU-Next, LTO выключен. [Запуск 45060773115](https://github.com/krilikd-factory/KRILIKD-kernel/actions/runs/45060773115) подтверждён **только фактом загрузки** 22 ноября 2026 года. Работа дисплея, сети, камеры, звука, нагрева и ASB отдельно не подтверждена. Другие ZIP, устройства и прошивки эта отметка не покрывает.
-
-## ✨ Возможности
-
-| Направление | Что может входить в сборку |
+| Area | What a build can include |
 |---|---|
-| 🛡️ **Root и приватность** | KernelSU-Next и другие варианты KernelSU, SUSFS, NoMount, Baseband Guard, VPN Hide |
-| 🌐 **Сеть** | WireGuard, BBR/BBRv3, CAKE, IPSet, NAT и другие сетевые возможности — при наличии в конфигурации ядра |
-| 🎮 **Совместимость** | NTSync, DroidSpaces, исправления Ptrace и Unicode, поддержка BPF и Perf |
-| 🧠 **Планировщики и оптимизации** | BORE для CPU, ADIOS для I/O, а также отобранные оптимизации памяти, планировщика и файловых систем |
-| 🔋 **Энергия и фон** | Re-Kernel, блокировщик источников пробуждения ASB (AWL) и SDP 900 mA — в поддерживаемых сборках |
-| 🔌 **USB** | Возможности USB Arsenal и режимы USB gadget в зависимости от устройства и сборки |
+| 🛡️ **Root and privacy** | KernelSU-Next and other KernelSU variants, SUSFS, NoMount, Baseband Guard and VPN Hide |
+| 🌐 **Networking** | WireGuard, BBR/BBRv3, CAKE, IPSet, NAT and other networking features when enabled in the kernel configuration |
+| 🎮 **Compatibility** | NTSync, DroidSpaces, Ptrace and Unicode fixes, BPF and Perf support |
+| 🧠 **Schedulers and optimizations** | BORE for CPU, ADIOS for I/O, plus selected memory, scheduler and filesystem optimizations |
+| 🔋 **Power and background** | Re-Kernel, the ASB exact-name wakeup blocker (AWL) and SDP 900 mA on supported builds |
+| 🔌 **USB** | USB Arsenal and USB gadget modes, depending on the device and build |
 
-**BORE, ADIOS, Re-Kernel, AWL и SDP 900 mA доступны для поддерживаемой ветки `android16-6.12` и не присутствуют автоматически во всех ядрах.** При выборе AWL его список правил изначально пуст. Наличие опции в конфигурации ещё не гарантирует, что соответствующий интерфейс доступен и работает на конкретной прошивке.
+**BORE, ADIOS, Re-Kernel, AWL and SDP 900 mA are available for the supported `android16-6.12` branch; they are not automatically present in every kernel.** AWL starts with an empty rule list. A configuration option alone does not guarantee that its interface is available or functional on a particular firmware.
 
-В составе определённой сборки ориентируйтесь на её **BuildInfo**, итоговый `.config` и результат проверки на устройстве. Возможности можно включать и отключать при сборке; подробности — в [справочнике функций](docs/features.md) и [интеграции ASB](docs/asb-integration.md).
+Use the build's **BuildInfo**, final `.config` and on-device checks to establish what is actually available. Features can be enabled or disabled at build time; see the [feature reference](docs/features.md) and [ASB integration guide](docs/asb-integration.md).
 
-### 🎛️ Вместе с AutoSystemBoost
+### 🎛️ Working with AutoSystemBoost
 
-[AutoSystemBoost](https://github.com/krilikd-factory/AutoSystemBoost) управляет доступными настройками из пользовательского пространства. Перед применением поддерживаемых настроек ASB проверяет интерфейс, сохраняет исходное значение и считывает результат; на неподдерживаемом ядре отдельные переключатели могут быть недоступны. Блокировка пробуждений по точному имени требует соответствующего интерфейса ядра и заданных пользователем правил.
+[AutoSystemBoost](https://github.com/krilikd-factory/AutoSystemBoost) controls available settings from userspace. Before applying supported settings, ASB checks the interface, saves the original value and reads back the result; some controls may be unavailable on unsupported kernels. Blocking wakeup sources by exact name requires a compatible kernel interface and user-defined rules.
 
-## 📥 Скачать и установить
+## 📥 Download and install
 
-1. Выберите ZIP для своей модели и стоковой ветки GKI в [группе ASB](https://t.me/AutoSystemBoost) или в артефактах подходящего [запуска сборки](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/asb-kernel-topic.yml). Для скачивания артефактов GitHub может потребовать вход; артефакты имеют срок хранения.
-2. Проверьте параметры сборки и подготовьте резервные копии и способ восстановления, подходящие вашей прошивке и схеме разделов. Способ отката зависит от устройства и способа установки — универсальный набор разделов не предполагается.
-3. Установите **AnyKernel3 ZIP** подходящим для устройства способом. Если сборка требует отдельного метамодуля или менеджера, используйте соответствующие ей файлы и следуйте их инструкциям.
-4. После перезагрузки проверьте версию ядра, root, связь, звук, камеру и остальные нужные функции. При проблеме сохраните журнал диагностики и, если доступен, `console-ramoops`.
+1. Choose the ZIP for your device and stock GKI branch in the [ASB group](https://t.me/AutoSystemBoost) or among the artifacts of a matching [build run](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/asb-kernel-topic.yml). GitHub may require sign-in to download artifacts; artifacts have a retention period.
+2. Check the build details and prepare backups and a recovery method suitable for your firmware and partition layout. Recovery depends on the device and installation method; no single set of partitions is assumed to work for every device.
+3. Install the **AnyKernel3 ZIP** using a method appropriate for your phone. If the build requires a separate metamodule or manager, use its matching files and follow their instructions.
+4. After rebooting, check the kernel version, root, connectivity, audio, camera and other functions you need. If a problem occurs, save a diagnostic report and, if available, `console-ramoops`.
 
-[Инструкция по установке](docs/installation.md) · [Kernel Flasher](docs/kernelflasher.md) · [После установки](docs/post-install.md)
+[Installation guide](docs/installation.md) · [Kernel Flasher](docs/kernelflasher.md) · [After installation](docs/post-install.md)
 
-> VPN Hide, встроенный в ядро, использует совместимый companion-модуль. Не устанавливайте поверх него `vpnhide-kmod`. NoMount поставляется отдельным метамодулем, когда он выбран для сборки.
+> Built-in VPN Hide uses its matching companion module. Do not install `vpnhide-kmod` on top of it. NoMount is provided as a separate metamodule when selected for the build.
 
-## 🏗️ Собрать своё
+## 🏗️ Build your own
 
-Откройте **Actions → [Build Kernels](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/main.yml) → Run workflow** и выберите конкретные семейство, patch level, root-вариант и функции. Для начала не выбирайте `All`: это запускает множество сборок. Workflow **[KRILIKD · ASB group build](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/asb-kernel-topic.yml)** готовит три указанных выше семейства, поддерживает выбор root и отключение функций; публикация в Telegram управляется отдельным параметром и требует настройки секретов.
+Open **Actions → [Build Kernels](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/main.yml) → Run workflow** and choose a specific family, patch level, root implementation and feature set. Avoid `All` for a first build: it starts many jobs. The **[KRILIKD · ASB group build](https://github.com/krilikd-factory/KRILIKD-kernel/actions/workflows/asb-kernel-topic.yml)** workflow prepares the three families listed above and supports root selection and feature exclusions; Telegram publishing is controlled separately and requires configured secrets.
 
-Для анализа результата сохраняйте артефакты **AnyKernel3**, **BuildInfo** и **Pins**. В них находятся сведения об исходниках, выбранных компонентах, итоговой конфигурации и проверках сборки. Сборка кандидата не становится проверенной на устройстве автоматически. Подробный порядок — в [руководстве по сборке](docs/build-from-fork.md).
+Keep the **AnyKernel3**, **BuildInfo** and **Pins** artifacts for review. They contain source and component details, the final configuration and build checks. A candidate build is not automatically attested on a device. See the [build guide](docs/build-from-fork.md) for the full procedure.
 
-## 📚 Документация
+## 📚 Documentation
 
-- [Возможности и компоненты](docs/features.md) · [Интеграция с ASB](docs/asb-integration.md)
-- [OnePlus 15 / TOP и история изменений](docs/KRILIKD.md) · [Статус реализации](docs/KRILIKD_IMPLEMENTATION_STATUS.md)
-- [Сборка в своём форке](docs/build-from-fork.md) · [Установка](docs/installation.md) · [Проверка после установки](docs/post-install.md)
-- [Лицензия](LICENSE) · [Уведомления и лицензии сторонних проектов](THIRD_PARTY_NOTICES.md)
+- [Features and components](docs/features.md) · [ASB integration](docs/asb-integration.md)
+- [OnePlus 15 / TOP and change history](docs/KRILIKD.md) · [Implementation status](docs/KRILIKD_IMPLEMENTATION_STATUS.md)
+- [Build in your own fork](docs/build-from-fork.md) · [Installation](docs/installation.md) · [Post-install checks](docs/post-install.md)
+- [License](LICENSE) · [Third-party notices and licenses](THIRD_PARTY_NOTICES.md)
 
-## 🙏 Благодарности
+## 🙏 Credits
 
-Проект основан на работе [Android Common Kernel / GKI](https://android.googlesource.com/kernel/common/), [Wild Kernels](https://github.com/WildKernels/GKI_KernelSU_SUSFS) и сообщества разработчиков. Отдельная благодарность авторам [KernelSU](https://github.com/tiann/KernelSU), [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next), [SUSFS](https://gitlab.com/simonpunk/susfs4ksu), [NoMount](https://github.com/maxsteeel/nomount), [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard), [DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS), [Re-Kernel](https://github.com/Sakion-Team/Re-Kernel), [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal), [BORE](https://github.com/firelzrd/bore-scheduler), [ADIOS](https://github.com/firelzrd/adios) и [AnyKernel3](https://github.com/osm0sis/AnyKernel3). Полные сведения об авторах и лицензиях — в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+This project builds on the work of [Android Common Kernel / GKI](https://android.googlesource.com/kernel/common/), [Wild Kernels](https://github.com/WildKernels/GKI_KernelSU_SUSFS) and the developer community. Thanks to the authors of [KernelSU](https://github.com/tiann/KernelSU), [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next), [SUSFS](https://gitlab.com/simonpunk/susfs4ksu), [NoMount](https://github.com/maxsteeel/nomount), [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard), [DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS), [Re-Kernel](https://github.com/Sakion-Team/Re-Kernel), [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal), [BORE](https://github.com/firelzrd/bore-scheduler), [ADIOS](https://github.com/firelzrd/adios) and [AnyKernel3](https://github.com/osm0sis/AnyKernel3). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full attribution and license details.
