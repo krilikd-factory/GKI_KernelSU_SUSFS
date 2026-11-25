@@ -7,7 +7,7 @@
 
 # ⚡ KRILIKD Kernel
 
-**Custom GKI kernels for OnePlus and Ace**<br>
+**Custom GKI kernels for OnePlus devices**<br>
 KernelSU · SUSFS · modern schedulers · AutoSystemBoost integration
 
 [![Android GKI](https://img.shields.io/badge/Android-GKI%202.0-3DDC84?logo=android&logoColor=white)](#-compatibility)
@@ -46,14 +46,26 @@ Check the family, patch level, page size, root implementation and feature set **
 
 ## ✨ Features
 
-| Area | What a build can include |
-|---|---|
-| 🛡️ **Root and privacy** | KernelSU-Next and other KernelSU variants, SUSFS, NoMount, Baseband Guard and VPN Hide |
-| 🌐 **Networking** | WireGuard, BBR/BBRv3, CAKE, IPSet, NAT and other networking features when enabled in the kernel configuration |
-| 🎮 **Compatibility** | NTSync, DroidSpaces, Ptrace and Unicode fixes, BPF and Perf support |
-| 🧠 **Schedulers and optimizations** | BORE for CPU, ADIOS for I/O, plus selected memory, scheduler and filesystem optimizations |
-| 🔋 **Power and background** | Re-Kernel, the ASB exact-name wakeup blocker (AWL) and SDP 900 mA on supported builds |
-| 🔌 **USB** | USB Arsenal and USB gadget modes, depending on the device and build |
+| Feature | What it brings | Build and device notes |
+|---|---|---|
+| 👑 **Root** | KernelSU-Next, KernelSU, BakaSU, SukiSU Ultra, KowSU, FinaSU or a no-root build | Select a root implementation and use its matching manager. Compatibility with SUSFS depends on the selected variant. |
+| 🛡️ **SUSFS** | Kernel-side privacy integration for compatible KernelSU setups | Requires a compatible userspace setup; availability does not guarantee that every app will accept the device. |
+| 🧩 **NoMount** | Metamodule support for the module mounting setup | Provided separately when requested; install a compatible metamodule for your root setup. |
+| 🔐 **Baseband Guard** | Protects critical partitions and device nodes from unauthorized writes | Applies when BBG is selected for the build. |
+| 🌐 **Networking** | WireGuard, BBR/BBRv3, CUBIC, CAKE, IPSet, IPv4/IPv6 NAT, conntrack, CIFS and TTL/HL targets | Kernel and userspace support vary; inspect the final configuration and verify on the device. |
+| 🕵️ **VPN Hide** | Kernel-side VPN Hide integration | Use the matching built-in companion; do not install `vpnhide-kmod` on top. |
+| 🔌 **USB Arsenal** | USB gadget features and ISO/DVD/CD-ROM support where applicable | Available modes depend on the kernel, device and firmware. |
+| 🎮 **NTSync** | Windows NT-style synchronization primitives for compatible software | Available when selected for a compatible kernel family. |
+| 📦 **DroidSpaces** | Container runtime support, including macvlan where configured | Container capabilities depend on the final config and userspace. |
+| 🔎 **BPF & Perf** | BTF, eBPF, FUSE-BPF and performance/tracing capabilities | A built feature does not guarantee that a particular program will load or run. |
+| 🧠 **BORE** | Burst-Oriented Response Enhancer, a CPU scheduler extension on top of EEVDF | Optional for `android16-6.12`; a runtime switch is exposed where supported. |
+| 💾 **ADIOS** | Adaptive Deadline I/O Scheduler for block devices | Optional for `android16-6.12`; available for runtime selection and not forced as the default. |
+| 🚀 **Performance tuning** | Reviewed scheduler, memory, wakeup, filesystem and logging patches | Selection and patch decisions are recorded in BuildInfo; no fixed speed gain is promised. |
+| 🔋 **ASB wakeup blocker · AWL** | Optional exact-name wakeup-source rules | `android16-6.12`; starts with an empty root-only policy. |
+| 🧊 **Re-Kernel** | Built-in app and network event delivery for compatible userspace tools | Optional `android16-6.12` integration; third-party freezer compatibility is not assumed. |
+| ⚡ **SDP 900 mA** | Optional USB data-port input-limit adjustment | `android16-6.12`; actual charging behavior depends on the device and firmware. |
+| 🔧 **Ptrace · Unicode** | Compatibility fixes selected for matching kernel trees | Availability is family- and source-dependent. |
+| 🧠 **Memory & pressure** | MGLRU, PSI and zram-related capabilities | ASB discovers available interfaces at runtime; exact support depends on the kernel. |
 
 **BORE, ADIOS, Re-Kernel, AWL and SDP 900 mA are available for the supported `android16-6.12` branch; they are not automatically present in every kernel.** AWL starts with an empty rule list. A configuration option alone does not guarantee that its interface is available or functional on a particular firmware.
 
@@ -62,6 +74,18 @@ Use the build's **BuildInfo**, final `.config` and on-device checks to establish
 ### 🎛️ Working with AutoSystemBoost
 
 [AutoSystemBoost](https://github.com/krilikd-factory/AutoSystemBoost) controls available settings from userspace. Before applying supported settings, ASB checks the interface, saves the original value and reads back the result; some controls may be unavailable on unsupported kernels. Blocking wakeup sources by exact name requires a compatible kernel interface and user-defined rules.
+
+### 🔍 Build evidence & artifacts
+
+| Artifact | What you can inspect |
+|---|---|
+| 📦 **AnyKernel3** | Flashable kernel ZIP for the selected build |
+| 📋 **BuildInfo** | Final `.config`, source provenance, capabilities, patch decisions and safety checks |
+| 📌 **Pins** | Exact component revisions and a device-validation template |
+| 🧩 **Companion modules** | Matching VPN Hide and NoMount files when selected |
+| 🛠️ **Rejects** | Patch rejects, when produced by the build |
+
+Sources, component revisions and selected features are recorded per run. New upstream patches follow a reviewed lifecycle; a candidate build is not automatically treated as device-tested. See [the build guide](docs/build-from-fork.md) for details.
 
 ## 📥 Download and install
 
