@@ -173,4 +173,21 @@ if [ "$KERNEL_SOURCE" = "oneplus" ]; then
 else
   echo "pin_kernel_common=${KG_COMMON}" >> "$GITHUB_OUTPUT"
 fi
+# Stable latest builds retain the BBG revision from the matching boot-attested
+# build: the remaining components still resolve as latest. Never guess across a
+# different family, patch level, root or OEM source, and fail closed when absent.
+if [ -z "$KG_BBG" ] && [ "$COMMIT_MODE" = latest ] && [ "${IN_PATCH_CHANNEL:-stable}" = stable ] && \
+   [[ "${IN_KVER:-}" =~ ^([0-9]+\.[0-9]+)\.x-(android[0-9]+)$ ]] && \
+   [ -n "$EFFECTIVE_OPL" ] && [ -n "${IN_ROOT:-}" ] && [[ "$IN_ROOT" != All* ]]; then
+  BBG_KEY="${BASH_REMATCH[2]}-${BASH_REMATCH[1]}-${EFFECTIVE_OPL}/${IN_ROOT}"
+  [ "$KERNEL_SOURCE" = oneplus ] && BBG_KEY="${BBG_KEY}+oneplus"
+  BBG_STATUS="$(jq -r --arg k "$BBG_KEY" '.[$k].device_validation.status // empty' .github/known-good.json)"
+  if [ "$BBG_STATUS" = boot_attested_only ] || [ "$BBG_STATUS" = validated ]; then
+    BBG_REVIEWED="$(jq -r --arg k "$BBG_KEY" '.[$k].bbg_commit // empty' .github/known-good.json)"
+    if [[ "$BBG_REVIEWED" =~ ^[0-9a-f]{40}$ ]]; then
+      KG_BBG="$BBG_REVIEWED"
+      echo "::notice::Stable BBG retains the matching boot-attested commit $KG_BBG; other components remain latest."
+    fi
+  fi
+fi
 echo "pin_bbg_commit=${KG_BBG}" >> "$GITHUB_OUTPUT"

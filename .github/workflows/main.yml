@@ -263,6 +263,7 @@ jobs:
           IN_KVER: ${{ inputs.kernel_build_version }}
           IN_ONEPLUS_BRANCH: ${{ inputs.oneplus_branch }}
           IN_ROOT: ${{ inputs.root_flavor }}
+          IN_PATCH_CHANNEL: ${{ inputs.patch_channel || 'stable' }}
         run: |
           set -euo pipefail
 
