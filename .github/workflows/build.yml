@@ -811,6 +811,7 @@ jobs:
             --arg kernel_source_commit "$(full "${KERNEL_SOURCE_COMMIT:-}")" \
             --arg nomount_commit "$(full "${{ inputs.nomount_commit }}")" \
             --arg bbg_commit "$(full "${BBG_COMMIT_FULL:-}")" \
+            --arg bbg_setup_sha256 "${BBG_SETUP_SHA256:-}" \
             --arg droidspaces_commit "$(full "${{ inputs.droidspaces_commit }}")" \
             --arg kernel_patches_commit "$(full "${{ inputs.kernel_patches_commit }}")" \
             --arg anykernel3_commit "$(full "${{ inputs.anykernel3_commit }}")" \
@@ -835,7 +836,7 @@ jobs:
             '{($key): {file: $file, root_commit: $root_commit, root_version: $root_version,
               root_version_code: $root_version_code, kernel_version_string: $kernel_version_string,
               susfs_commit: $susfs_commit, kernel_source_commit: $kernel_source_commit,
-              nomount_commit: $nomount_commit, bbg_commit: $bbg_commit,
+              nomount_commit: $nomount_commit, bbg_commit: $bbg_commit, bbg_setup_sha256: $bbg_setup_sha256,
               droidspaces_commit: $droidspaces_commit,
               kernel_patches_commit: $kernel_patches_commit,
               anykernel3_commit: $anykernel3_commit,

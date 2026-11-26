@@ -164,6 +164,7 @@ class CapabilityReportTest(unittest.TestCase):
             self.assertEqual(set(controls), {
                 "mglru_mode", "kernel_mglru_min_ttl", "kernel_timer_migration", "kernel_sched_nr_migrate",
                 "kernel_sched_stats", "kernel_sched_autogroup", "kernel_sched_child_runs_first", "kernel_rt_boost",
+                "kernel_hrtimer_migration", "kernel_lpm_prediction", "kernel_usb_autosuspend", "kernel_bore", "io_scheduler",
             })
             for name, control in controls.items():
                 self.assertEqual(control["interface"], "standard_linux")
@@ -173,9 +174,11 @@ class CapabilityReportTest(unittest.TestCase):
                 self.assertTrue(control["readback_required"])
                 self.assertEqual(control["restore"], "exact_captured_value")
                 self.assertTrue(control["runtime_path"].startswith((
-                    "/proc/sys/kernel/", "/sys/kernel/mm/lru_gen/", "/sys/kernel/debug/sched/",
+                    "/proc/sys/kernel/", "/sys/kernel/mm/lru_gen/", "/sys/kernel/debug/sched/", "/sys/module/", "/sys/block/",
                 )))
                 self.assertIn("stock", control["requests"], name)
+            self.assertEqual(controls["io_scheduler"]["build_state"], "not_config_gated")
+            self.assertIn("invert", controls["kernel_lpm_prediction"]["runtime_guard"])
             self.assertEqual(controls["mglru_mode"]["build_state"], "available_in_config")
             self.assertEqual(controls["mglru_mode"]["requests"]["smart"], ["5", "7"])
             self.assertEqual(controls["kernel_sched_nr_migrate"]["runtime_path"], "/sys/kernel/debug/sched/nr_migrate")
@@ -1197,6 +1200,34 @@ class SourceProvenanceTest(unittest.TestCase):
         (self.tree / "Makefile").write_text((self.tree / "Makefile").read_text() + "# dirty\n")
         with self.assertRaises(ValueError):
             self.run_preflight()
+
+
+class AwlSharedFixtureTest(unittest.TestCase):
+    def test_fixture_matches_reviewed_patch(self):
+        contract = json.loads((ROOT / "docs/asb-kernel-contract.json").read_text())
+        patch = (ROOT / ".github/patches/android16-6.12/asb-wakeup-blocker-6.12.69.patch").read_text()
+        for macro, key in (("ASB_WAKEUP_ABI_VERSION", "abi"), ("ASB_WAKEUP_MAX_RULES", "max_rules"), ("ASB_WAKEUP_NAME_MAX", "max_name_bytes")):
+            self.assertIn("#define %s %s" % (macro, contract[key]), patch)
+        for name in contract["paths"]:
+            self.assertIn("__ATTR(" + name + ",", patch)
+        self.assertTrue(contract["runtime_discovery_required"])
+
+
+class BbgPinContractTest(unittest.TestCase):
+    def test_stable_missing_pin_fails_before_any_network(self):
+        action = (ROOT / ".github/actions/bbg/action.yml").read_text()
+        begin = action.index("      run: |", action.index("    - name: Install Baseband Guard from an exact revision"))
+        end = action.index("    - name: Apply 6.18 compatibility shim", begin)
+        script = textwrap.dedent(action[begin + len("      run: |\n"):end])
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, PIN_BBG_COMMIT="", PATCH_CHANNEL="stable", GITHUB_ENV=str(Path(tmp) / "env"))
+            result = subprocess.run(["bash", "-c", script], cwd=tmp, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("requires a reviewed full commit pin", result.stdout)
+            self.assertFalse((Path(tmp) / "Baseband-guard").exists())
+        self.assertLess(script.index('checkout --detach'), script.index('bash Baseband-guard/setup.sh'))
+        self.assertIn("BBG_SETUP_SHA256", script)
+        self.assertNotIn("| bash", script)
 
 
 class PresentationContractTest(unittest.TestCase):

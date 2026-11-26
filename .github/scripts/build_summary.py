@@ -408,6 +408,8 @@ def render(a: argparse.Namespace, env: dict[str, str]) -> str:
         ("AnyKernel3", "input pin", "N/A", a.anykernel3_commit or "not pinned"),
     ]
     table(lines, ("Component", "State", "Version", "Commit / pin"), component_rows)
+    if "BBG" in features:
+        lines += ["", "BBG setup script SHA-256: `" + md(env.get("BBG_SETUP_SHA256") or "unknown") + "`"]
 
     lines += ["### ✨ Requested feature groups", ""]
     feature_rows = []

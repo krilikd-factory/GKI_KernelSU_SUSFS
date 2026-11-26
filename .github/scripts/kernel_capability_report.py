@@ -102,6 +102,33 @@ CAPABILITIES = {
 # apply the same closed allowlist even if this JSON is absent or comes from another
 # kernel. A config flag proves neither path existence nor write permission.
 CONTROL_CANDIDATES = {
+    "kernel_hrtimer_migration": {
+        "configs": [], "runtime_path": "/proc/sys/kernel/hrtimer_migration", "value_type": "boolean_0_1",
+        "requests": {"stock": "restore the exact captured value", "off": ["0"], "on": ["1"]},
+        "owner": "ASB kernel-controls helper", "readback": "exact readback; timer migration may cover this control",
+    },
+    "kernel_lpm_prediction": {
+        "configs": [], "runtime_path": "/sys/module/lpm_levels/parameters/lpm_prediction", "value_type": "boolean_0_1",
+        "runtime_guard": "discover either lpm_prediction or qcom_lpm/parameters/prediction_disabled; invert the latter",
+        "requests": {"stock": "restore the exact captured value", "off": ["0"], "on": ["1"]},
+        "owner": "ASB kernel-controls helper", "readback": "exact readback with inverted semantics where required",
+    },
+    "kernel_usb_autosuspend": {
+        "configs": [], "runtime_path": "/sys/module/usbcore/parameters/autosuspend", "value_type": "integer_seconds",
+        "requests": {"stock": "restore the exact captured value", "off": ["-1"], "on": ["2"]},
+        "owner": "ASB kernel-controls helper", "readback": "exact readback",
+    },
+    "kernel_bore": {
+        "configs": ["CONFIG_SCHED_BORE"], "runtime_path": "/proc/sys/kernel/sched_bore", "value_type": "boolean_0_1",
+        "requests": {"stock": "restore the exact captured value", "off": ["0"], "on": ["1"]},
+        "owner": "ASB kernel-controls helper", "readback": "exact readback",
+    },
+    "io_scheduler": {
+        "configs": [], "runtime_path": "/sys/block/*/queue/scheduler", "value_type": "per_queue_enumerated",
+        "runtime_guard": "discover physical queues and values exposed per queue; wildcard is not a write path",
+        "requests": {"stock": "restore each exact captured scheduler", "other": "only a scheduler exposed by the queue"},
+        "owner": "ASB I/O scheduler helper", "readback": "active scheduler in brackets per queue",
+    },
     "mglru_mode": {
         "configs": ["CONFIG_LRU_GEN"],
         "runtime_path": "/sys/kernel/mm/lru_gen/enabled",
@@ -255,6 +282,8 @@ def make_report(config_path: Path, feature_set: str) -> dict:
     controls = {}
     for name, spec in CONTROL_CANDIDATES.items():
         state, states = build_state(config, spec["configs"])
+        if not spec["configs"]:
+            state = "not_config_gated"
         controls[name] = {
             "interface": "standard_linux",
             "build_state": state,

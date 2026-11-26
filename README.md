@@ -42,7 +42,7 @@ Find the running kernel in device settings or with:
 adb shell uname -r
 ```
 
-Check the family, patch level, page size, root implementation and feature set **for the chosen file and its BuildInfo**. Build-time checks do not replace testing on your device.
+Check the family, patch level, page size, root implementation and feature set **for the chosen file and its BuildInfo**. Build-verified does not mean boot-verified; test on your device.
 
 ## ✨ Features
 
@@ -75,12 +75,14 @@ Use the build's **BuildInfo**, final `.config` and on-device checks to establish
 
 [AutoSystemBoost](https://github.com/krilikd-factory/AutoSystemBoost) controls available settings from userspace. Before applying supported settings, ASB checks the interface, saves the original value and reads back the result; some controls may be unavailable on unsupported kernels. Blocking wakeup sources by exact name requires a compatible kernel interface and user-defined rules.
 
+`kernel_sched_nr_migrate` uses `/sys/kernel/debug/sched/nr_migrate` via a temporary private debugfs mount when available; existence and writability are determined on the device, not assumed from the build. See [ASB integration](docs/asb-integration.md).
+
 ### 🔍 Build evidence & artifacts
 
 | Artifact | What you can inspect |
 |---|---|
 | 📦 **AnyKernel3** | Flashable kernel ZIP for the selected build |
-| 📋 **BuildInfo** | Final `.config`, source provenance, capabilities, patch decisions and safety checks |
+| 📋 **BuildInfo** | Final `.config`, Source provenance, Patch lifecycle decisions, capabilities and safety checks |
 | 📌 **Pins** | Exact component revisions and a device-validation template |
 | 🧩 **Companion modules** | Matching VPN Hide and NoMount files when selected |
 | 🛠️ **Rejects** | Patch rejects, when produced by the build |
@@ -113,4 +115,4 @@ Keep the **AnyKernel3**, **BuildInfo** and **Pins** artifacts for review. They c
 
 ## 🙏 Credits
 
-This project builds on the work of [Android Common Kernel / GKI](https://android.googlesource.com/kernel/common/), [Wild Kernels](https://github.com/WildKernels/GKI_KernelSU_SUSFS) and the developer community. Thanks to the authors of [KernelSU](https://github.com/tiann/KernelSU), [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next), [SUSFS](https://gitlab.com/simonpunk/susfs4ksu), [NoMount](https://github.com/maxsteeel/nomount), [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard), [DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS), [Re-Kernel](https://github.com/Sakion-Team/Re-Kernel), [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal), [BORE](https://github.com/firelzrd/bore-scheduler), [ADIOS](https://github.com/firelzrd/adios) and [AnyKernel3](https://github.com/osm0sis/AnyKernel3). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full attribution and license details.
+This project builds on the work of [Android Common Kernel / GKI](https://android.googlesource.com/kernel/common/), [Wild Kernels](https://github.com/WildKernels/GKI_KernelSU_SUSFS), [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches) and the developer community. Thanks to the authors of [KernelSU](https://github.com/tiann/KernelSU), [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next), [SUSFS](https://gitlab.com/simonpunk/susfs4ksu), [NoMount](https://github.com/maxsteeel/nomount), [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard), [DroidSpaces](https://github.com/ravindu644/Droidspaces-OSS), [Re-Kernel](https://github.com/Sakion-Team/Re-Kernel), [VPN Hide](https://github.com/okhsunrog/vpnhide), [USB Arsenal](https://github.com/ravindu644/USB-Arsenal), [BORE](https://github.com/firelzrd/bore-scheduler), [ADIOS](https://github.com/firelzrd/adios) and [AnyKernel3](https://github.com/osm0sis/AnyKernel3). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full attribution and license details.

@@ -4,25 +4,28 @@ description: Download and configure Baseband Guard security module
 runs:
   using: composite
   steps:
-    - name: Install Baseband Guard
-      uses: ./.github/actions/retry
-      with:
-        command: |
-          set -o pipefail
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
-        attempts: 5
-        delay: 5
-        workdir: ${{ github.workspace }}/kernel
-    
-    - name: Pin Baseband-guard to the known-good commit
-      if: env.PIN_BBG_COMMIT != ''
+    - name: Install Baseband Guard from an exact revision
       shell: bash
-      working-directory: ${{ github.workspace }}/kernel/Baseband-guard
+      working-directory: ${{ github.workspace }}/kernel
       run: |
         set -euo pipefail
-        git fetch -q origin "$PIN_BBG_COMMIT" 2>/dev/null || git fetch -q --unshallow origin 2>/dev/null || true
-        git checkout -q --detach "$PIN_BBG_COMMIT"
-        echo "[+] Baseband-guard pinned to known-good ${PIN_BBG_COMMIT:0:12}"
+        bbg_ref="${PIN_BBG_COMMIT:-}"
+        if [ -z "$bbg_ref" ]; then
+          if [ "${PATCH_CHANNEL:-stable}" != candidate ]; then
+            echo '::error::Stable BBG requires a reviewed full commit pin.'
+            exit 1
+          fi
+          bbg_ref="$(git ls-remote https://github.com/vc-teahouse/Baseband-guard.git refs/heads/main | awk '{print $1}')"
+        fi
+        [[ "$bbg_ref" =~ ^[0-9a-fA-F]{40}$ ]] || { echo '::error::BBG pin must be a full commit SHA.'; exit 1; }
+        git clone --no-checkout https://github.com/vc-teahouse/Baseband-guard.git Baseband-guard
+        git -C Baseband-guard fetch origin "$bbg_ref"
+        git -C Baseband-guard checkout --detach "$bbg_ref"
+        test "$(git -C Baseband-guard rev-parse HEAD)" = "$bbg_ref"
+        bbg_setup_sha="$(sha256sum Baseband-guard/setup.sh | cut -d' ' -f1)"
+        printf 'BBG_SETUP_SHA256=%s\n' "$bbg_setup_sha" >> "$GITHUB_ENV"
+        bash Baseband-guard/setup.sh "$bbg_ref"
+        test "$(git -C Baseband-guard rev-parse HEAD)" = "$bbg_ref"
 
     - name: Apply 6.18 compatibility shim
       # Upstream BBG calls blkdev_get_no_open() without declaring it; the
