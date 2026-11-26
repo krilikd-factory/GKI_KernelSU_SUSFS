@@ -156,6 +156,23 @@ class CapabilityReportTest(unittest.TestCase):
             self.assertEqual(report["asb_contract"]["writers_added"], [])
             self.assertEqual(report["final_config_sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
 
+    def test_transparent_proxy_and_wireguard_report_resolved_config(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".config"
+            path.write_text("CONFIG_NETFILTER_XT_TARGET_TPROXY=y\nCONFIG_NF_TPROXY_IPV4=y\n"
+                            "# CONFIG_NF_TPROXY_IPV6 is not set\nCONFIG_NETFILTER_XT_MATCH_SOCKET=m\n"
+                            "CONFIG_WIREGUARD=y\n")
+            report = caps.make_report(path, "NET")["capabilities"]
+            for key in ("network.tproxy_ipv4", "network.socket_match", "network.wireguard"):
+                self.assertEqual(report[key]["build_state"], "available_in_config")
+                self.assertEqual(report[key]["runtime_state"], "unknown")
+            self.assertEqual(report["network.tproxy_ipv6"]["build_state"], "not_available_in_config")
+            self.assertEqual(report["network.tproxy_ipv6"]["configs"]["CONFIG_NF_TPROXY_IPV6"], "n")
+            path.write_text("CONFIG_NETFILTER_XT_TARGET_TPROXY=y\n")
+            report = caps.make_report(path, "NET")["capabilities"]
+            self.assertEqual(report["network.tproxy_ipv4"]["build_state"], "not_available_in_config")
+            self.assertEqual(report["network.tproxy_ipv4"]["configs"]["CONFIG_NF_TPROXY_IPV4"], "not_exposed")
+
     def test_control_contract_is_bounded_and_never_claims_runtime_writability(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / ".config"

@@ -54,6 +54,26 @@ CAPABILITIES = {
         "runtime_paths": ["/sys/module/ip_set"],
         "asb_use": "netfilter set availability; actual ipset create/add commands still require runtime validation",
     },
+    "network.wireguard": {
+        "configs": ["CONFIG_WIREGUARD"],
+        "runtime_paths": [],
+        "asb_use": "in-kernel WireGuard build support; userspace and device operation require separate validation",
+    },
+    "network.tproxy_ipv4": {
+        "configs": ["CONFIG_NETFILTER_XT_TARGET_TPROXY", "CONFIG_NF_TPROXY_IPV4"],
+        "runtime_paths": [],
+        "asb_use": "IPv4 xtables TPROXY build support; userspace, rules and device operation require separate validation",
+    },
+    "network.tproxy_ipv6": {
+        "configs": ["CONFIG_NETFILTER_XT_TARGET_TPROXY", "CONFIG_NF_TPROXY_IPV6"],
+        "runtime_paths": [],
+        "asb_use": "IPv6 xtables TPROXY build support; userspace, rules and device operation require separate validation",
+    },
+    "network.socket_match": {
+        "configs": ["CONFIG_NETFILTER_XT_MATCH_SOCKET"],
+        "runtime_paths": [],
+        "asb_use": "xtables socket match build support; runtime rules require separate validation",
+    },
     "container.macvlan": {
         "configs": ["CONFIG_MACVLAN"],
         "runtime_paths": ["/sys/module/macvlan"],

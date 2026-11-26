@@ -39,6 +39,15 @@ runs:
           CONFIG_IP6_NF_NAT=y
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
 
+    - name: Request transparent proxy support
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          # Kconfig selects the IPv4/IPv6 helpers when dependencies are met.
+          # Final capabilities report records what survived Kconfig resolution.
+          CONFIG_NETFILTER_XT_TARGET_TPROXY=y
+          CONFIG_NETFILTER_XT_MATCH_SOCKET=y
+
     - name: Enable TCP Congestion Control Configs
       uses: ./.github/actions/set-kernel-config
       with:

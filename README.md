@@ -52,7 +52,7 @@ Check the family, patch level, page size, root implementation and feature set **
 | 🛡️ **SUSFS** | Kernel-side privacy integration for compatible KernelSU setups | Requires a compatible userspace setup; availability does not guarantee that every app will accept the device. |
 | 🧩 **NoMount** | Metamodule support for the module mounting setup | Provided separately when requested; install a compatible metamodule for your root setup. |
 | 🔐 **Baseband Guard** | Protects critical partitions and device nodes from unauthorized writes | Applies when BBG is selected for the build. |
-| 🌐 **Networking** | WireGuard, BBR/BBRv3, CUBIC, CAKE, IPSet, IPv4/IPv6 NAT, conntrack, CIFS and TTL/HL targets | Kernel and userspace support vary; inspect the final configuration and verify on the device. |
+| 🌐 **Networking** | WireGuard, BBR/BBRv3, CUBIC, CAKE, IPSet, IPv4/IPv6 NAT, conntrack, CIFS, TTL/HL targets and requested xtables TPROXY/socket matching | Kconfig dependencies and userspace support vary; inspect the final configuration and verify on the device. |
 | 🕵️ **VPN Hide** | Kernel-side VPN Hide integration | Use the matching built-in companion; do not install `vpnhide-kmod` on top. |
 | 🔌 **USB Arsenal** | USB gadget features and ISO/DVD/CD-ROM support where applicable | Available modes depend on the kernel, device and firmware. |
 | 🎮 **NTSync** | Windows NT-style synchronization primitives for compatible software | Available when selected for a compatible kernel family. |
