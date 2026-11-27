@@ -77,6 +77,42 @@ class UpdateCheckFeatureInheritanceTest(unittest.TestCase):
         self.assertEqual(len(parsed[True]["workflow_dispatch"]["inputs"]), 25)
         self.assertIn('build_args+=', workflow)
 
+    def test_scheduled_dispatch_respects_candidate_cache_even_with_built_pins(self):
+        # Exercise the actual workflow condition, including both scheduled and
+        # external-timer paths. A matching successful baseline must never bypass
+        # the candidate cache; an explicit manual request remains an override.
+        import re
+        import yaml
+        workflow = yaml.safe_load((ROOT / ".github/workflows/update-check.yml").read_text())
+        steps = workflow["jobs"]["check"]["steps"]
+        condition = next(step["if"] for step in steps if step.get("id") == "start")
+        self.assertNotIn("steps.baseline.outputs.available", condition)
+
+        def allowed(*, updates="1", manual=False, event="schedule", backup=False, active="0", hit="true"):
+            expr = condition
+            values = {
+                "steps.check.outputs.updates": updates,
+                "inputs.build_latest": manual,
+                "github.event_name": event,
+                "inputs.as_schedule": backup,
+                "steps.baseline.outputs.active": active,
+                "steps.seen.outputs.cache-hit": hit,
+            }
+            for name in sorted(values, key=len, reverse=True):
+                expr = expr.replace(name, repr(values[name]))
+            expr = expr.replace("&&", " and ").replace("||", " or ")
+            self.assertNotRegex(expr, r"[A-Za-z_][A-Za-z_0-9.]*\.")
+            return bool(eval(expr, {"__builtins__": {}}, {}))
+
+        self.assertFalse(allowed(hit="true"))
+        self.assertFalse(allowed(event="workflow_dispatch", backup=True, hit="true"))
+        self.assertTrue(allowed(hit="false"))
+        self.assertTrue(allowed(event="workflow_dispatch", backup=True, hit=""))
+        self.assertFalse(allowed(hit="false", active="1"))
+        self.assertFalse(allowed(updates="0", hit="false"))
+        self.assertFalse(allowed(event="workflow_dispatch", hit="false"))
+        self.assertTrue(allowed(manual=True, event="workflow_dispatch", hit="true"))
+
     @staticmethod
     def module_summary(paths, component="NoMount"):
         return {"updates": 1, "sets": {"key": {component: {

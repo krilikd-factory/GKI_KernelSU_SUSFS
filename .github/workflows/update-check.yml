@@ -102,7 +102,7 @@ jobs:
         id: start
         if: >-
           steps.check.outputs.updates != '0' &&
-          (inputs.build_latest || ((github.event_name == 'schedule' || inputs.as_schedule) && steps.baseline.outputs.active == '0' && (steps.baseline.outputs.available == 'true' || steps.seen.outputs.cache-hit != 'true')))
+          (inputs.build_latest || ((github.event_name == 'schedule' || inputs.as_schedule) && steps.baseline.outputs.active == '0' && steps.seen.outputs.cache-hit != 'true'))
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_INPUTS: ${{ steps.check.outputs.build_inputs }}
